@@ -121,16 +121,20 @@ function getFormatImageInstructions(bookFormat?: BookFormat): string {
 - DO NOT write any position labels, page numbers, or metadata on the image`;
 
     case 'bildbok-separat-text':
-      return `LAYOUT STYLE: Single illustration (like "Luna" picture books).
-- Create ONE clear, beautiful illustration that fills most of the image area
-- DO NOT include any text on the image - text will be printed separately
-- Softer, more painterly illustration style - warm colors, gentle lighting
-- Characters should be expressive but in a softer, less exaggerated style than comics
-- Focus on one key scene/moment from the story
-- Include detailed, atmospheric backgrounds that set the mood
-- The illustration should complement the story text without needing to contain it
-- Think of classic Scandinavian children's book illustration style
-- Simpler composition focused on the characters and their emotions
+      return `LAYOUT STYLE: Single-page illustration for a children's chapter book (like Swedish "Luna" books by Karin Lemon).
+- Create ONE illustration sized for a SINGLE book page (portrait orientation, approximately 14cm x 21cm)
+- The illustration will be placed on ONE page of a spread - the OTHER page will have printed text
+- DO NOT include any text, letters, words, or writing on the image - text is printed separately on the facing page
+- The illustration should NOT fill the entire image - leave some white/empty space around the edges
+- Clean line art style with soft digital coloring - similar to modern Scandinavian children's book illustration
+- Characters should have expressive faces with large eyes, clean outlines, soft shading
+- NOT watercolor or painterly - more like clean digital illustration with defined edges
+- Focus on ONE key moment or character interaction from the scene
+- Background can be simple or partially white - does not need to fill the entire space
+- Think of how illustrations look in chapter books: sometimes full-page, sometimes smaller with white space
+- Characters should feel warm and relatable, with natural proportions (not overly cartoonish)
+- Soft, muted color palette with gentle lighting
+- The illustration should complement the story text on the facing page
 - DO NOT write any labels, page numbers, position text, or metadata on the image`;
 
     case 'kapitelbok':
@@ -265,13 +269,20 @@ IMPORTANT: Do NOT include any text, letters, words, page numbers, or labels on t
     characterPresenceSection = `\nCHARACTERS THAT MUST BE VISIBLE IN THIS SCENE:
 ${charList}
 
-CRITICAL: ALL ${charsInScene.length} characters listed above MUST appear in this illustration. Do NOT leave any of them out.
-${mainCharsInScene.length > 1 ? `There are ${mainCharsInScene.length} main characters in this scene - make sure ALL of them are clearly visible and recognizable.` : ''}
-${supportingCharsInScene.length > 0 ? `Supporting characters: ${supportingCharsInScene.map(c => c.name).join(', ')} - include them as described in the scene.` : ''}`;
+CRITICAL: There are exactly ${charsInScene.length} character(s) in this scene. Each character must appear EXACTLY ONCE.
+IMPORTANT: Do NOT draw any character more than once. Each person appears only ONE time in the illustration.
+${mainCharsInScene.length > 1 ? `There are ${mainCharsInScene.length} main characters in this scene - make sure ALL of them are clearly visible and recognizable, but each drawn only ONCE.` : ''}
+${supportingCharsInScene.length > 0 ? `Supporting characters: ${supportingCharsInScene.map(c => c.name).join(', ')} - include them as described in the scene, each appearing once.` : ''}`;
   }
 
+  // Determine image format based on book type
+  const isSinglePageFormat = bookFormat === 'bildbok-separat-text' || bookFormat === 'kapitelbok';
+  const imageSize = isSinglePageFormat
+    ? 'a single book page (portrait, approximately 14cm x 21cm)'
+    : 'a children\'s book spread (double page, 32cm x 21cm)';
+
   // Add the main prompt
-  const mainPrompt = `Generate an illustration for a children's book spread (double page, 32cm x 21cm).
+  const mainPrompt = `Generate an illustration for ${imageSize}.
 
 ${formatInstructions}
 
@@ -286,9 +297,12 @@ ${characterPresenceSection}
 CHARACTER CONSISTENCY:
 - Keep ALL characters looking EXACTLY like their reference images above
 - Maintain consistent art style throughout
-- The image should be a full illustration suitable for a children's book spread
+${isSinglePageFormat
+  ? '- The image should be a single-page illustration - portrait orientation, NOT a wide landscape spread'
+  : '- The image should be a full illustration suitable for a children\'s book spread'}
 - Make sure character proportions, hair, clothing, and features match their reference sheets
 - Every character must look the SAME across all pages - same hair color, same clothing, same features
+- NEVER duplicate a character - each person appears EXACTLY ONCE in the image
 - NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image`;
 
   contents.push({ text: mainPrompt });
