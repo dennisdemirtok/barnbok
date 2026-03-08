@@ -10,7 +10,7 @@ import PageGenerator from '@/components/PageGenerator';
 import BookPreview from '@/components/BookPreview';
 
 type Step = 'library' | 'import' | 'characters' | 'generate' | 'review';
-type ImportMode = 'choose' | 'import' | 'create';
+type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts';
 
 export default function Home() {
   const [step, setStep] = useState<Step>('library');
@@ -22,6 +22,7 @@ export default function Home() {
   const [importMode, setImportMode] = useState<ImportMode>('choose');
   const [importFormat, setImportFormat] = useState<BookFormat>('bildbok-text-pa-bild');
   const [importParsedBook, setImportParsedBook] = useState<BookProject | null>(null);
+  const [isClonedBook, setIsClonedBook] = useState(false);
 
   // Auto-save whenever book changes (debounced)
   const autoSave = useCallback(async (bookToSave: BookProject) => {
@@ -53,6 +54,7 @@ export default function Home() {
 
   const handleLoadBook = (loadedBook: BookProject) => {
     setBook(loadedBook);
+    setIsClonedBook(false);
     // Go to the appropriate step based on book status
     switch (loadedBook.status) {
       case 'importing':
@@ -103,6 +105,7 @@ export default function Home() {
 
   const handleNewBook = () => {
     setBook(null);
+    setIsClonedBook(false);
     // Reset all import state for a fresh start
     setImportRawText('');
     setImportMode('choose');
@@ -111,8 +114,38 @@ export default function Home() {
     setStep('import');
   };
 
+  const handleReuseBook = (sourceBook: BookProject) => {
+    const clonedBook: BookProject = {
+      ...sourceBook,
+      id: Math.random().toString(36).substring(2, 11),
+      title: sourceBook.title + ' (kopia)',
+      status: 'characters' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: undefined,
+      // Keep characters with their reference images and approval status
+      characters: sourceBook.characters.map(c => ({ ...c })),
+      // Reset spreads: keep text and image prompts, clear generated images
+      spreads: sourceBook.spreads.map(s => ({
+        ...s,
+        id: Math.random().toString(36).substring(2, 11),
+        generatedImage: undefined,
+        status: 'pending' as const,
+        error: undefined,
+      })),
+    };
+
+    setImportRawText('');
+    setImportMode('choose');
+    setImportFormat(sourceBook.bookFormat || 'bildbok-text-pa-bild');
+    setImportParsedBook(null);
+    setIsClonedBook(true);
+    setBook(clonedBook);
+    setStep('characters');
+  };
+
   const handleBackToLibrary = () => {
     setBook(null);
+    setIsClonedBook(false);
     setStep('library');
   };
 
@@ -214,6 +247,7 @@ export default function Home() {
           <BookLibrary
             onLoadBook={handleLoadBook}
             onNewBook={handleNewBook}
+            onReuseBook={handleReuseBook}
           />
         )}
 
@@ -232,14 +266,54 @@ export default function Home() {
         )}
 
         {step === 'characters' && book && (
-          <CharacterApproval
-            characters={book.characters}
-            styleGuide={book.styleGuide}
-            bookId={book.id}
-            bookTitle={book.title}
-            onCharactersApproved={handleCharactersApproved}
-            onBack={() => setStep('import')}
-          />
+          <>
+            {/* Format selector for cloned/reused books */}
+            {isClonedBook && (
+              <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="font-semibold text-yellow-800">Ateranvand bok</span>
+                </div>
+                <p className="text-sm text-yellow-700 mb-3">
+                  Karaktarer och text fran originalboken behalles. Du kan byta bildformat innan du genererar nya bilder.
+                </p>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Bokformat
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'bildbok-text-pa-bild' as BookFormat, label: 'Text pa bild (Handbok-stil)' },
+                    { value: 'bildbok-separat-text' as BookFormat, label: 'Separat text (Luna-stil)' },
+                    { value: 'kapitelbok' as BookFormat, label: 'Kapitelbok' },
+                    { value: 'larobok' as BookFormat, label: 'Larobok' },
+                  ].map((fmt) => (
+                    <button
+                      key={fmt.value}
+                      onClick={() => setBook({ ...book, bookFormat: fmt.value })}
+                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                        book.bookFormat === fmt.value
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      {fmt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <CharacterApproval
+              characters={book.characters}
+              styleGuide={book.styleGuide}
+              bookId={book.id}
+              bookTitle={book.title}
+              onCharactersApproved={handleCharactersApproved}
+              onBack={() => isClonedBook ? handleBackToLibrary() : setStep('import')}
+            />
+          </>
         )}
 
         {step === 'generate' && book && (

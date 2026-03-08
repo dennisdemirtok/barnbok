@@ -1,9 +1,10 @@
-import { BookProject, SavedCharacter } from './types';
+import { BookProject, SavedCharacter, SavedText } from './types';
 
 const DB_NAME = 'book-creator-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const BOOKS_STORE = 'books';
 const CHARACTERS_STORE = 'characters';
+const TEXTS_STORE = 'texts';
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -17,6 +18,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(CHARACTERS_STORE)) {
         db.createObjectStore(CHARACTERS_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(TEXTS_STORE)) {
+        db.createObjectStore(TEXTS_STORE, { keyPath: 'id' });
       }
     };
   });
@@ -137,6 +141,59 @@ export async function deleteSavedCharacter(id: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CHARACTERS_STORE, 'readwrite');
     const store = tx.objectStore(CHARACTERS_STORE);
+    store.delete(id);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+// ===== Saved text operations =====
+
+export async function saveText(text: SavedText): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TEXTS_STORE, 'readwrite');
+    const store = tx.objectStore(TEXTS_STORE);
+    store.put(text);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+export async function listSavedTexts(): Promise<SavedText[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TEXTS_STORE, 'readonly');
+    const store = tx.objectStore(TEXTS_STORE);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      db.close();
+      resolve(request.result || []);
+    };
+    request.onerror = () => {
+      db.close();
+      reject(request.error);
+    };
+  });
+}
+
+export async function deleteSavedText(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TEXTS_STORE, 'readwrite');
+    const store = tx.objectStore(TEXTS_STORE);
     store.delete(id);
     tx.oncomplete = () => {
       db.close();

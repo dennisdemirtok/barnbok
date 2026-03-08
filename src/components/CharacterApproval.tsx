@@ -21,6 +21,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
   const [showRegistry, setShowRegistry] = useState(false);
   const [savedChars, setSavedChars] = useState<SavedCharacter[]>([]);
   const [saveMessage, setSaveMessage] = useState('');
+  const [mappingCharId, setMappingCharId] = useState<string | null>(null);
 
   // Sync with prop changes when navigating back/forward between steps
   // This ensures that if the user goes back to import, re-parses, and comes back,
@@ -150,6 +151,28 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
     } catch (err) {
       console.error('Kunde inte ta bort karaktaren:', err);
     }
+  };
+
+  // Map a saved character's visual data onto an existing book character
+  // Keeps the book character's name/role (identity from text) but copies image + appearance
+  const handleMapFromRegistry = (targetCharId: string, saved: SavedCharacter) => {
+    setChars(prev => prev.map(c =>
+      c.id === targetCharId
+        ? {
+            ...c,
+            referenceImage: saved.referenceImage,
+            appearance: saved.appearance,
+            normalClothes: saved.normalClothes || c.normalClothes,
+            heroCostume: saved.heroCostume || c.heroCostume,
+            personality: saved.personality || c.personality,
+            power: saved.power || c.power,
+            approved: !!saved.referenceImage,
+          }
+        : c
+    ));
+    setMappingCharId(null);
+    setSaveMessage(`Sparad karaktar kopplad till ${chars.find(c => c.id === targetCharId)?.name || 'karaktaren'}!`);
+    setTimeout(() => setSaveMessage(''), 3000);
   };
 
   const allApproved = chars.every(c => c.approved && c.referenceImage);
@@ -479,6 +502,23 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   {char.referenceImage ? 'Regenerera' : 'Generera'}
                 </button>
 
+                {/* Map from saved character button */}
+                <button
+                  onClick={() => setMappingCharId(mappingCharId === char.id ? null : char.id)}
+                  className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-1 ${
+                    mappingCharId === char.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  }`}
+                  title="Valj sparad karaktar fran registret"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Valj sparad
+                </button>
+
                 {char.referenceImage && (
                   <>
                     <button
@@ -509,6 +549,49 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   </>
                 )}
               </div>
+
+              {/* Inline saved character picker */}
+              {mappingCharId === char.id && (
+                <div className="mx-4 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-semibold text-blue-800 mb-2">
+                    Valj sparad karaktar for {char.name}:
+                  </p>
+                  {savedChars.filter(sc => sc.referenceImage).length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {savedChars.filter(sc => sc.referenceImage).map(saved => (
+                        <button
+                          key={saved.id}
+                          onClick={() => handleMapFromRegistry(char.id, saved)}
+                          className="border-2 border-gray-200 rounded-lg overflow-hidden hover:border-blue-400
+                                     transition-colors text-left"
+                        >
+                          <img
+                            src={`data:image/png;base64,${saved.referenceImage}`}
+                            alt={saved.name}
+                            className="w-full h-20 object-contain bg-gray-100"
+                          />
+                          <div className="p-1.5">
+                            <p className="text-xs font-medium text-gray-800 truncate">{saved.name}</p>
+                            {saved.fromBookTitle && (
+                              <p className="text-[10px] text-gray-400 truncate">{saved.fromBookTitle}</p>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-blue-600 text-center py-2">
+                      Inga sparade karaktarer med bilder. Godkann en karaktar och spara den forst.
+                    </p>
+                  )}
+                  <button
+                    onClick={() => setMappingCharId(null)}
+                    className="mt-2 text-xs text-blue-500 hover:text-blue-700"
+                  >
+                    Avbryt
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

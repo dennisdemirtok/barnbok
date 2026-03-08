@@ -7,9 +7,10 @@ import { listBooks, deleteBook } from '@/lib/storage';
 interface Props {
   onLoadBook: (book: BookProject) => void;
   onNewBook: () => void;
+  onReuseBook: (book: BookProject) => void;
 }
 
-export default function BookLibrary({ onLoadBook, onNewBook }: Props) {
+export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Props) {
   const [books, setBooks] = useState<BookProject[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -147,15 +148,26 @@ export default function BookLibrary({ onLoadBook, onNewBook }: Props) {
                     <span className="text-xs text-gray-400">
                       {new Date((book as any).updatedAt || book.createdAt).toLocaleDateString('sv-SE')}
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(book.id, book.title);
-                      }}
-                      className="text-xs text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      Ta bort
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReuseBook(book);
+                        }}
+                        className="text-xs text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        Ateranvand
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(book.id, book.title);
+                        }}
+                        className="text-xs text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        Ta bort
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

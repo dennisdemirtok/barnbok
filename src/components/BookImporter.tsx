@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { BookProject, BookFormat } from '@/lib/types';
+import { BookProject, BookFormat, SavedText } from '@/lib/types';
+import { saveText } from '@/lib/storage';
 import BookCreator from './BookCreator';
+import SavedTextPicker from './SavedTextPicker';
 
-type Mode = 'choose' | 'import' | 'create';
+type Mode = 'choose' | 'import' | 'create' | 'savedTexts';
 
 interface Props {
   onBookParsed: (book: BookProject) => void;
@@ -40,6 +42,33 @@ export default function BookImporter({
   // Only transient UI state stays local
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [textSaved, setTextSaved] = useState(false);
+
+  const handleSaveText = async () => {
+    if (!parsedBook || !rawText) return;
+    try {
+      const savedTextEntry: SavedText = {
+        id: `text-${Date.now()}`,
+        title: parsedBook.title || 'Namnlos text',
+        rawText,
+        bookFormat: importFormat,
+        characterCount: parsedBook.characters.length,
+        spreadCount: parsedBook.spreads.length,
+        savedAt: new Date().toISOString(),
+      };
+      await saveText(savedTextEntry);
+      setTextSaved(true);
+      setTimeout(() => setTextSaved(false), 3000);
+    } catch (err) {
+      setError('Kunde inte spara texten');
+    }
+  };
+
+  const handleTextSelected = (text: SavedText) => {
+    onRawTextChange(text.rawText);
+    if (text.bookFormat) onImportFormatChange(text.bookFormat);
+    onModeChange('import');
+  };
 
   const handleParse = async () => {
     if (!rawText.trim()) {
@@ -87,11 +116,11 @@ export default function BookImporter({
             Steg 1: Skapa eller importera bok
           </h2>
           <p className="text-gray-600">
-            Valj om du vill skapa en helt ny bok med AI eller importera befintlig boktext.
+            Valj om du vill skapa en helt ny bok med AI, importera befintlig boktext, eller anvanda en sparad text.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Create new */}
           <button
             onClick={() => onModeChange('create')}
@@ -133,8 +162,38 @@ export default function BookImporter({
               <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">KARAKTERER</span>
             </div>
           </button>
+
+          {/* Use saved text */}
+          <button
+            onClick={() => onModeChange('savedTexts')}
+            className="p-8 border-2 border-gray-200 rounded-2xl text-left hover:border-green-400
+                       hover:shadow-lg transition-all group"
+          >
+            <div className="text-5xl mb-4">📚</div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-green-600 transition-colors">
+              Sparade texter
+            </h3>
+            <p className="text-gray-500">
+              Anvand en tidigare sparad boktext. Perfekt for att testa samma historia
+              med nya karaktarer eller annat bildformat.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Snabb start</span>
+              <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Ateranvand text</span>
+            </div>
+          </button>
         </div>
       </div>
+    );
+  }
+
+  // Saved texts mode
+  if (mode === 'savedTexts') {
+    return (
+      <SavedTextPicker
+        onTextSelected={handleTextSelected}
+        onBack={() => onModeChange('choose')}
+      />
     );
   }
 
@@ -313,6 +372,21 @@ Double page spread, Swedish children's book...`}
                          hover:bg-green-700 transition-colors"
             >
               Ser bra ut - fortsatt till karaktarer
+            </button>
+            <button
+              onClick={handleSaveText}
+              disabled={textSaved}
+              className={`px-4 py-3 rounded-lg transition-colors flex items-center gap-2 ${
+                textSaved
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-yellow-500 text-white hover:bg-yellow-600'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
+              {textSaved ? 'Sparad!' : 'Spara text'}
             </button>
             <button
               onClick={() => onParsedBookChange(null)}

@@ -62,3 +62,13 @@ export interface TextBlock {
   position: string; // e.g. "sida 6 - textruta överst"
   text: string;
 }
+
+export interface SavedText {
+  id: string;
+  title: string;
+  rawText: string;
+  bookFormat?: BookFormat;
+  characterCount: number;
+  spreadCount: number;
+  savedAt: string;
+}
