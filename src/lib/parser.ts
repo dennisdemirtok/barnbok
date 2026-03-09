@@ -138,7 +138,7 @@ function detectRecurringCharacters(spreads: Spread[], existingCharacters: Charac
   // Build character entries for names appearing in 2+ different spreads
   const additionalChars: Character[] = [];
 
-  for (const [, data] of nameData.entries()) {
+  for (const data of Array.from(nameData.values())) {
     if (data.spreads.size >= 2) {
       const descParts: string[] = [];
       if (data.descriptions.length > 0) {
