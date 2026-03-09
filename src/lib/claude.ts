@@ -31,10 +31,11 @@ Bokformat: 16×21 cm (bred × hög). Varje uppslag (2 sidor) har en helsides-ill
 Texten placeras i textrutor ovanpå illustrationen.
 Ca 50-100 ord per sida (100-200 ord per uppslag). Visuellt berättande med integrerad text.`;
     case 'bildbok-separat-text':
-      return `Bildbok med separat text (liknande "Luna"-böcker).
+      return `Bildbok med separat text (liknande "Luna"-böcker av Karin Lemon).
 Bokformat: 16×21 cm (bred × hög). Varannan sida har illustration, varannan har text. Eller text ovanför/under bilden.
 Ca 100-200 ord per textsida (en fullsida med text har ca 180 ord). Bild och text kompletterar varandra.
-Typiskt 10 kapitel i en bok på ~96 sidor.`;
+INGEN kapitelindelning - berättelsen flödar som en sammanhängande historia utan kapitelrubriker.
+Typiskt 32-48 sidor i boken.`;
     case 'kapitelbok':
       return `Kapitelbok med mycket text (liknande Harry Potter / Bert-böcker).
 Mest text med enstaka illustrationer. Längre berättande stycken.
@@ -166,9 +167,7 @@ ${config.bookFormat === 'bildbok-text-pa-bild' ? 'Superhjältedräkt: [om releva
 
 (Upprepa för varje karaktär)
 
-KAPITEL 1: [KAPITELNAMN]
-
-SIDA 6-7 (Uppslag 1)
+${config.bookFormat !== 'bildbok-separat-text' ? 'KAPITEL 1: [KAPITELNAMN]\n' : ''}SIDA 6-7 (Uppslag 1)
 
 Text (sida 6 - textruta överst):
 [Text här]
@@ -196,7 +195,7 @@ VIKTIGA REGLER:
 2. Skriv ALLA bildpromptar på ENGELSKA
 3. Följ formatet EXAKT - parsern behöver "SIDA X-Y (Uppslag N)", "Text (sida X):", och "BILDPROMPT - SIDA X-Y:"
 4. Skapa ALLA ${numSpreads} uppslag - hoppa inte över några
-5. Varje kapitel ska ha en KAPITEL-rubrik
+${config.bookFormat !== 'bildbok-separat-text' ? '5. Varje kapitel ska ha en KAPITEL-rubrik' : '5. Använd INTE kapitelrubriker - berättelsen ska flöda utan kapitelindelning'}
 6. Sidor börjar på 6-7 (sida 1-5 är titel/copyright etc.)
 7. Gör berättelsen engagerande, åldersanpassad och med en tydlig dramaturgi
 8. Varje bildprompt ska vara detaljerad (minst 3-4 meningar) och inkludera stilen: ${config.imageStyle}
