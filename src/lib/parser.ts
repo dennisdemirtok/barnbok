@@ -80,10 +80,11 @@ function detectRecurringCharacters(spreads: Spread[], existingCharacters: Charac
     ].join(' ');
 
     // Pattern 1: Swedish titles - "herr Jansson", "fru Lindström", "fröken Berg"
-    const svTitled = allText.matchAll(/(?:herr|fru|fröken)\s+([A-ZÅÄÖ][a-zåäö]+)/gi);
-    for (const match of svTitled) {
-      const surname = match[1];
-      const fullTitle = match[0].trim();
+    const svRegex = /(?:herr|fru|fröken)\s+([A-ZÅÄÖ][a-zåäö]+)/gi;
+    let svMatch;
+    while ((svMatch = svRegex.exec(allText)) !== null) {
+      const surname = svMatch[1];
+      const fullTitle = svMatch[0].trim();
       // Look for role context: "vaktmästaren, herr Jansson" or "rektorn fru Lindström"
       const roleMatch = allText.match(new RegExp(`([a-zåäö]+(?:en|ern|arn)),?\\s+(?:herr|fru|fröken)\\s+${surname}`, 'i'));
       const roleDesc = roleMatch ? roleMatch[1] : undefined;
@@ -91,13 +92,14 @@ function detectRecurringCharacters(spreads: Spread[], existingCharacters: Charac
     }
 
     // Pattern 2: English titles - "Mr. Jansson", "Mrs. Lindström"
-    const enTitled = allText.matchAll(/(?:Mr\.?|Mrs\.?|Ms\.?)\s+([A-ZÅÄÖ][a-zåäö]+)/g);
-    for (const match of enTitled) {
-      const surname = match[1];
+    const enRegex = /(?:Mr\.?|Mrs\.?|Ms\.?)\s+([A-ZÅÄÖ][a-zåäö]+)/g;
+    let enMatch;
+    while ((enMatch = enRegex.exec(allText)) !== null) {
+      const surname = enMatch[1];
       // Look for English role: "the janitor, Mr. Jansson" or "janitor Mr. Jansson"
       const roleMatch = allText.match(new RegExp(`(?:the\\s+)?(\\w+),?\\s+(?:Mr\\.?|Mrs\\.?|Ms\\.?)\\s+${surname}`, 'i'));
       const roleDesc = roleMatch ? roleMatch[1] : undefined;
-      addName(surname, match[0].trim(), spread.spreadNumber, roleDesc);
+      addName(surname, enMatch[0].trim(), spread.spreadNumber, roleDesc);
     }
 
     // Pattern 3: Look for proper nouns in image prompts that aren't common words
