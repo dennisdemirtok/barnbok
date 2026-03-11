@@ -1,4 +1,5 @@
 import { BookProject, SavedCharacter, SavedText } from './types';
+import { saveBookToCloud, deleteBookFromCloud } from './supabase-db';
 
 const DB_NAME = 'book-creator-db';
 const DB_VERSION = 3;
@@ -26,6 +27,15 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
+// Check if Supabase is configured
+function isCloudEnabled(): boolean {
+  return !!(
+    typeof window !== 'undefined' &&
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
 // ===== Book operations =====
 
 export async function saveBook(book: BookProject): Promise<void> {
@@ -40,6 +50,14 @@ export async function saveBook(book: BookProject): Promise<void> {
     store.put(bookWithTimestamp);
     tx.oncomplete = () => {
       db.close();
+
+      // Sync to Supabase in background (don't block the UI)
+      if (isCloudEnabled()) {
+        saveBookToCloud(bookWithTimestamp).catch(err =>
+          console.warn('Cloud-synk misslyckades:', err.message)
+        );
+      }
+
       resolve();
     };
     tx.onerror = () => {
@@ -91,6 +109,14 @@ export async function deleteBook(id: string): Promise<void> {
     store.delete(id);
     tx.oncomplete = () => {
       db.close();
+
+      // Delete from Supabase in background
+      if (isCloudEnabled()) {
+        deleteBookFromCloud(id).catch(err =>
+          console.warn('Cloud-radering misslyckades:', err.message)
+        );
+      }
+
       resolve();
     };
     tx.onerror = () => {
