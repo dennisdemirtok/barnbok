@@ -20,6 +20,12 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkResults, setCheckResults] = useState<Record<string, {
+    passed: boolean;
+    summary: string;
+    issues: Array<{ character: string; issue: string; severity: string }>;
+  }>>({});
 
   const isSeparateTextFormat = book.bookFormat === 'bildbok-separat-text';
 
@@ -73,6 +79,34 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     onSaveBook(doneBook);
     setSaveMessage('Boken ar markerad som klar!');
     setTimeout(() => setSaveMessage(''), 3000);
+  };
+
+  // ── Character check ──
+  const handleCheckCharacters = async () => {
+    setChecking(true);
+    setCheckResults({});
+    const spreadsWithImages = book.spreads.filter(s => s.generatedImage && s.pages !== 'omslag' && s.pages !== 'slutsida');
+
+    for (const spread of spreadsWithImages) {
+      try {
+        const res = await fetch('/api/check-character', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            generatedImage: spread.generatedImage,
+            characters: book.characters.filter(c => c.approved),
+          }),
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          setCheckResults(prev => ({ ...prev, [spread.id]: result }));
+        }
+      } catch (err) {
+        console.error(`Kontroll av sida ${spread.pages}:`, err);
+      }
+    }
+    setChecking(false);
   };
 
   // ── Helper: render image ──
@@ -502,6 +536,20 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             </button>
 
             <button
+              onClick={handleCheckCharacters}
+              disabled={checking}
+              className="px-5 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg
+                         hover:bg-indigo-700 disabled:bg-gray-400 transition-colors
+                         flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              {checking ? 'Kontrollerar...' : 'Kontrollera karaktarer'}
+            </button>
+
+            <button
               onClick={handleMarkDone}
               className="px-5 py-2.5 bg-yellow-500 text-white font-semibold rounded-lg
                          hover:bg-yellow-600 transition-colors flex items-center gap-2"
@@ -521,6 +569,36 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
               : 'bg-red-100 text-red-700'
           }`}>
             {saveMessage}
+          </div>
+        )}
+
+        {/* Character check results summary */}
+        {Object.keys(checkResults).length > 0 && (
+          <div className="mt-3 p-3 rounded-lg bg-gray-50 border">
+            <h4 className="font-semibold text-sm mb-2">Karaktarskontroll:</h4>
+            {(() => {
+              const passed = Object.values(checkResults).filter(r => r.passed).length;
+              const failed = Object.values(checkResults).filter(r => !r.passed).length;
+              return (
+                <div className="flex gap-4 text-sm">
+                  <span className="text-green-600 font-medium">{passed} godkanda</span>
+                  {failed > 0 && <span className="text-red-600 font-medium">{failed} behover fixas</span>}
+                </div>
+              );
+            })()}
+            {Object.entries(checkResults).filter(([, r]) => !r.passed).map(([spreadId, result]) => {
+              const spread = book.spreads.find(s => s.id === spreadId);
+              return (
+                <div key={spreadId} className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700">
+                  <strong>Sida {spread?.pages}:</strong> {result.summary}
+                  {result.issues?.map((issue, i) => (
+                    <div key={i} className="ml-2 mt-1">
+                      - {issue.character}: {issue.issue} ({issue.severity})
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

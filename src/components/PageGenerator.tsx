@@ -3,6 +3,8 @@
 import { useState, useRef } from 'react';
 import { BookProject, Spread } from '@/lib/types';
 
+const BATCH_SIZE = 3; // Generate 3 images in parallel
+
 interface Props {
   book: BookProject;
   onPagesGenerated: (spreads: Spread[]) => void;
@@ -12,7 +14,6 @@ interface Props {
 export default function PageGenerator({ book, onPagesGenerated, onBack }: Props) {
   const [spreads, setSpreads] = useState<Spread[]>(book.spreads);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(-1);
   const [error, setError] = useState('');
   const abortRef = useRef(false);
 
@@ -20,9 +21,9 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
   const completedSpreads = spreads.filter(s => s.status === 'done').length;
   const failedCount = spreads.filter(s => s.status === 'error').length;
   const pendingCount = spreads.filter(s => s.status === 'pending').length;
+  const generatingCount = spreads.filter(s => s.status === 'generating').length;
   const progress = totalSpreads > 0 ? (completedSpreads / totalSpreads) * 100 : 0;
 
-  // Can proceed to review if most pages are done (allow skipping failed ones)
   const canProceedToReview = completedSpreads > 0 && !isGenerating && pendingCount === 0;
   const allDone = completedSpreads === totalSpreads;
 
@@ -33,16 +34,16 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
 
     const pendingSpreads = spreads.filter(s => s.status !== 'done');
 
-    for (let i = 0; i < pendingSpreads.length; i++) {
+    // Process in batches of BATCH_SIZE
+    for (let i = 0; i < pendingSpreads.length; i += BATCH_SIZE) {
       if (abortRef.current) break;
 
-      const spread = pendingSpreads[i];
-      const spreadIndex = spreads.findIndex(s => s.id === spread.id);
-      setCurrentIndex(spreadIndex);
+      const batch = pendingSpreads.slice(i, i + BATCH_SIZE);
+      const batchIds = batch.map(s => s.id);
 
-      // Update status to generating
+      // Mark all in batch as generating
       setSpreads(prev => prev.map(s =>
-        s.id === spread.id ? { ...s, status: 'generating' as const } : s
+        batchIds.includes(s.id) ? { ...s, status: 'generating' as const } : s
       ));
 
       try {
@@ -50,7 +51,8 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            spread,
+            batch: true,
+            spreads: batch,
             characters: book.characters,
             styleGuide: book.styleGuide,
             bookFormat: book.bookFormat,
@@ -59,29 +61,36 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
 
         if (!res.ok) {
           const data = await res.json();
-          throw new Error(data.error || 'Generering misslyckades');
+          throw new Error(data.error || 'Batch-generering misslyckades');
         }
 
-        const { image } = await res.json();
+        const { results } = await res.json() as {
+          results: Array<{ id: string; image?: string; error?: string }>;
+        };
 
-        setSpreads(prev => prev.map(s =>
-          s.id === spread.id
-            ? { ...s, generatedImage: image, status: 'done' as const, error: undefined }
-            : s
-        ));
+        // Update each spread with its result
+        setSpreads(prev => prev.map(s => {
+          const result = results.find(r => r.id === s.id);
+          if (!result) return s;
+
+          if (result.image) {
+            return { ...s, generatedImage: result.image, status: 'done' as const, error: undefined };
+          } else {
+            return { ...s, status: 'error' as const, error: result.error || 'Okant fel' };
+          }
+        }));
       } catch (err) {
+        // If the whole batch fails, mark all as error
         const message = err instanceof Error ? err.message : 'Okant fel';
         setSpreads(prev => prev.map(s =>
-          s.id === spread.id
+          batchIds.includes(s.id) && s.status === 'generating'
             ? { ...s, status: 'error' as const, error: message }
             : s
         ));
-        // Continue with next page instead of stopping
       }
     }
 
     setIsGenerating(false);
-    setCurrentIndex(-1);
   };
 
   const stopGeneration = () => {
@@ -89,15 +98,12 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
   };
 
   const retryFailed = async () => {
-    // Reset failed to pending
     setSpreads(prev => prev.map(s =>
       s.status === 'error' ? { ...s, status: 'pending' as const, error: undefined } : s
     ));
-    // Then start generation
-    await generateAllPages();
+    setTimeout(() => generateAllPages(), 100);
   };
 
-  // Retry a single failed spread
   const retrySingle = async (spreadId: string) => {
     const spread = spreads.find(s => s.id === spreadId);
     if (!spread) return;
@@ -152,9 +158,14 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
           </h2>
           <p className="text-gray-600">
             Genererar {totalSpreads} uppslag med dina godkanda karaktarer.
+            {generatingCount > 0 && (
+              <span className="text-blue-600 ml-1 font-medium">
+                ({generatingCount} bilder genereras parallellt)
+              </span>
+            )}
             {failedCount > 0 && (
               <span className="text-orange-600 ml-1">
-                (Gemini forsoker automatiskt igen vid fel - upp till 3 ganger per sida)
+                ({failedCount} misslyckade)
               </span>
             )}
           </p>
@@ -174,6 +185,9 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
       <div className="flex justify-between text-sm text-gray-600">
         <span>
           {completedSpreads} av {totalSpreads} uppslag klara
+          {generatingCount > 0 && (
+            <span className="text-blue-500 ml-2">({generatingCount} genereras...)</span>
+          )}
           {failedCount > 0 && (
             <span className="text-red-500 ml-2">({failedCount} misslyckade)</span>
           )}
@@ -213,7 +227,6 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
           </button>
         )}
 
-        {/* Allow proceeding even with some failures */}
         {canProceedToReview && (
           <button
             onClick={() => onPagesGenerated(spreads)}
@@ -230,12 +243,10 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
         )}
       </div>
 
-      {/* Warning about failed pages */}
       {canProceedToReview && !allDone && (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
           <strong>{failedCount} sidor</strong> kunde inte genereras. Du kan fortsatta till granskning anda
           - misslyckade sidor visas som tomma och kan regenereras darifran.
-          Du kan ocksa forsoka igen har forst.
         </div>
       )}
 
@@ -247,7 +258,7 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
 
       {/* Spread grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {spreads.map((spread, idx) => (
+        {spreads.map((spread) => (
           <div
             key={spread.id}
             className={`border rounded-lg overflow-hidden ${
@@ -257,7 +268,6 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
               'border-gray-200'
             }`}
           >
-            {/* Image area */}
             <div className="bg-gray-100 aspect-[3/2] flex items-center justify-center">
               {spread.status === 'generating' ? (
                 <div className="text-center">
@@ -292,7 +302,6 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
               )}
             </div>
 
-            {/* Info */}
             <div className="p-3">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-sm text-gray-700">

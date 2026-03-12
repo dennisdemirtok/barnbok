@@ -9,17 +9,22 @@ function getClient() {
   return new GoogleGenAI({ apiKey });
 }
 
-// Rate limiting
+// Rate limiting with queue for parallel requests
 let lastRequestTime = 0;
-const MIN_DELAY_MS = 3000;
+const MIN_DELAY_MS = 2000;
+let rateLimitQueue = Promise.resolve();
 
 async function rateLimitedDelay() {
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  if (timeSinceLastRequest < MIN_DELAY_MS) {
-    await new Promise(resolve => setTimeout(resolve, MIN_DELAY_MS - timeSinceLastRequest));
-  }
-  lastRequestTime = Date.now();
+  // Chain requests so they respect minimum delay even when called in parallel
+  rateLimitQueue = rateLimitQueue.then(async () => {
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime;
+    if (timeSinceLastRequest < MIN_DELAY_MS) {
+      await new Promise(resolve => setTimeout(resolve, MIN_DELAY_MS - timeSinceLastRequest));
+    }
+    lastRequestTime = Date.now();
+  });
+  await rateLimitQueue;
 }
 
 // Retry with exponential backoff

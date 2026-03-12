@@ -8,6 +8,7 @@ import BookImporter from '@/components/BookImporter';
 import CharacterApproval from '@/components/CharacterApproval';
 import PageGenerator from '@/components/PageGenerator';
 import BookPreview from '@/components/BookPreview';
+import ReferenceManager from '@/components/ReferenceManager';
 
 type Step = 'library' | 'import' | 'characters' | 'generate' | 'review';
 type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts';
@@ -23,6 +24,7 @@ export default function Home() {
   const [importFormat, setImportFormat] = useState<BookFormat>('bildbok-text-pa-bild');
   const [importParsedBook, setImportParsedBook] = useState<BookProject | null>(null);
   const [isClonedBook, setIsClonedBook] = useState(false);
+  const [showRefManager, setShowRefManager] = useState(false);
 
   // Auto-save whenever book changes (debounced)
   const autoSave = useCallback(async (bookToSave: BookProject) => {
@@ -175,6 +177,13 @@ export default function Home() {
               <p className="text-sm text-gray-500">Skapa barnbocker med AI-genererade illustrationer</p>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => setShowRefManager(true)}
+                className="px-3 py-1.5 text-sm text-indigo-600 hover:text-indigo-800 border border-indigo-200
+                           rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                Referensdata
+              </button>
               {book && step !== 'library' && (
                 <>
                   <div className="text-right">
@@ -333,6 +342,11 @@ export default function Home() {
           />
         )}
       </div>
+
+      {/* Reference Manager Modal */}
+      {showRefManager && (
+        <ReferenceManager onClose={() => setShowRefManager(false)} />
+      )}
     </main>
   );
 }
