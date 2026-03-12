@@ -68,21 +68,73 @@ export async function generateCharacterSheet(
   await rateLimitedDelay();
   const ai = getClient();
 
-  const prompt = `Create a character reference sheet for a children's book character. Show the character from front view and 3/4 angle view, on a simple white background.
+  // Estimate height from age string
+  const ageNum = parseInt(character.age || '', 10);
+  let heightEstimate: string;
+  if (!isNaN(ageNum)) {
+    if (ageNum <= 4) heightEstimate = '~100cm';
+    else if (ageNum <= 6) heightEstimate = '~110cm';
+    else if (ageNum <= 8) heightEstimate = '~125cm';
+    else if (ageNum <= 9) heightEstimate = '~130cm';
+    else if (ageNum <= 11) heightEstimate = '~140cm';
+    else if (ageNum <= 13) heightEstimate = '~155cm';
+    else if (ageNum <= 15) heightEstimate = '~165cm';
+    else heightEstimate = '~170cm';
+  } else {
+    heightEstimate = '~130cm';
+  }
+
+  const hasHeroCostume = !!character.heroCostume;
+
+  // Build layout instructions based on whether hero costume exists
+  let layoutSection: string;
+  if (hasHeroCostume) {
+    layoutSection = `LAYOUT: 2×2 grid (4 views) on a clean white background.
+- Top-left: FRONT VIEW wearing normal clothes. Label: "FRONT - Normal"
+- Top-right: 3/4 ANGLE VIEW wearing normal clothes. Label: "3/4 - Normal"
+- Bottom-left: FRONT VIEW wearing hero costume. Label: "FRONT - Hero"
+- Bottom-right: 3/4 ANGLE VIEW wearing hero costume. Label: "3/4 - Hero"`;
+  } else {
+    layoutSection = `LAYOUT: 1×2 grid (2 views side by side) on a clean white background.
+- Left: FRONT VIEW wearing normal clothes. Label: "FRONT - Normal"
+- Right: 3/4 ANGLE VIEW wearing normal clothes. Label: "3/4 - Normal"`;
+  }
+
+  // Build color swatch list
+  const swatchColors: string[] = [];
+  swatchColors.push('hair color', 'eye color', 'skin tone', 'main clothing colors');
+  if (hasHeroCostume) {
+    swatchColors.push('hero costume colors');
+  }
+
+  const prompt = `Create a professional CHARACTER MODEL SHEET / CHARACTER REFERENCE SHEET for a children's book character.
 
 CHARACTER DETAILS:
 - Name: ${character.name}${character.heroName ? ` (Hero name: ${character.heroName})` : ''}
 - Age: ${character.age || 'unknown'}
 - Appearance: ${character.appearance}
 ${character.normalClothes ? `- Normal clothes: ${character.normalClothes}` : ''}
-${character.heroCostume ? `- Hero costume: ${character.heroCostume}` : ''}
+${hasHeroCostume ? `- Hero costume: ${character.heroCostume}` : ''}
 ${character.personality ? `- Personality: ${character.personality}` : ''}
 
-STYLE: ${styleGuide}
+ART STYLE: ${styleGuide}
 
-Show the character clearly with consistent features, large expressive eyes in manga/comic style. The reference sheet should make it easy to reproduce this character exactly in future illustrations. Include both normal clothes and hero costume if applicable.
+${layoutSection}
 
-Label each view clearly. White/light grey background.`;
+REQUIRED ELEMENTS:
+1. COLOR CALLOUT SWATCHES: Include a row of small labeled colored squares showing the exact colors used for: ${swatchColors.join(', ')}. Each swatch must have a text label beneath it identifying what it represents.
+2. HEIGHT SCALE: Draw a vertical reference line with height marking (${heightEstimate}) next to the front view to indicate the character's height.
+3. FACIAL EXPRESSION: Neutral/calm expression in ALL views — not smiling, not angry, just neutral and composed. This makes it easy to adapt the character to different emotions later.
+4. VIEW LABELS: Clear text label directly under each view (e.g., "FRONT - Normal", "3/4 - Normal"${hasHeroCostume ? ', "FRONT - Hero", "3/4 - Hero"' : ''}).
+5. BACKGROUND: Clean pure white background. No scenery, no props, no distractions.
+6. PROFESSIONAL LAYOUT: Arrange everything like a professional animation or comic character model sheet used by illustrators for reference.
+
+CONSISTENCY RULES (CRITICAL):
+- The character must look IDENTICAL across ALL views: same exact proportions, same facial features, same hair style and color, same eye color, same skin tone.
+- Clothing details must be consistent within each outfit (normal clothes consistent across normal views, hero costume consistent across hero views).
+- The character should be easily reproducible from this reference sheet in future illustrations.
+
+This reference sheet will be used as the definitive guide for drawing this character consistently throughout an entire book.`;
 
   return withRetry(async () => {
     const response = await ai.models.generateContent({
@@ -94,7 +146,7 @@ Label each view clearly. White/light grey background.`;
     });
 
     if (!response.candidates?.[0]?.content?.parts) {
-      throw new Error('Inget svar fran Gemini');
+      throw new Error('Inget svar från Gemini');
     }
 
     for (const part of response.candidates[0].content.parts) {
@@ -323,7 +375,7 @@ ${isSinglePageFormat
     });
 
     if (!response.candidates?.[0]?.content?.parts) {
-      throw new Error('Inget svar fran Gemini');
+      throw new Error('Inget svar från Gemini');
     }
 
     for (const part of response.candidates[0].content.parts) {

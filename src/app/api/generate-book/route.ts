@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     console.log(`[generate-book] Claude returnerade ${rawBookText.length} tecken`);
 
     // Log first 500 chars for debugging
-    console.log('[generate-book] Forsta 500 tecken:', rawBookText.substring(0, 500));
+    console.log('[generate-book] Första 500 tecken:', rawBookText.substring(0, 500));
 
     // Parse the generated content using the same parser
     const book = parseBookData(rawBookText);
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Bokgenerering misslyckades:', error);
-    const message = error instanceof Error ? error.message : 'Okant fel';
+    const message = error instanceof Error ? error.message : 'Okänt fel';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

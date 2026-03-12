@@ -5,10 +5,10 @@ import { SavedText, BookFormat } from '@/lib/types';
 import { listSavedTexts, deleteSavedText } from '@/lib/storage';
 
 const FORMAT_LABELS: Record<BookFormat, string> = {
-  'bildbok-text-pa-bild': 'Text pa bild',
+  'bildbok-text-pa-bild': 'Text på bild',
   'bildbok-separat-text': 'Separat text',
   'kapitelbok': 'Kapitelbok',
-  'larobok': 'Larobok',
+  'larobok': 'Lärobok',
 };
 
 interface Props {
@@ -63,7 +63,7 @@ export default function SavedTextPicker({ onTextSelected, onBack }: Props) {
           <p className="text-gray-600">
             {texts.length > 0
               ? `Du har ${texts.length} sparad${texts.length > 1 ? 'e' : ''} text${texts.length > 1 ? 'er' : ''}.`
-              : 'Inga sparade texter an. Skapa en bok och spara texten for att borja.'}
+              : 'Inga sparade texter än. Skapa en bok och spara texten för att börja.'}
           </p>
         </div>
         <button
@@ -95,7 +95,7 @@ export default function SavedTextPicker({ onTextSelected, onBack }: Props) {
               </div>
 
               <div className="flex gap-3 text-xs text-gray-400 mb-3">
-                <span>{text.characterCount} karaktarer</span>
+                <span>{text.characterCount} karaktärer</span>
                 <span>{text.spreadCount} uppslag</span>
               </div>
 
@@ -122,7 +122,7 @@ export default function SavedTextPicker({ onTextSelected, onBack }: Props) {
           <div className="text-5xl mb-4">📝</div>
           <h3 className="text-lg font-semibold text-gray-500 mb-2">Inga sparade texter</h3>
           <p className="text-gray-400">
-            Nar du skapar eller importerar en bok kan du spara texten for att ateranvanda den.
+            När du skapar eller importerar en bok kan du spara texten för att återanvända den.
           </p>
         </div>
       )}

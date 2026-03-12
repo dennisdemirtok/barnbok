@@ -76,12 +76,12 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
           if (result.image) {
             return { ...s, generatedImage: result.image, status: 'done' as const, error: undefined };
           } else {
-            return { ...s, status: 'error' as const, error: result.error || 'Okant fel' };
+            return { ...s, status: 'error' as const, error: result.error || 'Okänt fel' };
           }
         }));
       } catch (err) {
         // If the whole batch fails, mark all as error
-        const message = err instanceof Error ? err.message : 'Okant fel';
+        const message = err instanceof Error ? err.message : 'Okänt fel';
         setSpreads(prev => prev.map(s =>
           batchIds.includes(s.id) && s.status === 'generating'
             ? { ...s, status: 'error' as const, error: message }
@@ -138,7 +138,7 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
           : s
       ));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Okant fel';
+      const message = err instanceof Error ? err.message : 'Okänt fel';
       setSpreads(prev => prev.map(s =>
         s.id === spreadId
           ? { ...s, status: 'error' as const, error: message }
@@ -157,7 +157,7 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
             Steg 3: Generera sidor
           </h2>
           <p className="text-gray-600">
-            Genererar {totalSpreads} uppslag med dina godkanda karaktarer.
+            Genererar {totalSpreads} uppslag med dina godkända karaktärer.
             {generatingCount > 0 && (
               <span className="text-blue-600 ml-1 font-medium">
                 ({generatingCount} bilder genereras parallellt)
@@ -205,7 +205,7 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700
                          disabled:bg-gray-400 transition-colors"
             >
-              {completedSpreads > 0 ? 'Fortsatt generera' : 'Starta generering'}
+              {completedSpreads > 0 ? 'Fortsätt generera' : 'Starta generering'}
             </button>
             {failedCount > 0 && (
               <button
@@ -213,7 +213,7 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
                 className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700
                            transition-colors"
               >
-                Forsok igen alla ({failedCount} misslyckade)
+                Försök igen alla ({failedCount} misslyckade)
               </button>
             )}
           </>
@@ -245,8 +245,8 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
 
       {canProceedToReview && !allDone && (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
-          <strong>{failedCount} sidor</strong> kunde inte genereras. Du kan fortsatta till granskning anda
-          - misslyckade sidor visas som tomma och kan regenereras darifran.
+          <strong>{failedCount} sidor</strong> kunde inte genereras. Du kan fortsätta till granskning ändå
+          - misslyckade sidor visas som tomma och kan regenereras därifrån.
         </div>
       )}
 
@@ -293,12 +293,12 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
                       className="px-3 py-1 bg-orange-500 text-white text-xs rounded-lg
                                  hover:bg-orange-600 transition-colors"
                     >
-                      Forsok igen
+                      Försök igen
                     </button>
                   )}
                 </div>
               ) : (
-                <span className="text-gray-400 text-sm">Vantar...</span>
+                <span className="text-gray-400 text-sm">Väntar...</span>
               )}
             </div>
 
@@ -317,7 +317,7 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
                 }`}>
                   {spread.status === 'done' ? 'Klar' :
                    spread.status === 'generating' ? 'Genererar' :
-                   spread.status === 'error' ? 'Fel' : 'Vantar'}
+                   spread.status === 'error' ? 'Fel' : 'Väntar'}
                 </span>
               </div>
               {spread.chapter && (

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     return handleSingle(body);
   } catch (error) {
     console.error('Page generation error:', error);
-    const message = error instanceof Error ? error.message : 'Okant fel';
+    const message = error instanceof Error ? error.message : 'Okänt fel';
     return NextResponse.json(
       { error: `Kunde inte generera sidbild: ${message}` },
       { status: 500 }
@@ -93,7 +93,7 @@ async function handleBatch(body: {
         );
         return { id: spread.id, image };
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Okant fel';
+        const message = err instanceof Error ? err.message : 'Okänt fel';
         return { id: spread.id, error: message };
       }
     });

@@ -67,7 +67,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       await exportBookToPDF(book);
     } catch (err) {
       console.error('PDF-export misslyckades:', err);
-      alert('PDF-export misslyckades. Kontrollera konsolen for detaljer.');
+      alert('PDF-export misslyckades. Kontrollera konsolen för detaljer.');
     } finally {
       setExporting(false);
     }
@@ -77,7 +77,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     const doneBook = { ...book, status: 'done' as const };
     await saveBook(doneBook);
     onSaveBook(doneBook);
-    setSaveMessage('Boken ar markerad som klar!');
+    setSaveMessage('Boken är markerad som klar!');
     setTimeout(() => setSaveMessage(''), 3000);
   };
 
@@ -485,7 +485,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             Steg 4: Granska & redigera
           </h2>
           <p className="text-gray-600">
-            Klicka pa ett uppslag for att redigera text eller regenerera bilden.
+            Klicka på ett uppslag för att redigera text eller regenerera bilden.
           </p>
         </div>
         <button onClick={onBack} className="px-4 py-2 text-gray-500 hover:text-gray-700">
@@ -501,7 +501,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             {book.subtitle && <p className="text-gray-600">{book.subtitle}</p>}
             <div className="flex gap-4 mt-2 text-sm text-gray-500">
               <span>{book.spreads.length} uppslag</span>
-              <span>{book.characters.length} karaktarer</span>
+              <span>{book.characters.length} karaktärer</span>
               <span>{book.spreads.filter(s => s.status === 'done').length} bilder klara</span>
             </div>
           </div>
@@ -546,7 +546,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              {checking ? 'Kontrollerar...' : 'Kontrollera karaktarer'}
+              {checking ? 'Kontrollerar...' : 'Kontrollera karaktärer'}
             </button>
 
             <button
@@ -575,14 +575,14 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
         {/* Character check results summary */}
         {Object.keys(checkResults).length > 0 && (
           <div className="mt-3 p-3 rounded-lg bg-gray-50 border">
-            <h4 className="font-semibold text-sm mb-2">Karaktarskontroll:</h4>
+            <h4 className="font-semibold text-sm mb-2">Karaktärskontroll:</h4>
             {(() => {
               const passed = Object.values(checkResults).filter(r => r.passed).length;
               const failed = Object.values(checkResults).filter(r => !r.passed).length;
               return (
                 <div className="flex gap-4 text-sm">
-                  <span className="text-green-600 font-medium">{passed} godkanda</span>
-                  {failed > 0 && <span className="text-red-600 font-medium">{failed} behover fixas</span>}
+                  <span className="text-green-600 font-medium">{passed} godkända</span>
+                  {failed > 0 && <span className="text-red-600 font-medium">{failed} behöver fixas</span>}
                 </div>
               );
             })()}
@@ -609,7 +609,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
           onClick={() => setViewMode(viewMode === 'grid' ? 'book' : 'grid')}
           className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
         >
-          {viewMode === 'grid' ? 'Bokvy' : 'Rutnat'}
+          {viewMode === 'grid' ? 'Bokvy' : 'Rutnät'}
         </button>
       </div>
 
@@ -649,7 +649,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
                        `Sida ${spread.pages}`}
                     </span>
                     <span className="text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                      Klicka for att redigera
+                      Klicka för att redigera
                     </span>
                   </div>
                   {spread.chapter && !showLuna && firstChapterSpreadIds.has(spread.id) && (

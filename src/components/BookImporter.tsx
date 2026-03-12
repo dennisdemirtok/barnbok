@@ -22,10 +22,10 @@ interface Props {
 }
 
 const FORMAT_CHOICES: { value: BookFormat; label: string }[] = [
-  { value: 'bildbok-text-pa-bild', label: 'Bildbok med text pa bild (Handbok-stil)' },
+  { value: 'bildbok-text-pa-bild', label: 'Bildbok med text på bild (Handbok-stil)' },
   { value: 'bildbok-separat-text', label: 'Bildbok med separat text (Luna-stil)' },
   { value: 'kapitelbok', label: 'Kapitelbok' },
-  { value: 'larobok', label: 'Larobok / Aktivitetsbok' },
+  { value: 'larobok', label: 'Lärobok / Aktivitetsbok' },
 ];
 
 export default function BookImporter({
@@ -49,7 +49,7 @@ export default function BookImporter({
     try {
       const savedTextEntry: SavedText = {
         id: `text-${Date.now()}`,
-        title: parsedBook.title || 'Namnlos text',
+        title: parsedBook.title || 'Namnlös text',
         rawText,
         bookFormat: importFormat,
         characterCount: parsedBook.characters.length,
@@ -72,7 +72,7 @@ export default function BookImporter({
 
   const handleParse = async () => {
     if (!rawText.trim()) {
-      setError('Klistra in boktext forst');
+      setError('Klistra in boktext först');
       return;
     }
 
@@ -95,7 +95,7 @@ export default function BookImporter({
       book.bookFormat = importFormat;
       onParsedBookChange(book);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nagot gick fel');
+      setError(err instanceof Error ? err.message : 'Något gick fel');
     } finally {
       setLoading(false);
     }
@@ -116,7 +116,7 @@ export default function BookImporter({
             Steg 1: Skapa eller importera bok
           </h2>
           <p className="text-gray-600">
-            Valj om du vill skapa en helt ny bok med AI, importera befintlig boktext, eller anvanda en sparad text.
+            Välj om du vill skapa en helt ny bok med AI, importera befintlig boktext, eller använda en sparad text.
           </p>
         </div>
 
@@ -132,13 +132,13 @@ export default function BookImporter({
               Skapa ny bok med AI
             </h3>
             <p className="text-gray-500">
-              Fyll i titel, karaktarer, handling och stil. Claude AI skapar hela boken
+              Fyll i titel, karaktärer, handling och stil. Claude AI skapar hela boken
               - text, kapitel och bildpromptar.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Bildbok</span>
               <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Kapitelbok</span>
-              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Larobok</span>
+              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Lärobok</span>
             </div>
           </button>
 
@@ -153,7 +153,7 @@ export default function BookImporter({
               Importera befintlig boktext
             </h3>
             <p className="text-gray-500">
-              Har du redan text med karaktarer, sidtexter och bildpromptar?
+              Har du redan text med karaktärer, sidtexter och bildpromptar?
               Klistra in den och vi parsar den automatiskt.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -174,12 +174,12 @@ export default function BookImporter({
               Sparade texter
             </h3>
             <p className="text-gray-500">
-              Anvand en tidigare sparad boktext. Perfekt for att testa samma historia
-              med nya karaktarer eller annat bildformat.
+              Använd en tidigare sparad boktext. Perfekt för att testa samma historia
+              med nya karaktärer eller annat bildformat.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Snabb start</span>
-              <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Ateranvand text</span>
+              <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Återanvänd text</span>
             </div>
           </button>
         </div>
@@ -217,8 +217,8 @@ export default function BookImporter({
           </h2>
           <p className="text-gray-600">
             {parsedBook
-              ? 'Granska resultatet och fortsatt till karaktarer.'
-              : 'Klistra in din boktext med karaktarer, sidtexter och bildpromptar.'}
+              ? 'Granska resultatet och fortsatt till karaktärer.'
+              : 'Klistra in din boktext med karaktärer, sidtexter och bildpromptar.'}
           </p>
         </div>
         <button
@@ -234,7 +234,7 @@ export default function BookImporter({
           {/* Book format selector for import */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Bokformat (viktigt for bildgenerering)
+              Bokformat (viktigt för bildgenerering)
             </label>
             <div className="flex flex-wrap gap-2">
               {FORMAT_CHOICES.map((fmt) => (
@@ -317,10 +317,10 @@ Double page spread, Swedish children's book...`}
           {/* Warning if parsing found nothing */}
           {(parsedBook.spreads.length === 0 || parsedBook.characters.length === 0) && (
             <div className="p-3 bg-yellow-100 border border-yellow-300 rounded-lg text-yellow-800 text-sm">
-              <strong>Parsningen hittade {parsedBook.spreads.length === 0 ? 'inga uppslag' : ''}{parsedBook.spreads.length === 0 && parsedBook.characters.length === 0 ? ' och ' : ''}{parsedBook.characters.length === 0 ? 'inga karaktarer' : ''}.</strong>
+              <strong>Parsningen hittade {parsedBook.spreads.length === 0 ? 'inga uppslag' : ''}{parsedBook.spreads.length === 0 && parsedBook.characters.length === 0 ? ' och ' : ''}{parsedBook.characters.length === 0 ? 'inga karaktärer' : ''}.</strong>
               <br />
-              Klicka &quot;Redigera text&quot; for att se och redigera den genererade texten, och forsok parsa igen.
-              AI-texten kan ibland anvanda ett format som parsern inte kannar igen.
+              Klicka &quot;Redigera text&quot; för att se och redigera den genererade texten, och försök parsa igen.
+              AI-texten kan ibland använda ett format som parsern inte känner igen.
             </div>
           )}
           <h3 className={`text-lg font-bold ${
@@ -335,7 +335,7 @@ Double page spread, Swedish children's book...`}
             </div>
             <div className="bg-white rounded-lg p-3 text-center">
               <p className="text-2xl font-bold text-purple-600">{parsedBook.characters.length}</p>
-              <p className="text-xs text-gray-500">Karaktarer</p>
+              <p className="text-xs text-gray-500">Karaktärer</p>
             </div>
             <div className="bg-white rounded-lg p-3 text-center">
               <p className="text-2xl font-bold text-green-600">
@@ -371,7 +371,7 @@ Double page spread, Swedish children's book...`}
               className="flex-1 px-8 py-3 bg-green-600 text-white font-semibold rounded-lg
                          hover:bg-green-700 transition-colors"
             >
-              Ser bra ut - fortsatt till karaktarer
+              Ser bra ut - fortsatt till karaktärer
             </button>
             <button
               onClick={handleSaveText}

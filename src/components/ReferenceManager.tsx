@@ -11,10 +11,10 @@ import {
 } from '@/lib/supabase-db';
 
 const BOOK_SERIES_OPTIONS = [
-  { value: 'superhjaltarna', label: 'Handbok for Superhjaltar' },
+  { value: 'superhjaltarna', label: 'Handbok för Superhjältar' },
   { value: 'luna', label: 'Luna (Karin Lemon)' },
   { value: 'harry-potter', label: 'Harry Potter' },
-  { value: 'alfons', label: 'Alfons Aberg' },
+  { value: 'alfons', label: 'Alfons Åberg' },
   { value: 'pettson', label: 'Pettson & Findus' },
   { value: 'custom', label: 'Annan bokserie...' },
 ];
@@ -178,7 +178,7 @@ export default function ReferenceManager({ onClose }: Props) {
               <input
                 value={customSeries}
                 onChange={e => setCustomSeries(e.target.value)}
-                placeholder="Namn pa bokserie..."
+                placeholder="Namn på bokserie..."
                 className="flex-1 px-3 py-2 border rounded-lg text-sm"
               />
             )}
@@ -218,7 +218,7 @@ export default function ReferenceManager({ onClose }: Props) {
           {activeTab === 'texts' && (
             <div className="space-y-4">
               <div className="p-4 bg-blue-50 rounded-lg space-y-3">
-                <h3 className="font-semibold text-sm text-blue-800">Lagg till referenstext</h3>
+                <h3 className="font-semibold text-sm text-blue-800">Lägg till referenstext</h3>
                 <input
                   value={bookTitle}
                   onChange={e => setBookTitle(e.target.value)}
@@ -228,7 +228,7 @@ export default function ReferenceManager({ onClose }: Props) {
                 <textarea
                   value={textSample}
                   onChange={e => setTextSample(e.target.value)}
-                  placeholder="Klistra in textexempel fran boken..."
+                  placeholder="Klistra in textexempel från boken..."
                   rows={5}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                 />
@@ -238,10 +238,10 @@ export default function ReferenceManager({ onClose }: Props) {
                     onChange={e => setTextType(e.target.value)}
                     className="px-3 py-2 border rounded-lg text-sm"
                   >
-                    <option value="narrative">Berattande</option>
+                    <option value="narrative">Berättande</option>
                     <option value="dialogue">Dialog</option>
                     <option value="description">Beskrivning</option>
-                    <option value="opening">Oppning</option>
+                    <option value="opening">Öppning</option>
                     <option value="ending">Avslutning</option>
                   </select>
                   <input
@@ -287,7 +287,7 @@ export default function ReferenceManager({ onClose }: Props) {
               <div className="p-4 bg-purple-50 rounded-lg space-y-3">
                 <h3 className="font-semibold text-sm text-purple-800">Ladda upp referensbild</h3>
                 <p className="text-xs text-purple-600">
-                  Ta skarmbilder fran riktiga bocker for att lara systemet stilen.
+                  Ta skärmbilder från riktiga böcker för att lära systemet stilen.
                 </p>
                 <input
                   type="file"
@@ -351,11 +351,11 @@ export default function ReferenceManager({ onClose }: Props) {
             <div className="space-y-4">
               <div className="p-4 bg-green-50 rounded-lg space-y-3">
                 <h3 className="font-semibold text-sm text-green-800">
-                  Stilprofil for {BOOK_SERIES_OPTIONS.find(o => o.value === bookSeries)?.label || currentSeries}
+                  Stilprofil för {BOOK_SERIES_OPTIONS.find(o => o.value === bookSeries)?.label || currentSeries}
                 </h3>
                 <p className="text-xs text-green-600">
-                  Sammanfatta den typiska stilen for denna bokserie. Anvands som
-                  grund nar systemet genererar nya bocker.
+                  Sammanfatta den typiska stilen för denna bokserie. Används som
+                  grund när systemet genererar nya böcker.
                 </p>
                 <div>
                   <label className="text-xs font-medium text-gray-600">Textstil</label>
@@ -372,13 +372,13 @@ export default function ReferenceManager({ onClose }: Props) {
                   <textarea
                     value={profileImageStyle}
                     onChange={e => setProfileImageStyle(e.target.value)}
-                    placeholder="Beskriv bildstilen: t.ex. 'Comic/manga-stil, starka konturer, livfulla farger, pratbubblor...'"
+                    placeholder="Beskriv bildstilen: t.ex. 'Comic/manga-stil, starka konturer, livfulla färger, pratbubblor...'"
                     rows={3}
                     className="w-full px-3 py-2 border rounded-lg text-sm mt-1"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Ovrigt</label>
+                  <label className="text-xs font-medium text-gray-600">Övrigt</label>
                   <textarea
                     value={profileNotes}
                     onChange={e => setProfileNotes(e.target.value)}

@@ -29,7 +29,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
       });
       setBooks(savedBooks);
     } catch (err) {
-      console.error('Kunde inte ladda sparade bocker:', err);
+      console.error('Kunde inte ladda sparade böcker:', err);
     } finally {
       setLoading(false);
     }
@@ -55,18 +55,18 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
   const getStatusLabel = (book: BookProject) => {
     switch (book.status) {
       case 'importing': return { text: 'Importerad', color: 'bg-gray-100 text-gray-600' };
-      case 'characters': return { text: 'Karaktarer', color: 'bg-purple-100 text-purple-600' };
+      case 'characters': return { text: 'Karaktärer', color: 'bg-purple-100 text-purple-600' };
       case 'generating': return { text: 'Genererar', color: 'bg-blue-100 text-blue-600' };
       case 'reviewing': return { text: 'Granskning', color: 'bg-green-100 text-green-600' };
       case 'done': return { text: 'Klar', color: 'bg-green-200 text-green-700' };
-      default: return { text: 'Okand', color: 'bg-gray-100 text-gray-600' };
+      default: return { text: 'Okänd', color: 'bg-gray-100 text-gray-600' };
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="text-gray-500">Laddar sparade bocker...</div>
+        <div className="text-gray-500">Laddar sparade böcker...</div>
       </div>
     );
   }
@@ -75,11 +75,11 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">Dina bocker</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-1">Dina böcker</h2>
           <p className="text-gray-600">
             {books.length > 0
               ? `Du har ${books.length} sparad${books.length > 1 ? 'e' : ''} bok${books.length > 1 ? 'er' : ''}.`
-              : 'Inga sparade bocker an. Skapa en ny!'}
+              : 'Inga sparade böcker än. Skapa en ny!'}
           </p>
         </div>
         <button
@@ -142,7 +142,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
                   <div className="flex gap-3 text-xs text-gray-400">
                     <span>{stats.totalSpreads} uppslag</span>
                     <span>{stats.generatedImages} bilder</span>
-                    <span>{book.characters.length} karaktarer</span>
+                    <span>{book.characters.length} karaktärer</span>
                   </div>
                   <div className="flex items-center justify-between mt-3">
                     <span className="text-xs text-gray-400">
@@ -156,7 +156,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
                         }}
                         className="text-xs text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        Ateranvand
+                        Återanvänd
                       </button>
                       <button
                         onClick={(e) => {
@@ -182,8 +182,8 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
               d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
           </svg>
-          <h3 className="text-lg font-semibold text-gray-500 mb-2">Inga bocker an</h3>
-          <p className="text-gray-400 mb-6">Klicka pa "Ny bok" for att borja skapa din forsta bok!</p>
+          <h3 className="text-lg font-semibold text-gray-500 mb-2">Inga böcker än</h3>
+          <p className="text-gray-400 mb-6">Klicka på "Ny bok" för att börja skapa din första bok!</p>
           <button
             onClick={onNewBook}
             className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"

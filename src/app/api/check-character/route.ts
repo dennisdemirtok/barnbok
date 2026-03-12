@@ -77,7 +77,7 @@ RESPOND WITH ONLY THE JSON, no other text.`;
 
     const responseText = response.candidates?.[0]?.content?.parts?.[0];
     if (!responseText || !('text' in responseText)) {
-      throw new Error('Inget svar fran Gemini');
+      throw new Error('Inget svar från Gemini');
     }
 
     // Parse JSON from response
@@ -91,7 +91,7 @@ RESPOND WITH ONLY THE JSON, no other text.`;
     return NextResponse.json(analysis);
   } catch (error) {
     console.error('Character check error:', error);
-    const message = error instanceof Error ? error.message : 'Okant fel';
+    const message = error instanceof Error ? error.message : 'Okänt fel';
     return NextResponse.json(
       { error: `Karaktarskontroll misslyckades: ${message}` },
       { status: 500 }

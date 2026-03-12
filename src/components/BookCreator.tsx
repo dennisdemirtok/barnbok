@@ -15,24 +15,24 @@ const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; i
   {
     value: 'bildbok-text-pa-bild',
     label: 'Bildbok med text pa bild',
-    description: 'Likt "Handbok for Superhjaltar" - helsides illustrationer med text integrerad i bilden. Kort text, mycket visuellt.',
+    description: 'Likt "Handbok för Superhjältar" - helsides illustrationer med text integrerad i bilden. Kort text, mycket visuellt.',
     icon: '🦸',
   },
   {
     value: 'bildbok-separat-text',
     label: 'Bildbok med separat text',
-    description: 'Likt "Luna"-bocker - text ovanfor/under eller bredvid bilderna. Mer text, bild och text kompletterar varandra.',
+    description: 'Likt "Luna"-böcker - text ovanför/under eller bredvid bilderna. Mer text, bild och text kompletterar varandra.',
     icon: '🌙',
   },
   {
     value: 'kapitelbok',
     label: 'Kapitelbok',
-    description: 'Likt Harry Potter / Bert-bocker - mest text med enstaka illustrationer. Langre kapitel och detaljerat berattande.',
+    description: 'Likt Harry Potter / Bert-böcker - mest text med enstaka illustrationer. Längre kapitel och detaljerat berättande.',
     icon: '📖',
   },
   {
     value: 'larobok',
-    label: 'Larobok / Aktivitetsbok',
+    label: 'Lärobok / Aktivitetsbok',
     description: 'Likt "Artan, Partan" - blandning av text, bilder och uppgifter. Pedagogiskt upplag.',
     icon: '📐',
   },
@@ -41,7 +41,7 @@ const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; i
 const PLOT_TAGS = [
   'Aventyr', 'Drama', 'Komedi', 'Mysterium', 'Fantasy', 'Sci-fi',
   'Vanskap', 'Skola', 'Familj', 'Djur', 'Natur', 'Sport',
-  'Superhjaltar', 'Magi', 'Rymden', 'Pirater', 'Dinosaurier',
+  'Superhjältar', 'Magi', 'Rymden', 'Pirater', 'Dinosaurier',
 ];
 
 const SETTING_TAGS = [
@@ -49,12 +49,12 @@ const SETTING_TAGS = [
   'Rymden', 'Under vatten', 'Slott', 'Bondgard', 'Lekplats',
 ];
 
-const AGE_OPTIONS = ['3-5 ar', '6-8 ar', '9-12 ar', '12+ ar'];
+const AGE_OPTIONS = ['3-5 år', '6-8 år', '9-12 år', '12+ år'];
 
 const PAGE_PRESETS = [
   { pages: 24, label: '24 sidor (kort bildbok)' },
   { pages: 32, label: '32 sidor (standard bildbok)' },
-  { pages: 48, label: '48 sidor (langre bildbok)' },
+  { pages: 48, label: '48 sidor (längre bildbok)' },
   { pages: 64, label: '64 sidor (kort kapitelbok)' },
   { pages: 96, label: '96 sidor (kapitelbok)' },
   { pages: 128, label: '128 sidor (lang kapitelbok)' },
@@ -69,7 +69,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
   const [numCharacters, setNumCharacters] = useState(3);
   const [characterNames, setCharacterNames] = useState('');
   const [numPages, setNumPages] = useState(32);
-  const [targetAge, setTargetAge] = useState('6-8 ar');
+  const [targetAge, setTargetAge] = useState('6-8 år');
   const [textDensity, setTextDensity] = useState<TextDensity>('medium');
   const [subject, setSubject] = useState('');
 
@@ -78,7 +78,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
   const [selectedPlotTags, setSelectedPlotTags] = useState<string[]>([]);
   const [setting, setSetting] = useState('');
   const [selectedSettingTags, setSelectedSettingTags] = useState<string[]>([]);
-  const [imageStyle, setImageStyle] = useState('Farggrant, manga/comic-stil med stora uttrycksfulla ogon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik');
+  const [imageStyle, setImageStyle] = useState('Färgglatt, manga/comic-stil med stora uttrycksfulla ögon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik');
 
   // State
   const [loading, setLoading] = useState(false);
@@ -124,8 +124,8 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
       ],
       'larobok': [
         { value: 'minimal', label: 'Minimal', desc: 'Korta instruktioner', words: '30-60 ord/sida' },
-        { value: 'lite', label: 'Lite', desc: 'Tydliga forklaringar', words: '60-100 ord/sida' },
-        { value: 'medium', label: 'Medium', desc: 'Utforliga ovningar', words: '100-150 ord/sida' },
+        { value: 'lite', label: 'Lite', desc: 'Tydliga förklaringar', words: '60-100 ord/sida' },
+        { value: 'medium', label: 'Medium', desc: 'Utförliga övningar', words: '100-150 ord/sida' },
         { value: 'mycket', label: 'Mycket', desc: 'Detaljerat', words: '150-200 ord/sida' },
       ],
     };
@@ -182,7 +182,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
       setProgress('Klar! Boken har skapats.');
       onBookCreated(book, rawText);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nagot gick fel');
+      setError(err instanceof Error ? err.message : 'Något gick fel');
     } finally {
       setLoading(false);
       setProgress('');
@@ -260,7 +260,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           {bookFormat === 'larobok' && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Amne
+                Ämne
               </label>
               <input
                 type="text"
@@ -276,7 +276,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           {/* Target Age */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Malgrupp *
+              Målgrupp *
             </label>
             <div className="flex flex-wrap gap-2">
               {AGE_OPTIONS.map((age) => (
@@ -298,7 +298,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           {/* Text Density */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Textmangd per sida
+              Textmängd per sida
             </label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {getDensityOptions().map((opt) => (
@@ -318,7 +318,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              Styr hur mycket text varje sida far. Anpassat efter valt bokformat ({FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}).
+              Styr hur mycket text varje sida får. Anpassat efter valt bokformat ({FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}).
             </p>
           </div>
 
@@ -326,7 +326,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Antal karaktarer
+                Antal karaktärer
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -342,7 +342,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Namn pa karaktarerna
+                Namn på karaktärerna
                 <span className="text-gray-400 font-normal ml-1">(valfritt)</span>
               </label>
               <input
@@ -353,7 +353,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg
                            focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-sm"
               />
-              <p className="text-xs text-gray-400 mt-1">Lamna tomt for automatiska namn</p>
+              <p className="text-xs text-gray-400 mt-1">Lämna tomt för automatiska namn</p>
             </div>
           </div>
 
@@ -409,7 +409,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             className="w-full px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg
                        hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-lg"
           >
-            Nasta: Handling & stil →
+            Nästa: Handling & stil →
           </button>
         </div>
       ) : (
@@ -437,7 +437,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             <textarea
               value={plotText}
               onChange={(e) => setPlotText(e.target.value)}
-              placeholder="Beskriv handlingen fritt... T.ex. 'Fyra barn som gar i skolan upptacker att de har magiska krafter. De maste samarbeta for att stoppa en mystisk skurk.'"
+              placeholder="Beskriv handlingen fritt... T.ex. 'Fyra barn som går i skolan upptäcker att de har magiska krafter. De måste samarbeta för att stoppa en mystisk skurk.'"
               className="w-full h-24 p-3 border-2 border-gray-300 rounded-lg text-sm
                          focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-y"
             />
@@ -446,7 +446,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           {/* Setting */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Miljo
+              Miljö
             </label>
             <div className="flex flex-wrap gap-2 mb-3">
               {SETTING_TAGS.map((tag) => (
@@ -467,7 +467,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               type="text"
               value={setting}
               onChange={(e) => setSetting(e.target.value)}
-              placeholder="Beskriv miljon mer detaljerat... T.ex. 'Liten svensk stad vid kusten, gammal skola fran 1800-talet'"
+              placeholder="Beskriv miljön mer detaljerat... T.ex. 'Liten svensk stad vid kusten, gammal skola från 1800-talet'"
               className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm
                          focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
             />
@@ -487,10 +487,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             />
             <div className="flex flex-wrap gap-2 mt-2">
               {[
-                { label: 'Handbok for Superhjaltar', value: 'Farggrant, manga/comic-stil med stora uttrycksfulla ogon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik. Liknande "Handbok for Superhjaltar".' },
-                { label: 'Akvarellstil', value: 'Mjuk akvarellstil med pasteller, drommande atmosfar, fina detaljer och naturliga toner.' },
-                { label: 'Tecknad/Disney', value: 'Tecknad stil liknande moderna Disney/Pixar-filmer, varm belysning, uttrycksfulla karaktarer, detaljerade miljoer.' },
-                { label: 'Minimalistisk', value: 'Enkel, minimalistisk stil med platta farger, geometriska former och mycket vitt utrymme.' },
+                { label: 'Handbok för Superhjältar', value: 'Färgglatt, manga/comic-stil med stora uttrycksfulla ögon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik. Liknande "Handbok för Superhjältar".' },
+                { label: 'Akvarellstil', value: 'Mjuk akvarellstil med pasteller, drömmande atmosfär, fina detaljer och naturliga toner.' },
+                { label: 'Tecknad/Disney', value: 'Tecknad stil liknande moderna Disney/Pixar-filmer, varm belysning, uttrycksfulla karaktärer, detaljerade miljöer.' },
+                { label: 'Minimalistisk', value: 'Enkel, minimalistisk stil med platta färger, geometriska former och mycket vitt utrymme.' },
               ].map((style) => (
                 <button
                   key={style.label}
@@ -514,8 +514,8 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               <div><span className="font-medium">Titel:</span> {title}</div>
               <div><span className="font-medium">Format:</span> {FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}</div>
               <div><span className="font-medium">Sidor:</span> {numPages} ({Math.ceil(numPages / 2)} uppslag)</div>
-              <div><span className="font-medium">Karaktarer:</span> {numCharacters}</div>
-              <div><span className="font-medium">Alder:</span> {targetAge}</div>
+              <div><span className="font-medium">Karaktärer:</span> {numCharacters}</div>
+              <div><span className="font-medium">Ålder:</span> {targetAge}</div>
               <div><span className="font-medium">~Ord:</span> {estimatedWords().toLocaleString()}</div>
             </div>
           </div>

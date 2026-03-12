@@ -167,12 +167,12 @@ export function parseBookData(rawText: string): BookProject {
   const spreads = extractSpreads(text);
   const styleGuide = extractStyleGuide(text);
 
-  console.log(`[Parser] Titel: "${title}", Karaktarer: ${characters.length}, Uppslag: ${spreads.length}`);
+  console.log(`[Parser] Titel: "${title}", Karaktärer: ${characters.length}, Uppslag: ${spreads.length}`);
   if (characters.length === 0) {
-    console.warn('[Parser] Inga karaktarer hittades! Forsta 500 tecken:', text.substring(0, 500));
+    console.warn('[Parser] Inga karaktärer hittades! Första 500 tecken:', text.substring(0, 500));
   }
   if (spreads.length === 0) {
-    console.warn('[Parser] Inga uppslag hittades! Soker efter SIDA-matchningar...');
+    console.warn('[Parser] Inga uppslag hittades! Söker efter SIDA-matchningar...');
     const sidaLines = text.split('\n').filter(l => /sida/i.test(l)).slice(0, 10);
     console.warn('[Parser] Rader med "SIDA":', sidaLines);
   }
@@ -210,7 +210,7 @@ function extractTitle(text: string): string {
       return trimmed;
     }
   }
-  return lines[0]?.trim() || 'Namnlos bok';
+  return lines[0]?.trim() || 'Namnlös bok';
 }
 
 function extractSubtitle(text: string): string | undefined {
@@ -265,7 +265,7 @@ function extractCharacters(text: string): Character[] {
   }
 
   if (!charSectionMatch) {
-    console.warn('[Parser] Karaktarssektion hittades inte');
+    console.warn('[Parser] Karaktärssektionen hittades inte');
     return [];
   }
 
@@ -348,7 +348,7 @@ function parseCharacterBlock(block: string): Character | null {
   if (parenMatch && !name) {
     name = parenMatch[1].trim();
     heroName = parenMatch[2].trim();
-    age = parenMatch[3] + ' ar';
+    age = parenMatch[3] + ' år';
   }
 
   // Pattern: "Ella (Blixten) - beskrivning" (without age)
@@ -365,7 +365,7 @@ function parseCharacterBlock(block: string): Character | null {
     const nameAgeMatch = firstLine.match(/^([A-ZÅÄÖa-zåäö\s]+?)\s*[-–]\s*(\d+)\s*[aå]r/i);
     if (nameAgeMatch) {
       name = nameAgeMatch[1].trim();
-      age = nameAgeMatch[2] + ' ar';
+      age = nameAgeMatch[2] + ' år';
     }
   }
 
@@ -438,9 +438,9 @@ function parseCharacterBlock(block: string): Character | null {
   // Build full appearance string
   const fullAppearance = [
     appearance,
-    age ? `Alder: ${age}` : '',
-    normalClothes ? `Vanliga klader: ${normalClothes}` : '',
-    heroCostume ? `Superhjalteddrakt: ${heroCostume}` : '',
+    age ? `Ålder: ${age}` : '',
+    normalClothes ? `Vanliga kläder: ${normalClothes}` : '',
+    heroCostume ? `Superhjältedräkt: ${heroCostume}` : '',
   ].filter(Boolean).join('. ');
 
   return {
@@ -448,7 +448,7 @@ function parseCharacterBlock(block: string): Character | null {
     name,
     heroName: heroName || undefined,
     age,
-    appearance: fullAppearance || `${name} - karaktar i boken`,
+    appearance: fullAppearance || `${name} - karaktär i boken`,
     normalClothes: normalClothes || undefined,
     heroCostume: heroCostume || undefined,
     personality: personality || undefined,
