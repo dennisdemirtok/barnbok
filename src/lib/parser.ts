@@ -346,7 +346,8 @@ function parseCharacterBlock(block: string): Character | null {
   }
   if (lines.length === 0) return null;
 
-  const firstLine = lines[0];
+  // Strip leading bullet markers so they don't pollute the extracted name
+  const firstLine = lines[0].replace(/^[*•]\s+/, '');
 
   let name = '';
   let heroName: string | undefined;
@@ -489,7 +490,12 @@ function parseCharacterBlock(block: string): Character | null {
 function extractField(text: string, fieldName: string): string | null {
   const regex = new RegExp(`${fieldName}:\\s*(.+?)(?:\\n|$)`, 'i');
   const match = text.match(regex);
-  return match ? match[1].trim() : null;
+  if (!match) return null;
+  const value = match[1].trim();
+  // Treat placeholder answers as "no value" - otherwise "Superhjältedräkt: ej relevant"
+  // produces hero-costume views labeled "EJ RELEVANT" on the character sheet
+  if (/^(ej relevant|inte relevant|ingen|inga|nej|n\/a|saknas|-)\.?$/i.test(value)) return null;
+  return value;
 }
 
 function extractSpreads(text: string): Spread[] {

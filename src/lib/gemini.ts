@@ -84,7 +84,9 @@ export async function generateCharacterSheet(
     heightEstimate = '~130cm';
   }
 
-  const hasHeroCostume = !!character.heroCostume;
+  // Guard against placeholder values from older saved characters
+  const hasHeroCostume = !!character.heroCostume &&
+    !/^(ej relevant|inte relevant|ingen|inga|nej|n\/a|saknas|-)\.?$/i.test(character.heroCostume.trim());
 
   // Build layout instructions based on whether hero costume exists
   let layoutSection: string;
