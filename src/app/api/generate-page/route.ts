@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generatePageImage, regeneratePageImage } from '@/lib/gemini';
+import { regeneratePageImage } from '@/lib/gemini';
+import { generatePageWithQualityCheck } from '@/lib/character-check';
 import { Character, Spread, BookFormat } from '@/lib/types';
 
-export const maxDuration = 120;
+// Generering + kvalitetskontroll + ev. auto-regenerering kan ta ett par minuter
+export const maxDuration = 300;
 
 // Batch endpoint: accepts multiple spreads
 export async function POST(request: NextRequest) {
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Single spread generation (existing behavior)
+// Single spread generation (used for first generation and manual regeneration)
 async function handleSingle(body: {
   spread: Spread;
   characters: Character[];
@@ -43,19 +45,22 @@ async function handleSingle(body: {
     );
   }
 
-  let imageBase64: string;
-
   if (isRegenerate && customInstructions) {
-    imageBase64 = await regeneratePageImage(
+    // Manual regeneration with user instructions - no auto-loop, the user is in control
+    const imageBase64 = await regeneratePageImage(
       spread, characters, styleGuide || '', customInstructions, bookFormat
     );
-  } else {
-    imageBase64 = await generatePageImage(
-      spread, characters, styleGuide || '', bookFormat
-    );
+    return NextResponse.json({ image: imageBase64 });
   }
 
-  return NextResponse.json({ image: imageBase64 });
+  const result = await generatePageWithQualityCheck(
+    spread, characters, styleGuide || '', bookFormat
+  );
+  return NextResponse.json({
+    image: result.image,
+    check: result.check,
+    autoFixed: result.autoFixed,
+  });
 }
 
 // Batch generation: process multiple spreads in parallel
@@ -76,7 +81,13 @@ async function handleBatch(body: {
 
   // Process up to 3 at a time with staggered starts
   const CONCURRENCY = 3;
-  const results: Array<{ id: string; image?: string; error?: string }> = [];
+  const results: Array<{
+    id: string;
+    image?: string;
+    error?: string;
+    check?: unknown;
+    autoFixed?: boolean;
+  }> = [];
 
   for (let i = 0; i < spreads.length; i += CONCURRENCY) {
     const chunk = spreads.slice(i, i + CONCURRENCY);
@@ -88,10 +99,15 @@ async function handleBatch(body: {
       }
 
       try {
-        const image = await generatePageImage(
+        const result = await generatePageWithQualityCheck(
           spread, characters, styleGuide || '', bookFormat
         );
-        return { id: spread.id, image };
+        return {
+          id: spread.id,
+          image: result.image,
+          check: result.check,
+          autoFixed: result.autoFixed,
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Okänt fel';
         return { id: spread.id, error: message };

@@ -56,6 +56,15 @@ export interface Spread {
   generatedImage?: string; // base64
   status: 'pending' | 'generating' | 'done' | 'error';
   error?: string;
+  qualityCheck?: SpreadQualityCheck;
+}
+
+// Result of the automatic quality check that runs after image generation
+export interface SpreadQualityCheck {
+  passed: boolean;
+  summary: string;
+  autoFixed: boolean; // true if the image was automatically regenerated once
+  issues?: { character: string; issue: string; severity: 'minor' | 'major' }[];
 }
 
 export interface TextBlock {

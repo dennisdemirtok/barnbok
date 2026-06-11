@@ -27,6 +27,10 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
   const canProceedToReview = completedSpreads > 0 && !isGenerating && pendingCount === 0;
   const allDone = completedSpreads === totalSpreads;
 
+  // Rough time estimate: ~45s per batch of 3 (generation + quality check + possible auto-fix)
+  const remainingSpreads = pendingCount + generatingCount;
+  const estimatedMinutes = Math.max(1, Math.ceil((Math.ceil(remainingSpreads / BATCH_SIZE) * 45) / 60));
+
   const generateAllPages = async () => {
     setIsGenerating(true);
     setError('');
@@ -65,7 +69,13 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
         }
 
         const { results } = await res.json() as {
-          results: Array<{ id: string; image?: string; error?: string }>;
+          results: Array<{
+            id: string;
+            image?: string;
+            error?: string;
+            check?: { passed: boolean; summary: string; issues?: { character: string; issue: string; severity: 'minor' | 'major' }[] };
+            autoFixed?: boolean;
+          }>;
         };
 
         // Update each spread with its result
@@ -74,7 +84,18 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
           if (!result) return s;
 
           if (result.image) {
-            return { ...s, generatedImage: result.image, status: 'done' as const, error: undefined };
+            return {
+              ...s,
+              generatedImage: result.image,
+              status: 'done' as const,
+              error: undefined,
+              qualityCheck: result.check ? {
+                passed: result.check.passed,
+                summary: result.check.summary,
+                issues: result.check.issues,
+                autoFixed: !!result.autoFixed,
+              } : undefined,
+            };
           } else {
             return { ...s, status: 'error' as const, error: result.error || 'Okänt fel' };
           }
@@ -130,11 +151,22 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
         throw new Error(data.error || 'Generering misslyckades');
       }
 
-      const { image } = await res.json();
+      const { image, check, autoFixed } = await res.json();
 
       setSpreads(prev => prev.map(s =>
         s.id === spreadId
-          ? { ...s, generatedImage: image, status: 'done' as const, error: undefined }
+          ? {
+              ...s,
+              generatedImage: image,
+              status: 'done' as const,
+              error: undefined,
+              qualityCheck: check ? {
+                passed: check.passed,
+                summary: check.summary,
+                issues: check.issues,
+                autoFixed: !!autoFixed,
+              } : undefined,
+            }
           : s
       ));
     } catch (err) {
@@ -192,7 +224,12 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
             <span className="text-red-500 ml-2">({failedCount} misslyckade)</span>
           )}
         </span>
-        <span>{Math.round(progress)}%</span>
+        <span>
+          {isGenerating && remainingSpreads > 0 && (
+            <span className="text-gray-500 mr-3">~{estimatedMinutes} min kvar</span>
+          )}
+          {Math.round(progress)}%
+        </span>
       </div>
 
       {/* Controls */}
@@ -275,7 +312,7 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  <p className="text-sm text-gray-500">Genererar...</p>
+                  <p className="text-sm text-gray-500">Genererar &amp; kvalitetskontrollerar...</p>
                 </div>
               ) : spread.generatedImage ? (
                 <img
@@ -322,6 +359,15 @@ export default function PageGenerator({ book, onPagesGenerated, onBack }: Props)
               </div>
               {spread.chapter && (
                 <p className="text-xs text-gray-500 mt-1">{spread.chapter}</p>
+              )}
+              {spread.status === 'done' && spread.qualityCheck && (
+                <p className={`text-xs mt-1 ${
+                  spread.qualityCheck.passed ? 'text-green-600' : 'text-amber-600'
+                }`}>
+                  {spread.qualityCheck.passed
+                    ? `✓ Kvalitetskontrollerad${spread.qualityCheck.autoFixed ? ' (auto-förbättrad)' : ''}`
+                    : '⚠ Granska manuellt - kontrollen hittade avvikelser'}
+                </p>
               )}
             </div>
           </div>
