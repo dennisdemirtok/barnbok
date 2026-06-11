@@ -44,15 +44,24 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     setSelectedSpread(null);
   };
 
+  const formatSaveMessage = (result: { cloud: string; cloudError?: string }, baseText: string): string => {
+    switch (result.cloud) {
+      case 'synced': return `${baseText} - lokalt och i molnet ✓`;
+      case 'disabled': return `${baseText} lokalt (molnsynk ej konfigurerad)`;
+      case 'failed': return `${baseText} lokalt, men molnsynken misslyckades: ${result.cloudError || 'okänt fel'}`;
+      default: return baseText;
+    }
+  };
+
   const handleSaveBook = async () => {
     setSaving(true);
     setSaveMessage('');
     try {
       const bookToSave = { ...book, status: 'reviewing' as const };
-      await saveBook(bookToSave);
+      const result = await saveBook(bookToSave);
       onSaveBook(bookToSave);
-      setSaveMessage('Boken har sparats!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      setSaveMessage(formatSaveMessage(result, 'Boken har sparats'));
+      setTimeout(() => setSaveMessage(''), result.cloud === 'failed' ? 8000 : 4000);
     } catch (err) {
       setSaveMessage('Kunde inte spara boken');
       console.error(err);
@@ -75,10 +84,10 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
 
   const handleMarkDone = async () => {
     const doneBook = { ...book, status: 'done' as const };
-    await saveBook(doneBook);
+    const result = await saveBook(doneBook);
     onSaveBook(doneBook);
-    setSaveMessage('Boken är markerad som klar!');
-    setTimeout(() => setSaveMessage(''), 3000);
+    setSaveMessage(formatSaveMessage(result, 'Boken är markerad som klar'));
+    setTimeout(() => setSaveMessage(''), result.cloud === 'failed' ? 8000 : 4000);
   };
 
   // ── Character check ──

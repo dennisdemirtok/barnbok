@@ -174,6 +174,9 @@ function getFormatImageInstructions(bookFormat?: BookFormat): string {
 - The text in speech bubbles must use a clean, bold, comic-style font
 - Text must be large enough to read easily (suitable for children age 6-9)
 - EVERY piece of Swedish text MUST appear in an appropriate bubble or narration box
+- ALL text on the image MUST be in SWEDISH - use the exact Swedish text provided, never translate it, and NEVER write English words (no "CHAPTER", "THE END", "POW" etc.)
+- Do NOT draw chapter headings, chapter banners, or any title text - only the provided story text
+- NEVER draw an empty speech bubble or empty text box - every bubble and box must contain one of the provided Swedish texts. If no dialogue is provided, draw no speech bubbles at all.
 - Make it look like a REAL published comic book page - professional quality
 - DO NOT write any position labels, page numbers, or metadata on the image`;
 
@@ -226,7 +229,7 @@ function getFormatImageInstructions(bookFormat?: BookFormat): string {
 }
 
 // Detect which characters from the list are mentioned in a spread's text/imagePrompt
-function findCharactersInScene(spread: Spread, characters: Character[]): Character[] {
+export function findCharactersInScene(spread: Spread, characters: Character[]): Character[] {
   const allText = [
     ...spread.textBlocks.map(tb => tb.text),
     spread.imagePrompt,
@@ -290,12 +293,23 @@ export async function generatePageImage(
   }
 
   // Get format-specific instructions
-  const formatInstructions = getFormatImageInstructions(bookFormat);
-  const includeTextOnImage = bookFormat === 'bildbok-text-pa-bild' || bookFormat === 'larobok' || !bookFormat;
+  const isCover = spread.pages === 'omslag';
+  const formatInstructions = isCover
+    ? `LAYOUT STYLE: BOOK COVER (front cover of a children's book).
+- This is the book's front cover - make it eye-catching and inviting
+- The book title MUST appear as large, prominent, beautifully lettered SWEDISH title text near the top (the exact title is given in the image description below)
+- Apart from the title (and possibly an author line if specified), NO other text on the cover
+- Show the main character(s) in an appealing scene that captures the book's theme
+- Vibrant colors, strong composition, professional children's book cover quality
+- DO NOT write any position labels, page numbers, chapter headings, or metadata on the image`
+    : getFormatImageInstructions(bookFormat);
+  const includeTextOnImage = !isCover && (bookFormat === 'bildbok-text-pa-bild' || bookFormat === 'larobok' || !bookFormat);
 
   // Build text section based on format - CLEAN position labels
   let textSection = '';
-  if (includeTextOnImage) {
+  if (isCover) {
+    textSection = `TEXT ON THE COVER: The ONLY text allowed on the cover is the book title in Swedish (given in the image description below), rendered as large decorative title lettering. No other words, labels or text anywhere on the image.`;
+  } else if (includeTextOnImage) {
     const textEntries = spread.textBlocks.map((tb, idx) => {
       const placement = cleanPositionForPrompt(tb.position);
       const placementHint = placement ? ` (placement: ${placement})` : '';
@@ -307,6 +321,8 @@ ${textEntries}
 
 IMPORTANT: ALL Swedish text above MUST be included on the image in speech bubbles, narration boxes, or text areas as appropriate.
 Make sure ALL text is spelled correctly in Swedish.
+Draw EXACTLY as many text boxes/speech bubbles as there are texts above - no extra bubbles, no empty bubbles, and no invented text.
+Every word on the image must be Swedish and come from the texts above. Do not add chapter headings or titles.
 DO NOT write any position labels, metadata, or page numbers. Only the actual story text should appear.`;
   } else {
     const storyText = spread.textBlocks.map(tb => tb.text).join('\n\n');

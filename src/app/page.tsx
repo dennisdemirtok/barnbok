@@ -29,7 +29,8 @@ export default function Home() {
   // Auto-save whenever book changes (debounced)
   const autoSave = useCallback(async (bookToSave: BookProject) => {
     try {
-      await saveBook(bookToSave);
+      // Endast lokal sparning - molnsynk (med bilduppladdning) sker vid explicit "Spara bok"
+      await saveBook(bookToSave, { cloud: false });
       console.log('Auto-sparad:', new Date().toLocaleTimeString());
     } catch (err) {
       console.error('Auto-sparning misslyckades:', err);

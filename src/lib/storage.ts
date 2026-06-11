@@ -36,28 +36,55 @@ function isCloudEnabled(): boolean {
   );
 }
 
+function isUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
+// Older books were created with short random ids, but Supabase columns are uuid.
+// Regenerate ids so cloud sync works; returns the old book id when it changed
+// so the stale IndexedDB record can be removed.
+function migrateBookIds(book: BookProject): { book: BookProject; oldId?: string } {
+  const needsMigration =
+    !isUuid(book.id) ||
+    book.characters.some(c => !isUuid(c.id)) ||
+    book.spreads.some(s => !isUuid(s.id));
+  if (!needsMigration) return { book };
+
+  const oldId = !isUuid(book.id) ? book.id : undefined;
+  return {
+    book: {
+      ...book,
+      id: isUuid(book.id) ? book.id : crypto.randomUUID(),
+      characters: book.characters.map(c => (isUuid(c.id) ? c : { ...c, id: crypto.randomUUID() })),
+      spreads: book.spreads.map(s => (isUuid(s.id) ? s : { ...s, id: crypto.randomUUID() })),
+    },
+    oldId,
+  };
+}
+
 // ===== Book operations =====
 
-export async function saveBook(book: BookProject): Promise<void> {
+export interface SaveResult {
+  cloud: 'synced' | 'failed' | 'disabled' | 'skipped';
+  cloudError?: string;
+}
+
+export async function saveBook(
+  book: BookProject,
+  options?: { cloud?: boolean }
+): Promise<SaveResult> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  const bookWithTimestamp = {
+    ...book,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(BOOKS_STORE, 'readwrite');
     const store = tx.objectStore(BOOKS_STORE);
-    const bookWithTimestamp = {
-      ...book,
-      updatedAt: new Date().toISOString(),
-    };
     store.put(bookWithTimestamp);
     tx.oncomplete = () => {
       db.close();
-
-      // Sync to Supabase in background (don't block the UI)
-      if (isCloudEnabled()) {
-        saveBookToCloud(bookWithTimestamp).catch(err =>
-          console.warn('Cloud-synk misslyckades:', err.message)
-        );
-      }
-
       resolve();
     };
     tx.onerror = () => {
@@ -65,11 +92,25 @@ export async function saveBook(book: BookProject): Promise<void> {
       reject(tx.error);
     };
   });
+
+  // Cloud sync: explicit saves await the result so the UI can show it.
+  // Auto-saves pass cloud:false - syncing every keystroke would re-upload all images.
+  if (options?.cloud === false) return { cloud: 'skipped' };
+  if (!isCloudEnabled()) return { cloud: 'disabled' };
+
+  try {
+    await saveBookToCloud(bookWithTimestamp);
+    return { cloud: 'synced' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('Cloud-synk misslyckades:', message);
+    return { cloud: 'failed', cloudError: message };
+  }
 }
 
 export async function loadBook(id: string): Promise<BookProject | null> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  const loaded = await new Promise<BookProject | null>((resolve, reject) => {
     const tx = db.transaction(BOOKS_STORE, 'readonly');
     const store = tx.objectStore(BOOKS_STORE);
     const request = store.get(id);
@@ -80,6 +121,35 @@ export async function loadBook(id: string): Promise<BookProject | null> {
     request.onerror = () => {
       db.close();
       reject(request.error);
+    };
+  });
+
+  if (!loaded) return null;
+
+  // Migrate pre-UUID books on load so cloud sync starts working for them
+  const { book: migrated, oldId } = migrateBookIds(loaded);
+  if (migrated !== loaded) {
+    await saveBook(migrated, { cloud: false });
+    if (oldId) await deleteLocalBookRecord(oldId);
+  }
+  return migrated;
+}
+
+// Remove only the local IndexedDB record (used after id migration - the old
+// short id never existed in the cloud, so no cloud delete is needed)
+async function deleteLocalBookRecord(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BOOKS_STORE, 'readwrite');
+    const store = tx.objectStore(BOOKS_STORE);
+    store.delete(id);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
     };
   });
 }

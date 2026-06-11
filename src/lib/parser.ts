@@ -1,7 +1,8 @@
 import { BookProject, Character, Spread, TextBlock } from './types';
 
 function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
+  // Supabase-kolumnerna är av typen uuid - korta slumpsträngar gör att molnsynken misslyckas
+  return crypto.randomUUID();
 }
 
 // Pre-process text to normalize formatting issues from Claude/AI output
@@ -145,6 +146,9 @@ function detectRecurringCharacters(spreads: Spread[], existingCharacters: Charac
         descParts.push(data.descriptions.join(', '));
       }
       descParts.push(`Återkommande bikaraktär (förekommer i ${data.spreads.size} uppslag)`);
+      if (data.descriptions.length === 0) {
+        descParts.push('OBS: Utseendebeskrivning saknas - redigera karaktären och ange art (människa/katt/hund osv.) och utseende innan du genererar referensbild');
+      }
 
       additionalChars.push({
         id: generateId(),
@@ -183,6 +187,11 @@ export function parseBookData(rawText: string): BookProject {
   if (additionalChars.length > 0) {
     console.log(`[Parser] Hittade ${additionalChars.length} återkommande bikaraktärer: ${additionalChars.map(c => c.name).join(', ')}`);
     characters.push(...additionalChars);
+  }
+
+  // Safety net: a book must have a main character - promote the first one if none was marked
+  if (characters.length > 0 && !characters.some(c => c.role === 'main')) {
+    characters[0].role = 'main';
   }
 
   return {
@@ -327,7 +336,14 @@ function extractCharacters(text: string): Character[] {
 }
 
 function parseCharacterBlock(block: string): Character | null {
-  const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+  let lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+
+  // Strip leading section-header lines (KARAKTÄRER, Huvudkaraktärer etc.)
+  // so the header isn't mistaken for a character name
+  while (lines.length > 0 && /^(KARAKTÄRER|KARAKTARER|Karakt[aä]rer|Huvudkaraktärer|Bikaraktärer|Rollista|Figurer)\s*:?\s*$/i.test(lines[0])) {
+    lines = lines.slice(1);
+  }
   if (lines.length === 0) return null;
 
   const firstLine = lines[0];
@@ -399,7 +415,8 @@ function parseCharacterBlock(block: string): Character | null {
   }
 
   // Extract appearance
-  const appearanceMatch = block.match(/Utseende:\s*([\s\S]*?)(?=\n\s*(?:\*|[A-ZÅÄÖa-z]+:)|\n\n|$)/i);
+  // Stop at the next field label - also multi-word labels like "Vanliga kläder:"
+  const appearanceMatch = block.match(/Utseende:\s*([\s\S]*?)(?=\n\s*(?:\*|[A-ZÅÄÖa-zåäö][A-Za-zåäöÅÄÖ ]{0,30}:)|\n\n|$)/i);
   let appearance = appearanceMatch ? appearanceMatch[1].trim() : '';
 
   // If no explicit "Utseende:" field, try description from block
@@ -419,11 +436,19 @@ function parseCharacterBlock(block: string): Character | null {
   const heroCostume = extractField(block, 'Superhj[aä]ltedr[aä]kt');
   const personality = extractField(block, 'Personlighet');
   const power = extractField(block, 'Kraft');
+  const species = extractField(block, 'Art');
 
-  // Determine role
+  // Determine role - explicit "Roll:" field has priority over keyword inference
   let role: 'main' | 'supporting' | 'villain' = 'supporting';
+  const rollField = extractField(block, 'Roll');
   const lowerBlock = block.toLowerCase();
-  if (lowerBlock.includes('skurk') || lowerBlock.includes('villain') || lowerBlock.includes('antagonist')) {
+  if (rollField && /huvud|main|protagonist/i.test(rollField)) {
+    role = 'main';
+  } else if (rollField && /skurk|villain|antagonist/i.test(rollField)) {
+    role = 'villain';
+  } else if (rollField) {
+    role = 'supporting';
+  } else if (lowerBlock.includes('skurk') || lowerBlock.includes('villain') || lowerBlock.includes('antagonist')) {
     role = 'villain';
   } else if (heroName || lowerBlock.includes('huvudkaraktar') || lowerBlock.includes('huvudkaraktär') || lowerBlock.includes('protagonist')) {
     role = 'main';
@@ -432,15 +457,18 @@ function parseCharacterBlock(block: string): Character | null {
   if (!name || name.length < 2) return null;
 
   // Reject names that are actually field labels (not character names)
-  const fieldLabelPattern = /^(Utseende|Vanliga|Superhj|Personlighet|Kraft|Kl[aä]der|Hemlighet|Roll|[Åa]lder|Beskrivning|Bakgrund|Text|Stil|Tema|Handling|Milj[oö]|Format|Kapitel)\b/i;
+  const fieldLabelPattern = /^(Utseende|Vanliga|Superhj|Personlighet|Kraft|Kl[aä]der|Hemlighet|Roll|Art|[Åa]lder|Beskrivning|Bakgrund|Text|Stil|Tema|Handling|Milj[oö]|Format|Kapitel)\b/i;
   if (fieldLabelPattern.test(name)) return null;
 
-  // Build full appearance string
+  // Build full appearance string - skip fields whose content already appears in
+  // the appearance text, so descriptions aren't duplicated
+  const lowerAppearance = appearance.toLowerCase();
   const fullAppearance = [
+    species && !lowerAppearance.includes(species.toLowerCase()) ? `Art: ${species}` : '',
     appearance,
-    age ? `Ålder: ${age}` : '',
-    normalClothes ? `Vanliga kläder: ${normalClothes}` : '',
-    heroCostume ? `Superhjältedräkt: ${heroCostume}` : '',
+    age && !lowerAppearance.includes(age.toLowerCase()) ? `Ålder: ${age}` : '',
+    normalClothes && !lowerAppearance.includes(normalClothes.toLowerCase()) ? `Vanliga kläder: ${normalClothes}` : '',
+    heroCostume && !lowerAppearance.includes(heroCostume.toLowerCase()) ? `Superhjältedräkt: ${heroCostume}` : '',
   ].filter(Boolean).join('. ');
 
   return {

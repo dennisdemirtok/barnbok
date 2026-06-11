@@ -116,13 +116,19 @@ ${range.desc}`;
 export async function generateBookContent(config: BookConfig): Promise<string> {
   const client = getClient();
 
-  const numSpreads = Math.ceil(config.numPages / 2);
+  // Tryckkonvention: sida 1-5 är titelsida/copyright, innehållet börjar på sida 6
+  // och bokens SISTA sida är slutsidan. numPages = bokens totala sidantal.
+  const numSpreads = Math.max(1, Math.floor((config.numPages - 6) / 2));
+  const lastContentPage = 5 + numSpreads * 2;
   const formatDesc = getFormatDescription(config.bookFormat);
   const formatTemplate = getFormatTemplate(config.bookFormat);
 
-  const characterInstructions = config.characterNames.length > 0
-    ? `Använd dessa karaktärsnamn: ${config.characterNames.join(', ')}. Skapa detaljerade beskrivningar för varje karaktär.`
-    : `Skapa ${config.numCharacters} unika karaktärer med svenska namn. Ge varje karaktär ett unikt utseende, personlighet och bakgrund.`;
+  const mainCharInstructions = config.characterNames.length > 0
+    ? `Skapa EXAKT ${config.numCharacters} huvudkaraktärer med dessa namn: ${config.characterNames.join(', ')}. Skapa detaljerade beskrivningar för varje karaktär.`
+    : `Skapa EXAKT ${config.numCharacters} huvudkaraktärer med svenska namn. Ge varje karaktär ett unikt utseende, personlighet och bakgrund.`;
+
+  const characterInstructions = `${mainCharInstructions}
+VIKTIGT OM BIKARAKTÄRER: ALLA namngivna figurer som förekommer i berättelsen (vuxna, lärare, husdjur, djur osv.) MÅSTE också listas i KARAKTÄRER-sektionen med Roll: bikaraktär. Varje karaktär (även djur!) ska ha fälten Art och Utseende ifyllda - annars går det inte att rita dem konsekvent. Lämna ALDRIG en namngiven figur olistad, och inför inga fler huvudkaraktärer än de ${config.numCharacters} begärda.`;
 
   const textDensityDesc = getTextDensityDescription(config.textDensity, config.bookFormat);
 
@@ -160,14 +166,21 @@ Titel: ${config.title}
 KARAKTÄRER
 
 * [Karaktärsnamn] - [ålder], [kort beskrivning]
-Utseende: [detaljerad beskrivning av utseende - hårfärg, ögonfärg, kroppsbyggnad, speciella drag]
+Art: [människa/katt/hund/björn osv.]
+Roll: [huvudkaraktär/bikaraktär]
+Utseende: [detaljerad beskrivning av utseende - hårfärg, ögonfärg, kroppsbyggnad, speciella drag. För djur: päls/fjädrar, färger, storlek]
 Vanliga kläder: [vad karaktären brukar ha på sig]
 Personlighet: [personlighetsdrag]
 ${config.bookFormat === 'bildbok-text-pa-bild' ? 'Superhjältedräkt: [om relevant]' : ''}
 
-(Upprepa för varje karaktär)
+(Upprepa för varje karaktär - både huvudkaraktärer och ALLA namngivna bikaraktärer)
 
-${config.bookFormat !== 'bildbok-separat-text' ? 'KAPITEL 1: [KAPITELNAMN]\n' : ''}SIDA 6-7 (Uppslag 1)
+OMSLAG
+
+BILDPROMPT - OMSLAG:
+[Bildprompt på ENGELSKA för bokens framsida. Visa huvudkaraktärerna i en iögonfallande scen som fångar bokens tema. Inkludera instruktionen att bokens titel "${config.title}" ska visas som stor, tydlig titeltext på svenska högst upp på omslaget.]
+
+${config.bookFormat === 'kapitelbok' ? 'KAPITEL 1: [KAPITELNAMN]\n' : ''}SIDA 6-7 (Uppslag 1)
 
 Text (sida 6 - textruta överst):
 [Text här]
@@ -178,7 +191,7 @@ Text (sida 7 - textruta nedre):
 BILDPROMPT - SIDA 6-7:
 [Detaljerad bildprompt på ENGELSKA som beskriver illustrationen. Inkludera stil, komposition, karaktärernas positioner, bakgrund, belysning, stämning. Skriv alltid bildprompten på engelska.]
 
-(Fortsätt med alla ${numSpreads} uppslag)
+(Fortsätt med alla ${numSpreads} uppslag - sista uppslaget är SIDA ${lastContentPage - 1}-${lastContentPage})
 
 SLUTSIDA
 
@@ -194,13 +207,14 @@ VIKTIGA REGLER:
 1. Skriv ALL berättande text på SVENSKA
 2. Skriv ALLA bildpromptar på ENGELSKA
 3. Följ formatet EXAKT - parsern behöver "SIDA X-Y (Uppslag N)", "Text (sida X):", och "BILDPROMPT - SIDA X-Y:"
-4. Skapa ALLA ${numSpreads} uppslag - hoppa inte över några
-${config.bookFormat !== 'bildbok-separat-text' ? '5. Varje kapitel ska ha en KAPITEL-rubrik' : '5. Använd INTE kapitelrubriker - berättelsen ska flöda utan kapitelindelning'}
-6. Sidor börjar på 6-7 (sida 1-5 är titel/copyright etc.)
+4. Skapa ALLA ${numSpreads} uppslag plus OMSLAG och SLUTSIDA - hoppa inte över några
+${config.bookFormat === 'kapitelbok' ? '5. Varje kapitel ska ha en KAPITEL-rubrik' : '5. Använd INTE kapitelrubriker - berättelsen ska flöda utan kapitelindelning. Skriv ALDRIG ordet KAPITEL någonstans i boken eller bildpromptarna.'}
+6. Sidnumrering: innehållet börjar på sida 6 (sida 1-5 är titelsida/copyright), sista uppslaget är sida ${lastContentPage - 1}-${lastContentPage} och SLUTSIDA är bokens sista sida (sida ${config.numPages}). Totalt ${config.numPages} sidor - överskrid ALDRIG sida ${config.numPages}.
 7. Gör berättelsen engagerande, åldersanpassad och med en tydlig dramaturgi
 8. Varje bildprompt ska vara detaljerad (minst 3-4 meningar) och inkludera stilen: ${config.imageStyle}
 9. Karaktärsbeskrivningarna ska vara tillräckligt detaljerade för att kunna generera konsekventa bilder
-10. ${config.bookFormat === 'bildbok-text-pa-bild' ? 'Inkludera i bildprompten var texten ska placeras (t.ex. "text box in upper left", "speech bubble")' : 'Bildprompten ska INTE inkludera text i bilden'}`;
+10. ${config.bookFormat === 'bildbok-text-pa-bild' ? 'Inkludera i bildprompten var texten ska placeras (t.ex. "text box in upper left", "speech bubble")' : 'Bildprompten ska INTE inkludera text i bilden'}
+11. Bildpromptarna får ALDRIG be om rubriker, kapitelbanderoller, sidnummer eller annan text utöver berättelsetexten${config.bookFormat === 'bildbok-text-pa-bild' ? ' i textrutor/pratbubblor' : ''}`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',

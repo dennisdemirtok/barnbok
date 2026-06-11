@@ -11,7 +11,7 @@ interface Props {
 
 type BookFormat = BookConfig['bookFormat'];
 
-const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; icon: string }[] = [
+const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; icon: string; comingSoon?: boolean }[] = [
   {
     value: 'bildbok-text-pa-bild',
     label: 'Bildbok med text pa bild',
@@ -23,18 +23,21 @@ const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; i
     label: 'Bildbok med separat text',
     description: 'Likt "Luna"-böcker - text ovanför/under eller bredvid bilderna. Mer text, bild och text kompletterar varandra.',
     icon: '🌙',
+    comingSoon: true,
   },
   {
     value: 'kapitelbok',
     label: 'Kapitelbok',
     description: 'Likt Harry Potter / Bert-böcker - mest text med enstaka illustrationer. Längre kapitel och detaljerat berättande.',
     icon: '📖',
+    comingSoon: true,
   },
   {
     value: 'larobok',
     label: 'Lärobok / Aktivitetsbok',
     description: 'Likt "Artan, Partan" - blandning av text, bilder och uppgifter. Pedagogiskt upplag.',
     icon: '📐',
+    comingSoon: true,
   },
 ];
 
@@ -96,9 +99,12 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
     return wordsTable[bookFormat][textDensity];
   };
 
+  // Tryckkonvention: sida 1-5 är titelsida/copyright, sista sidan är slutsidan.
+  // Innehållsuppslagen ligger däremellan (samma formel som i claude.ts).
+  const contentSpreads = () => Math.max(1, Math.floor((numPages - 6) / 2));
+
   const estimatedWords = () => {
-    const spreads = Math.ceil(numPages / 2);
-    return Math.round(spreads * getWordsPerSpread());
+    return Math.round(contentSpreads() * getWordsPerSpread());
   };
 
   // Format-specific word range descriptions for the density buttons
@@ -239,16 +245,25 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               {FORMAT_OPTIONS.map((fmt) => (
                 <button
                   key={fmt.value}
-                  onClick={() => setBookFormat(fmt.value)}
-                  className={`p-4 border-2 rounded-xl text-left transition-all ${
-                    bookFormat === fmt.value
+                  onClick={() => !fmt.comingSoon && setBookFormat(fmt.value)}
+                  disabled={fmt.comingSoon}
+                  className={`relative p-4 border-2 rounded-xl text-left transition-all ${
+                    fmt.comingSoon
+                      ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                      : bookFormat === fmt.value
                       ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
+                  {fmt.comingSoon && (
+                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-amber-100 text-amber-700
+                                     text-xs font-semibold rounded-full">
+                      Kommer snart
+                    </span>
+                  )}
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-2xl">{fmt.icon}</span>
-                    <span className="font-semibold text-gray-800">{fmt.label}</span>
+                    <span className={`font-semibold ${fmt.comingSoon ? 'text-gray-500' : 'text-gray-800'}`}>{fmt.label}</span>
                   </div>
                   <p className="text-xs text-gray-500">{fmt.description}</p>
                 </button>
@@ -393,7 +408,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             </div>
             <div className="mt-2 p-3 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-600">
-                <span className="font-medium">{Math.ceil(numPages / 2)} uppslag</span>
+                <span className="font-medium">{contentSpreads()} uppslag + omslag + slutsida</span>
                 {' · '}
                 <span>~{estimatedWords().toLocaleString()} ord</span>
                 {' · '}
@@ -513,7 +528,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             <div className="grid grid-cols-2 gap-2 text-sm text-blue-700">
               <div><span className="font-medium">Titel:</span> {title}</div>
               <div><span className="font-medium">Format:</span> {FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}</div>
-              <div><span className="font-medium">Sidor:</span> {numPages} ({Math.ceil(numPages / 2)} uppslag)</div>
+              <div><span className="font-medium">Sidor:</span> {numPages} ({contentSpreads()} uppslag + omslag + slutsida)</div>
               <div><span className="font-medium">Karaktärer:</span> {numCharacters}</div>
               <div><span className="font-medium">Ålder:</span> {targetAge}</div>
               <div><span className="font-medium">~Ord:</span> {estimatedWords().toLocaleString()}</div>
