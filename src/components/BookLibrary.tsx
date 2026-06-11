@@ -13,6 +13,7 @@ interface Props {
 export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Props) {
   const [books, setBooks] = useState<BookProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     loadSavedBooks();
@@ -35,8 +36,15 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
     }
   };
 
-  const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Vill du verkligen ta bort "${title}"?`)) return;
+  // Two-step inline confirm instead of window.confirm (which blocks rendering)
+  const handleDelete = async (id: string) => {
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      // Reset confirmation after a few seconds if the user doesn't follow through
+      setTimeout(() => setConfirmDeleteId(prev => (prev === id ? null : prev)), 4000);
+      return;
+    }
+    setConfirmDeleteId(null);
     try {
       await deleteBook(id);
       setBooks(prev => prev.filter(b => b.id !== id));
@@ -161,11 +169,15 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDelete(book.id, book.title);
+                          handleDelete(book.id);
                         }}
-                        className="text-xs text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className={`text-xs transition-all ${
+                          confirmDeleteId === book.id
+                            ? 'px-2 py-0.5 bg-red-600 text-white rounded font-semibold opacity-100'
+                            : 'text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100'
+                        }`}
                       >
-                        Ta bort
+                        {confirmDeleteId === book.id ? 'Klicka igen för att ta bort' : 'Ta bort'}
                       </button>
                     </div>
                   </div>

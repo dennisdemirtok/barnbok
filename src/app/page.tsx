@@ -92,6 +92,13 @@ export default function Home() {
     setStep('review');
   };
 
+  // Called continuously while pages generate, so finished images are auto-saved
+  // even if the user leaves before clicking "Granska boken"
+  const handleSpreadsProgress = (spreads: Spread[]) => {
+    if (!book) return;
+    setBook({ ...book, spreads });
+  };
+
   const handleUpdateSpread = (updatedSpread: Spread) => {
     if (!book) return;
     setBook({
@@ -330,6 +337,7 @@ export default function Home() {
           <PageGenerator
             book={book}
             onPagesGenerated={handlePagesGenerated}
+            onSpreadsProgress={handleSpreadsProgress}
             onBack={() => setStep('characters')}
           />
         )}

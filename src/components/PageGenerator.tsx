@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { BookProject, Spread } from '@/lib/types';
 
 const BATCH_SIZE = 3; // Generate 3 images in parallel
@@ -8,11 +8,19 @@ const BATCH_SIZE = 3; // Generate 3 images in parallel
 interface Props {
   book: BookProject;
   onPagesGenerated: (spreads: Spread[]) => void;
+  onSpreadsProgress?: (spreads: Spread[]) => void;
   onBack: () => void;
 }
 
-export default function PageGenerator({ book, onPagesGenerated, onBack }: Props) {
+export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgress, onBack }: Props) {
   const [spreads, setSpreads] = useState<Spread[]>(book.spreads);
+
+  // Push every spread update to the parent so generated images are auto-saved
+  // even if the user never clicks "Granska boken"
+  useEffect(() => {
+    onSpreadsProgress?.(spreads);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spreads]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
   const abortRef = useRef(false);
