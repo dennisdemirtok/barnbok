@@ -268,7 +268,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                      disabled:bg-gray-400 transition-colors"
         >
           {isGenerating
-            ? `Genererar... (${generatingIds.size} genereras...)`
+            ? `Genererar ${generatingIds.size} referensbilder... (~30 sek/bild)`
             : 'Generera alla karaktärer'}
         </button>
         {isGenerating && (

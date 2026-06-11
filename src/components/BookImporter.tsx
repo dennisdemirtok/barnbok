@@ -21,11 +21,11 @@ interface Props {
   onParsedBookChange: (book: BookProject | null) => void;
 }
 
-const FORMAT_CHOICES: { value: BookFormat; label: string }[] = [
+const FORMAT_CHOICES: { value: BookFormat; label: string; comingSoon?: boolean }[] = [
   { value: 'bildbok-text-pa-bild', label: 'Bildbok med text på bild (Handbok-stil)' },
-  { value: 'bildbok-separat-text', label: 'Bildbok med separat text (Luna-stil)' },
-  { value: 'kapitelbok', label: 'Kapitelbok' },
-  { value: 'larobok', label: 'Lärobok / Aktivitetsbok' },
+  { value: 'bildbok-separat-text', label: 'Bildbok med separat text (Luna-stil)', comingSoon: true },
+  { value: 'kapitelbok', label: 'Kapitelbok', comingSoon: true },
+  { value: 'larobok', label: 'Lärobok / Aktivitetsbok', comingSoon: true },
 ];
 
 export default function BookImporter({
@@ -240,14 +240,18 @@ export default function BookImporter({
               {FORMAT_CHOICES.map((fmt) => (
                 <button
                   key={fmt.value}
-                  onClick={() => onImportFormatChange(fmt.value)}
+                  onClick={() => !fmt.comingSoon && onImportFormatChange(fmt.value)}
+                  disabled={fmt.comingSoon}
                   className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                    importFormat === fmt.value
+                    fmt.comingSoon
+                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                      : importFormat === fmt.value
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
                   {fmt.label}
+                  {fmt.comingSoon && <span className="ml-1.5 text-xs text-amber-600 font-medium">(kommer snart)</span>}
                 </button>
               ))}
             </div>
