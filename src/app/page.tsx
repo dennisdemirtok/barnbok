@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BookProject, Character, Spread, BookFormat } from '@/lib/types';
 import { saveBook } from '@/lib/storage';
+import { useAuth } from '@/lib/auth';
 import BookLibrary from '@/components/BookLibrary';
 import BookImporter from '@/components/BookImporter';
 import CharacterApproval from '@/components/CharacterApproval';
 import PageGenerator from '@/components/PageGenerator';
 import BookPreview from '@/components/BookPreview';
 import ReferenceManager from '@/components/ReferenceManager';
+import LoginModal from '@/components/LoginModal';
 
 type Step = 'library' | 'import' | 'characters' | 'generate' | 'review';
 type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts';
@@ -25,6 +27,8 @@ export default function Home() {
   const [importParsedBook, setImportParsedBook] = useState<BookProject | null>(null);
   const [isClonedBook, setIsClonedBook] = useState(false);
   const [showRefManager, setShowRefManager] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const { user, signOut, loading: authLoading } = useAuth();
 
   // Auto-save whenever book changes (debounced)
   const autoSave = useCallback(async (bookToSave: BookProject) => {
@@ -192,6 +196,30 @@ export default function Home() {
               >
                 Referensdata
               </button>
+              {!authLoading && (
+                user ? (
+                  <div className="flex items-center gap-2">
+                    <span className="hidden sm:inline text-sm text-gray-500 max-w-[160px] truncate" title={user.email}>
+                      {user.email}
+                    </span>
+                    <button
+                      onClick={signOut}
+                      className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
+                                 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Logga ut
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowLogin(true)}
+                    className="px-4 py-1.5 text-sm bg-blue-600 text-white font-medium
+                               rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Logga in
+                  </button>
+                )
+              )}
               {book && step !== 'library' && (
                 <>
                   <div className="text-right">
@@ -355,6 +383,11 @@ export default function Home() {
       {/* Reference Manager Modal */}
       {showRefManager && (
         <ReferenceManager onClose={() => setShowRefManager(false)} />
+      )}
+
+      {/* Login Modal */}
+      {showLogin && (
+        <LoginModal onClose={() => setShowLogin(false)} />
       )}
     </main>
   );

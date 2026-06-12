@@ -8,11 +8,18 @@ import { BookProject, Character, Spread, TextBlock, SavedCharacter, SavedText } 
 export async function saveBookToCloud(book: BookProject): Promise<void> {
   const now = new Date().toISOString();
 
+  // Knyt boken till inloggad användare så RLS kan skydda den. Utan inloggning
+  // sparas inget i molnet (boken finns ändå lokalt i IndexedDB).
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Du måste vara inloggad för att spara i molnet');
+
   // 1. Upsert the book record
   const { error: bookError } = await supabase
     .from('barnbok_books')
     .upsert({
       id: book.id,
+      user_id: userId,
       title: book.title,
       book_format: book.bookFormat || 'bildbok-text-pa-bild',
       age_min: parseAgeMin(book.targetAge),
@@ -34,6 +41,7 @@ export async function saveBookToCloud(book: BookProject): Promise<void> {
     const charRows = book.characters.map((c, i) => ({
       id: c.id,
       book_id: book.id,
+      user_id: userId,
       name: c.name,
       appearance: c.appearance,
       role: c.role === 'villain' ? 'supporting' : c.role,
@@ -65,6 +73,7 @@ export async function saveBookToCloud(book: BookProject): Promise<void> {
         .insert({
           id: spread.id,
           book_id: book.id,
+          user_id: userId,
           spread_number: spread.spreadNumber,
           pages: spread.pages,
           chapter: spread.chapter || null,
@@ -83,6 +92,7 @@ export async function saveBookToCloud(book: BookProject): Promise<void> {
       if (spread.textBlocks.length > 0) {
         const textRows = spread.textBlocks.map((tb, i) => ({
           spread_id: spread.id,
+          user_id: userId,
           text_content: tb.text,
           position: i,
         }));
