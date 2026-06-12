@@ -22,6 +22,24 @@ async function fetchStyleProfile(series: string): Promise<{ text_style?: string;
   }
 }
 
+// Hämta verkliga exempelmeningar (few-shot förebilder) för en bokserie
+async function fetchLanguageExamples(series: string): Promise<string[]> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return [];
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/barnbok_reference_texts?book_series=eq.${encodeURIComponent(series)}&select=text_sample&limit=12`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return rows.map((r: { text_sample: string }) => r.text_sample).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const config: BookConfig = await request.json();
@@ -30,13 +48,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Titel kravs' }, { status: 400 });
     }
 
-    // Berika med stilprofil från referensböcker om en serie är vald
+    // Berika med stilprofil + språkexempel från referensböcker om en serie är vald
     if (config.styleSeries) {
-      const profile = await fetchStyleProfile(config.styleSeries);
+      const [profile, examples] = await Promise.all([
+        fetchStyleProfile(config.styleSeries),
+        fetchLanguageExamples(config.styleSeries),
+      ]);
       if (profile) {
         console.log(`[generate-book] Använder stilprofil "${config.styleSeries}"`);
         if (profile.image_style) config.imageStyle = profile.image_style;
         if (profile.text_style) config.textStyleNotes = profile.text_style;
+      }
+      if (examples.length > 0) {
+        console.log(`[generate-book] ${examples.length} språkexempel som förebilder`);
+        config.languageExamples = examples;
       }
     }
 

@@ -506,6 +506,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               {[
                 { label: 'Handbok för Superhjältar', series: 'Handbok for Superhjaltar', value: 'Färgglatt, manga/comic-stil med stora uttrycksfulla ögon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik. Liknande "Handbok för Superhjältar".' },
                 { label: 'Mamma Mu (akvarell)', series: 'Mamma Mu', value: 'Klassisk skandinavisk tusch- och akvarellstil med fina svarta konturer, varma naturfärger och mjuka vinjetter mot vit bakgrund. Liknande "Mamma Mu".' },
+                { label: 'Luna', series: 'Luna', value: 'Mjuk, varm skandinavisk bilderboksstil med fina konturer och dämpade färger. Liknande "Luna"-böckerna.' },
                 { label: 'Tecknad/Disney', series: undefined, value: 'Tecknad stil liknande moderna Disney/Pixar-filmer, varm belysning, uttrycksfulla karaktärer, detaljerade miljöer.' },
                 { label: 'Minimalistisk', series: undefined, value: 'Enkel, minimalistisk stil med platta färger, geometriska former och mycket vitt utrymme.' },
               ].map((style) => (

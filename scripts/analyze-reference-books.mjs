@@ -167,9 +167,12 @@ RESPOND WITH ONLY THE JSON.`,
   return profile;
 }
 
+// Valfritt argument: kör bara en specifik bok (mappnamn). Annars alla.
+const targetBook = process.argv[2];
 const bookDirs = readdirSync(BOOKS_DIR)
   .map(n => join(BOOKS_DIR, n))
-  .filter(p => statSync(p).isDirectory());
+  .filter(p => statSync(p).isDirectory())
+  .filter(p => !targetBook || basename(p).toLowerCase() === targetBook.toLowerCase());
 
 console.log(`Hittade ${bookDirs.length} böcker: ${bookDirs.map(d => basename(d)).join(', ')}`);
 for (const dir of bookDirs) {

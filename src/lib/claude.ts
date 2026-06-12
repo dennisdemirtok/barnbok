@@ -17,6 +17,7 @@ export interface BookConfig {
   textDensity: TextDensity;
   styleSeries?: string; // referens till barnbok_style_profiles.book_series
   textStyleNotes?: string; // skrivstil från analyserad referensbok
+  languageExamples?: string[]; // verkliga exempelmeningar (few-shot stilförebild)
 }
 
 function getClient() {
@@ -151,6 +152,11 @@ ${textDensityDesc}
 ${config.textStyleNotes ? `
 SKRIVSTIL (baserad på analys av professionella barnböcker i samma genre - följ denna noga):
 ${config.textStyleNotes}
+` : ''}${config.languageExamples && config.languageExamples.length > 0 ? `
+SPRÅKLIGA FÖREBILDER - så här låter en professionell bok i denna stil. Studera meningsrytmen, ordvalet, dialogtonen och hur naturligt det flyter. Skriv DIN text med samma känsla och naturlighet - men HITTA PÅ helt egen text. Kopiera ALDRIG dessa meningar, fraser eller handlingen, använd dem bara för att förstå rösten:
+${config.languageExamples.map(ex => `• "${ex}"`).join('\n')}
+
+Undvik stolpig, mekanisk eller "AI-aktig" text. Skriv levande, varmt och naturligt precis som exemplen ovan.
 ` : ''}
 
 BOKFORMAT:
