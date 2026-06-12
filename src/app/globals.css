@@ -2,6 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Varumärkesfärger - kreativt lila/indigo med varm accent */
+  --brand: 99 102 241;        /* indigo-500 */
+  --brand-dark: 79 70 229;    /* indigo-600 */
+  --accent: 244 114 182;      /* rosa accent */
+  --warm: 251 146 60;         /* varm orange */
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  color: #1f2433;
+  /* Mjuk, varm bakgrund istället för platt grått */
+  background-color: #f6f5fb;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.06) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(244, 114, 182, 0.05) 0px, transparent 45%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Mjukare, smalare scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.25);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.4); background-clip: padding-box; }
+
+@layer components {
+  /* Återanvändbar gradient-text för varumärket */
+  .brand-text {
+    @apply bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-500 bg-clip-text text-transparent;
+  }
+
+  /* Primär knapp med liten lyft-effekt */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl
+           bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold
+           shadow-sm shadow-indigo-500/30 hover:shadow-md hover:shadow-indigo-500/40
+           hover:-translate-y-0.5 active:translate-y-0 transition-all
+           disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none;
+  }
+
+  /* Sekundär/ghost-knapp */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl
+           text-gray-600 font-medium border border-gray-200 bg-white/70
+           hover:bg-white hover:border-gray-300 transition-colors;
+  }
+
+  /* Kort med mjuk skugga */
+  .card-soft {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/60;
+  }
 }

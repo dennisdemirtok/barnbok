@@ -176,17 +176,25 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       {/* Header */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-3">
           <div className="flex items-center justify-between">
             <div
-              className="cursor-pointer"
+              className="flex items-center gap-3 cursor-pointer group"
               onClick={handleBackToLibrary}
             >
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Bokverktyget
-              </h1>
-              <p className="text-sm text-gray-500">Skapa barnbocker med AI-genererade illustrationer</p>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-fuchsia-500
+                              flex items-center justify-center shadow-sm shadow-indigo-500/30
+                              group-hover:scale-105 transition-transform">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-extrabold brand-text leading-none">Bokverktyget</h1>
+                <p className="text-xs text-gray-400 mt-0.5">Skapa barnböcker med AI</p>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <button
