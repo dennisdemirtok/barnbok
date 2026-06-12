@@ -15,6 +15,8 @@ export interface BookConfig {
   imageStyle: string; // format bilder
   subject?: string; // for larobok (e.g. "matematik")
   textDensity: TextDensity;
+  styleSeries?: string; // referens till barnbok_style_profiles.book_series
+  textStyleNotes?: string; // skrivstil från analyserad referensbok
 }
 
 function getClient() {
@@ -146,6 +148,10 @@ MILJÖ: ${config.setting}
 
 TEXTMÄNGD PER SIDA:
 ${textDensityDesc}
+${config.textStyleNotes ? `
+SKRIVSTIL (baserad på analys av professionella barnböcker i samma genre - följ denna noga):
+${config.textStyleNotes}
+` : ''}
 
 BOKFORMAT:
 ${formatDesc}

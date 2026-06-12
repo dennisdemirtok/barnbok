@@ -82,6 +82,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
   const [setting, setSetting] = useState('');
   const [selectedSettingTags, setSelectedSettingTags] = useState<string[]>([]);
   const [imageStyle, setImageStyle] = useState('Färgglatt, manga/comic-stil med stora uttrycksfulla ögon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik');
+  const [styleSeries, setStyleSeries] = useState<string | undefined>(undefined);
 
   // State
   const [loading, setLoading] = useState(false);
@@ -169,6 +170,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
       plot: [...selectedPlotTags, plotText].filter(Boolean).join('. '),
       setting: [...selectedSettingTags, setting].filter(Boolean).join(', '),
       imageStyle,
+      styleSeries,
       subject: bookFormat === 'larobok' ? subject : undefined,
     };
 
@@ -495,31 +497,36 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             </label>
             <textarea
               value={imageStyle}
-              onChange={(e) => setImageStyle(e.target.value)}
+              onChange={(e) => { setImageStyle(e.target.value); setStyleSeries(undefined); }}
               placeholder="Beskriv hur bilderna ska se ut..."
               className="w-full h-20 p-3 border-2 border-gray-300 rounded-lg text-sm
                          focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-y"
             />
             <div className="flex flex-wrap gap-2 mt-2">
               {[
-                { label: 'Handbok för Superhjältar', value: 'Färgglatt, manga/comic-stil med stora uttrycksfulla ögon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik. Liknande "Handbok för Superhjältar".' },
-                { label: 'Akvarellstil', value: 'Mjuk akvarellstil med pasteller, drömmande atmosfär, fina detaljer och naturliga toner.' },
-                { label: 'Tecknad/Disney', value: 'Tecknad stil liknande moderna Disney/Pixar-filmer, varm belysning, uttrycksfulla karaktärer, detaljerade miljöer.' },
-                { label: 'Minimalistisk', value: 'Enkel, minimalistisk stil med platta färger, geometriska former och mycket vitt utrymme.' },
+                { label: 'Handbok för Superhjältar', series: 'Handbok for Superhjaltar', value: 'Färgglatt, manga/comic-stil med stora uttrycksfulla ögon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik. Liknande "Handbok för Superhjältar".' },
+                { label: 'Mamma Mu (akvarell)', series: 'Mamma Mu', value: 'Klassisk skandinavisk tusch- och akvarellstil med fina svarta konturer, varma naturfärger och mjuka vinjetter mot vit bakgrund. Liknande "Mamma Mu".' },
+                { label: 'Tecknad/Disney', series: undefined, value: 'Tecknad stil liknande moderna Disney/Pixar-filmer, varm belysning, uttrycksfulla karaktärer, detaljerade miljöer.' },
+                { label: 'Minimalistisk', series: undefined, value: 'Enkel, minimalistisk stil med platta färger, geometriska former och mycket vitt utrymme.' },
               ].map((style) => (
                 <button
                   key={style.label}
-                  onClick={() => setImageStyle(style.value)}
+                  onClick={() => { setImageStyle(style.value); setStyleSeries(style.series); }}
                   className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
                     imageStyle === style.value
                       ? 'bg-orange-600 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {style.label}
+                  {style.series ? '✨ ' : ''}{style.label}
                 </button>
               ))}
             </div>
+            {styleSeries && (
+              <p className="text-xs text-green-600 mt-2">
+                ✨ Stilprofil analyserad från riktiga böcker används - text och bild kalibreras automatiskt mot seriens stil.
+              </p>
+            )}
           </div>
 
           {/* Summary */}

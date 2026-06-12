@@ -4,12 +4,40 @@ import { parseBookData } from '@/lib/parser';
 
 export const maxDuration = 120; // 2 minutes for long book generation
 
+// Hämta stilprofil (byggd från analyserade referensböcker) från Supabase
+async function fetchStyleProfile(series: string): Promise<{ text_style?: string; image_style?: string } | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/barnbok_style_profiles?book_series=eq.${encodeURIComponent(series)}&select=text_style,image_style`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const config: BookConfig = await request.json();
 
     if (!config.title) {
       return NextResponse.json({ error: 'Titel kravs' }, { status: 400 });
+    }
+
+    // Berika med stilprofil från referensböcker om en serie är vald
+    if (config.styleSeries) {
+      const profile = await fetchStyleProfile(config.styleSeries);
+      if (profile) {
+        console.log(`[generate-book] Använder stilprofil "${config.styleSeries}"`);
+        if (profile.image_style) config.imageStyle = profile.image_style;
+        if (profile.text_style) config.textStyleNotes = profile.text_style;
+      }
     }
 
     // Generate book content with Claude
@@ -25,6 +53,13 @@ export async function POST(request: Request) {
 
     // Set the book format from the config
     book.bookFormat = config.bookFormat;
+
+    // Use the chosen (possibly profile-enriched) image style for ALL page
+    // generation - previously the parser's generic default overrode the
+    // user's choice so picked styles never reached the images
+    if (config.imageStyle) {
+      book.styleGuide = config.imageStyle;
+    }
 
     console.log(`[generate-book] Parsningsresultat: ${book.characters.length} karaktarer, ${book.spreads.length} uppslag`);
 
