@@ -534,9 +534,17 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-600 line-clamp-3">
-                    {char.appearance}
-                  </p>
+                  <>
+                    <p className="text-sm text-gray-600 line-clamp-3">
+                      {char.appearance}
+                    </p>
+                    {(char.personality || char.power) && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {char.personality && <span className="magic-chip">🎭 {char.personality}</span>}
+                        {char.power && <span className="magic-chip">⚡ {char.power}</span>}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
