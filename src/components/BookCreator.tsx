@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { BookProject } from '@/lib/types';
 import { BookConfig, TextDensity } from '@/lib/claude';
+import Icon from './Icon';
 
 interface Props {
   onBookCreated: (book: BookProject, rawText: string) => void;
@@ -511,13 +512,16 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                       : 'magic-chip hover:shadow-glow'
                   }`}
                 >
-                  {style.series ? '✨ ' : ''}{style.label}
+                  <span className="inline-flex items-center gap-1">
+                    {style.series && <Icon name="auto_awesome" filled size={13} />}{style.label}
+                  </span>
                 </button>
               ))}
             </div>
             {styleSeries && (
-              <p className="text-xs text-brand mt-2">
-                ✨ Stilprofil analyserad från riktiga böcker används - text och bild kalibreras automatiskt mot seriens stil.
+              <p className="text-xs text-brand mt-2 inline-flex items-start gap-1">
+                <Icon name="auto_awesome" filled size={14} className="mt-0.5 shrink-0" />
+                Stilprofil analyserad från riktiga böcker används - text och bild kalibreras automatiskt mot seriens stil.
               </p>
             )}
           </div>
@@ -576,7 +580,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                   Skapar boken...
                 </>
               ) : (
-                <>✨ Skapa boken med AI</>
+                <><Icon name="auto_awesome" filled size={20} /> Skapa boken med AI</>
               )}
             </button>
           </div>

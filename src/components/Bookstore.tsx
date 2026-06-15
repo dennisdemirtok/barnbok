@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BookProject, Spread } from '@/lib/types';
 import { listPublicBooks, loadPublicBook, PublicBookSummary } from '@/lib/supabase-db';
+import Icon from './Icon';
 
 interface Props {
   onBack: () => void;
@@ -106,7 +107,9 @@ export default function Bookstore({ onBack }: Props) {
         <div className="text-center py-16 text-gray-400">Laddar böcker...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 glass rounded-4xl border-dashed border-2 border-brand/20">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center text-3xl">📚</div>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center">
+            <Icon name="storefront" filled size={32} className="text-brand" />
+          </div>
           <h3 className="text-lg font-heading font-semibold text-gray-700 mb-1">
             {books.length === 0 ? 'Inga publicerade böcker än' : 'Inga träffar'}
           </h3>
@@ -128,7 +131,9 @@ export default function Bookstore({ onBack }: Props) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 ) : (
-                  <div className="flex items-center justify-center h-full text-4xl">📖</div>
+                  <div className="flex items-center justify-center h-full text-brand/30">
+                    <Icon name="menu_book" size={48} />
+                  </div>
                 )}
                 <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-white/90 backdrop-blur text-xs font-bold text-brand shadow-glow">
                   {FORMAT_LABEL[b.bookFormat || ''] || 'Bok'}

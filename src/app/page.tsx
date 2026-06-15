@@ -12,6 +12,7 @@ import BookPreview from '@/components/BookPreview';
 import ReferenceManager from '@/components/ReferenceManager';
 import LoginModal from '@/components/LoginModal';
 import Bookstore from '@/components/Bookstore';
+import Icon from '@/components/Icon';
 
 type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore';
 type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts';
@@ -203,7 +204,7 @@ export default function Home() {
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm text-brand font-heading font-semibold
                            border border-brand/25 rounded-full hover:bg-brand/5 transition-colors"
               >
-                📚 Bokhandel
+                <Icon name="storefront" filled size={18} /> Bokhandel
               </button>
               <button
                 onClick={() => setShowRefManager(true)}
@@ -215,7 +216,8 @@ export default function Home() {
               {!authLoading && (
                 user ? (
                   <div className="flex items-center gap-2">
-                    <span className="hidden sm:inline text-sm text-gray-500 max-w-[160px] truncate" title={user.email}>
+                    <Icon name="account_circle" filled size={26} className="text-brand/70" />
+                    <span className="hidden sm:inline text-sm text-gray-500 max-w-[140px] truncate" title={user.email}>
                       {user.email}
                     </span>
                     <button

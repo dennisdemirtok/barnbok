@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { BookProject, Spread, Character, BookFormat } from '@/lib/types';
+import Icon from './Icon';
 
 interface Props {
   book: BookProject;
@@ -141,8 +142,8 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
           </div>
 
           <div className="space-y-2">
-            <h4 className="font-heading font-semibold text-gray-700 text-sm flex items-center gap-1">
-              ✨ AI-förslag
+            <h4 className="font-heading font-semibold text-gray-700 text-sm flex items-center gap-1.5">
+              <Icon name="auto_awesome" filled size={18} className="text-magic" /> AI-förslag
             </h4>
             <div className="flex flex-wrap gap-2">
               {AI_SUGGESTIONS.map((s) => (
@@ -160,8 +161,8 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button onClick={regenerate} disabled={regenerating} className="btn-action">
-              {regenerating ? 'Genererar...' : '✨ Regenerera bild'}
+            <button onClick={regenerate} disabled={regenerating} className="btn-action inline-flex items-center gap-1.5">
+              {regenerating ? 'Genererar...' : <><Icon name="auto_fix_high" filled size={18} /> Regenerera bild</>}
             </button>
             <button onClick={saveText} className="btn-primary">Spara ändringar</button>
           </div>

@@ -25,6 +25,33 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.01em;
 }
 
+/* Material Symbols Rounded - enhetlig ikonografi */
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scroll-reveal: sektioner tonar mjukt in */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
 /* Mjuk, lila-tonad scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -54,22 +81,22 @@ h1, h2, h3, h4, h5, h6 {
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
            bg-gradient-to-r from-brand to-magic text-white font-heading font-bold
-           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 active:translate-y-0
-           transition-all disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none;
+           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]
+           transition-all duration-200 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none;
   }
 
   /* Handlingsknapp: sunset-accent (skapa/publicera) */
   .btn-action {
     @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
            bg-gradient-to-r from-sunset to-magic text-white font-heading font-bold
-           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 transition-all;
+           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200;
   }
 
   /* Sekundär: glas med lila kant */
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full
            text-brand font-heading font-semibold border border-brand/30 bg-white/60
-           hover:bg-white hover:border-brand/50 backdrop-blur transition-colors;
+           hover:bg-white hover:border-brand/50 active:scale-[0.97] backdrop-blur transition-all duration-200;
   }
 
   /* Kort: glas, rundat, glöd på hover */

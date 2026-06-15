@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Character, SavedCharacter } from '@/lib/types';
+import Icon from './Icon';
 import { saveCharacter, listSavedCharacters, deleteSavedCharacter } from '@/lib/storage';
 
 interface Props {
@@ -540,8 +541,8 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                     </p>
                     {(char.personality || char.power) && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {char.personality && <span className="magic-chip">🎭 {char.personality}</span>}
-                        {char.power && <span className="magic-chip">⚡ {char.power}</span>}
+                        {char.personality && <span className="magic-chip inline-flex items-center gap-1"><Icon name="theater_comedy" filled size={14} />{char.personality}</span>}
+                        {char.power && <span className="magic-chip inline-flex items-center gap-1"><Icon name="bolt" filled size={14} />{char.power}</span>}
                       </div>
                     )}
                   </>

@@ -29,6 +29,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="sv" className={`${quicksand.variable} ${beVietnamPro.variable}`}>
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
+        />
+      </head>
       <body className="min-h-screen">
         <Providers>{children}</Providers>
       </body>

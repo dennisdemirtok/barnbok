@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { BookProject, Spread, TextBlock } from '@/lib/types';
+import Icon from './Icon';
 import { saveBook } from '@/lib/storage';
 import { exportBookToPDF } from '@/lib/pdf-export';
 import { pickLunaLayout, LunaLayout } from '@/lib/luna-layouts';
@@ -655,18 +656,18 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       {/* View controls */}
       <div className="inline-flex items-center gap-1 p-1 glass rounded-full">
         {([
-          { key: 'workshop', label: '✨ Verkstad' },
-          { key: 'grid', label: 'Rutnät' },
-          { key: 'book', label: 'Bokvy' },
+          { key: 'workshop', label: 'Verkstad', icon: 'auto_awesome' },
+          { key: 'grid', label: 'Rutnät', icon: 'grid_view' },
+          { key: 'book', label: 'Bokvy', icon: 'menu_book' },
         ] as const).map((v) => (
           <button
             key={v.key}
             onClick={() => setViewMode(v.key)}
-            className={`px-4 py-1.5 rounded-full text-sm font-heading font-semibold transition-all ${
+            className={`px-4 py-1.5 rounded-full text-sm font-heading font-semibold transition-all inline-flex items-center gap-1.5 ${
               viewMode === v.key ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow' : 'text-gray-600 hover:text-brand'
             }`}
           >
-            {v.label}
+            <Icon name={v.icon} filled={viewMode === v.key} size={18} />{v.label}
           </button>
         ))}
       </div>

@@ -5,6 +5,7 @@ import { BookProject, BookFormat, SavedText } from '@/lib/types';
 import { saveText } from '@/lib/storage';
 import BookCreator from './BookCreator';
 import SavedTextPicker from './SavedTextPicker';
+import Icon from './Icon';
 
 type Mode = 'choose' | 'import' | 'create' | 'savedTexts';
 
@@ -126,7 +127,9 @@ export default function BookImporter({
             onClick={() => onModeChange('create')}
             className="card-glass p-8 text-left hover:-translate-y-1 group"
           >
-            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-magic text-3xl shadow-glow">✨</div>
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-magic text-white shadow-glow">
+              <Icon name="auto_awesome" filled size={32} />
+            </div>
             <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-brand transition-colors">
               Skapa ny bok med AI
             </h3>
@@ -146,7 +149,9 @@ export default function BookImporter({
             onClick={() => onModeChange('import')}
             className="card-glass p-8 text-left hover:-translate-y-1 group"
           >
-            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-trust to-brand text-3xl shadow-glow">📋</div>
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-trust to-brand text-white shadow-glow">
+              <Icon name="content_paste" filled size={30} />
+            </div>
             <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-trust transition-colors">
               Importera befintlig boktext
             </h3>
@@ -166,7 +171,9 @@ export default function BookImporter({
             onClick={() => onModeChange('savedTexts')}
             className="card-glass p-8 text-left hover:-translate-y-1 group"
           >
-            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-sunset to-magic text-3xl shadow-glow">📚</div>
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-sunset to-magic text-white shadow-glow">
+              <Icon name="bookmarks" filled size={30} />
+            </div>
             <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-magic transition-colors">
               Sparade texter
             </h3>
