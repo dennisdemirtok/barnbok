@@ -82,38 +82,64 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
   return (
     <div className="space-y-8">
       {/* Hero / landningssektion */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-500
-                          px-6 sm:px-10 py-10 sm:py-12 text-white shadow-xl shadow-indigo-500/20">
-        {/* Dekorativa former */}
-        <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-20 -left-10 w-72 h-72 rounded-full bg-fuchsia-300/20 blur-3xl" />
+      <section className="relative overflow-hidden rounded-4xl px-6 sm:px-12 py-12 sm:py-16 text-white
+                          bg-gradient-to-br from-brand via-magic to-trust shadow-glow-lg">
+        {/* Dekorativa blobbar (Level 1) */}
+        <div className="absolute -top-20 -right-10 w-72 h-72 rounded-full bg-white/15 blur-3xl animate-float" />
+        <div className="absolute -bottom-24 -left-10 w-80 h-80 rounded-full bg-sunset/20 blur-3xl" />
         <div className="relative z-10 max-w-2xl">
-          <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight tracking-tight">
+          <h1 className="text-4xl sm:text-5xl font-bold leading-[1.1] tracking-tight">
             Skapa din egen barnbok – på minuter
           </h1>
-          <p className="mt-3 text-indigo-100 text-base sm:text-lg leading-relaxed">
+          <p className="mt-4 text-white/85 text-lg leading-relaxed">
             Berätta din idé, så skriver och illustrerar AI:n en komplett bok med
             konsekventa karaktärer – i din favoritstil.
           </p>
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-6 flex flex-wrap gap-2">
             {['Handbok för Superhjältar', 'Mamma Mu', 'Luna'].map((s) => (
               <span key={s} className="inline-flex items-center gap-1 px-3 py-1 rounded-full
-                                       bg-white/15 backdrop-blur text-sm font-medium ring-1 ring-white/20">
+                                       bg-white/15 backdrop-blur text-sm font-medium ring-1 ring-white/25 animate-shimmer">
                 ✨ {s}
               </span>
             ))}
           </div>
           <button
             onClick={onNewBook}
-            className="mt-7 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-indigo-700
-                       font-bold shadow-lg shadow-indigo-900/20 hover:-translate-y-0.5 hover:shadow-xl
-                       active:translate-y-0 transition-all"
+            className="mt-8 inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-brand
+                       font-heading font-bold text-lg shadow-xl shadow-black/10 hover:-translate-y-0.5
+                       hover:shadow-2xl active:translate-y-0 transition-all"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
             </svg>
             Skapa en bok
           </button>
+        </div>
+      </section>
+
+      {/* Hur magin skapas */}
+      <section>
+        <h2 className="text-center text-sm font-heading font-semibold text-brand/70 tracking-widest uppercase mb-6">
+          Hur magin skapas
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { n: '1', t: 'Din idé', d: 'Berätta tema, karaktärer och stil', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13' },
+            { n: '2', t: 'Karaktärer', d: 'AI skapar konsekventa figurer', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+            { n: '3', t: 'Generering', d: 'Text och bilder vävs ihop', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
+            { n: '4', t: 'Klar bok', d: 'Ladda ner som PDF', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253' },
+          ].map((step) => (
+            <div key={step.n} className="glass rounded-4xl p-5 text-center">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-brand to-magic
+                              flex items-center justify-center text-white shadow-glow">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={step.icon} />
+                </svg>
+              </div>
+              <h3 className="font-heading font-bold text-gray-800">{step.t}</h3>
+              <p className="text-xs text-gray-500 mt-1">{step.d}</p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -148,8 +174,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
             return (
               <div
                 key={book.id}
-                className="card-soft overflow-hidden hover:shadow-lg hover:shadow-indigo-200/50
-                           hover:-translate-y-1 transition-all cursor-pointer group"
+                className="card-glass overflow-hidden hover:-translate-y-1 cursor-pointer group"
                 onClick={() => onLoadBook(book)}
               >
                 {/* Thumbnail */}
@@ -224,9 +249,9 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
       )}
 
       {books.length === 0 && (
-        <div className="text-center py-14 card-soft border-dashed border-2 border-gray-200">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-indigo-50 flex items-center justify-center">
-            <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="text-center py-14 glass rounded-4xl border-dashed border-2 border-brand/20">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center">
+            <svg className="w-8 h-8 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>

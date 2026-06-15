@@ -3,60 +3,90 @@
 @tailwind utilities;
 
 :root {
-  /* Varumärkesfärger - kreativt lila/indigo med varm accent */
-  --brand: 99 102 241;        /* indigo-500 */
-  --brand-dark: 79 70 229;    /* indigo-600 */
-  --accent: 244 114 182;      /* rosa accent */
-  --warm: 251 146 60;         /* varm orange */
+  --font-heading: 'Quicksand', sans-serif;
+  --font-body: 'Be Vietnam Pro', sans-serif;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  color: #1f2433;
-  /* Mjuk, varm bakgrund istället för platt grått */
-  background-color: #f6f5fb;
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #191c1d;
+  /* Level 1: mjuk bakgrund med stora färgglada blobbar (Stitch "Tonal Layers") */
+  background-color: #f8f9fa;
   background-image:
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.06) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(244, 114, 182, 0.05) 0px, transparent 45%);
+    radial-gradient(at 8% 0%, rgba(124, 58, 237, 0.10) 0px, transparent 45%),
+    radial-gradient(at 95% 5%, rgba(217, 70, 239, 0.08) 0px, transparent 42%),
+    radial-gradient(at 50% 100%, rgba(37, 99, 235, 0.06) 0px, transparent 55%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Mjukare, smalare scrollbar */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Mjuk, lila-tonad scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.25);
+  background: rgba(124, 58, 237, 0.25);
   border-radius: 99px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.4); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.4); background-clip: padding-box; }
 
 @layer components {
-  /* Återanvändbar gradient-text för varumärket */
+  /* Varumärkets gradient-text */
   .brand-text {
-    @apply bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-500 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-brand via-magic to-trust bg-clip-text text-transparent;
   }
 
-  /* Primär knapp med liten lyft-effekt */
+  /* Level 2: glas-panel med backdrop-blur och tunn vit kant */
+  .glass {
+    @apply bg-white/70 backdrop-blur-md border border-white/60 shadow-glow;
+  }
+  .glass-strong {
+    @apply bg-white/85 backdrop-blur-xl border border-white/70 shadow-glow;
+  }
+
+  /* Primär knapp: lila→rosa gradient, pillerform, lyft på hover */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl
-           bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold
-           shadow-sm shadow-indigo-500/30 hover:shadow-md hover:shadow-indigo-500/40
-           hover:-translate-y-0.5 active:translate-y-0 transition-all
-           disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none;
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
+           bg-gradient-to-r from-brand to-magic text-white font-heading font-bold
+           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 active:translate-y-0
+           transition-all disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none;
   }
 
-  /* Sekundär/ghost-knapp */
+  /* Handlingsknapp: sunset-accent (skapa/publicera) */
+  .btn-action {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
+           bg-gradient-to-r from-sunset to-magic text-white font-heading font-bold
+           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 transition-all;
+  }
+
+  /* Sekundär: glas med lila kant */
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl
-           text-gray-600 font-medium border border-gray-200 bg-white/70
-           hover:bg-white hover:border-gray-300 transition-colors;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full
+           text-brand font-heading font-semibold border border-brand/30 bg-white/60
+           hover:bg-white hover:border-brand/50 backdrop-blur transition-colors;
   }
 
-  /* Kort med mjuk skugga */
-  .card-soft {
-    @apply bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/60;
+  /* Kort: glas, rundat, glöd på hover */
+  .card-glass {
+    @apply bg-white/75 backdrop-blur-md border border-white/60 rounded-4xl shadow-glow
+           hover:shadow-glow-lg transition-all;
+  }
+
+  /* Magic-chip: AI-taggar/teman med svag shimmer */
+  .magic-chip {
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
+           bg-gradient-to-r from-brand/10 to-magic/10 text-brand ring-1 ring-brand/15;
+  }
+
+  /* Inputfält: mjukt, rundat, lila glöd vid fokus */
+  .field {
+    @apply w-full px-4 py-3 rounded-2xl bg-white/80 border border-gray-200
+           focus:border-brand focus:ring-4 focus:ring-brand/15 outline-none transition-all;
   }
 }

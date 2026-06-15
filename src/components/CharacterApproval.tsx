@@ -247,14 +247,14 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="text-2xl font-heading font-bold brand-text mb-2">
             Steg 2: Godkänn karaktärer
           </h2>
           <p className="text-gray-600">
             Redigera detaljer, generera referensbilder och godkänn varje karaktär.
           </p>
         </div>
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-700">
+        <button onClick={onBack} className="text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
           Tillbaka
         </button>
       </div>
@@ -264,8 +264,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         <button
           onClick={generateAll}
           disabled={isGenerating}
-          className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700
-                     disabled:bg-gray-400 transition-colors"
+          className="btn-primary"
         >
           {isGenerating
             ? `Genererar ${generatingIds.size} referensbilder... (~30 sek/bild)`
@@ -274,18 +273,17 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         {isGenerating && (
           <button
             onClick={stopGeneration}
-            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700
-                       transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-red-600 text-white font-heading font-bold shadow-glow hover:bg-red-700 hover:-translate-y-0.5 transition-all"
           >
             Stoppa
           </button>
         )}
         <button
           onClick={() => setShowRegistry(!showRegistry)}
-          className={`px-6 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+          className={`inline-flex items-center gap-2 transition-all ${
             showRegistry
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+              ? 'btn-primary'
+              : 'btn-ghost'
           }`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -298,40 +296,40 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
 
       {/* Save message */}
       {saveMessage && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm font-medium">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700 text-sm font-medium">
           {saveMessage}
         </div>
       )}
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700">
           {error}
         </div>
       )}
 
       {/* Character Registry Panel */}
       {showRegistry && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <div className="glass rounded-4xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-blue-800 text-lg">Sparade karaktärer</h3>
+            <h3 className="font-heading font-bold brand-text text-lg">Sparade karaktärer</h3>
             <button
               onClick={() => setShowRegistry(false)}
-              className="text-blue-500 hover:text-blue-700 text-sm"
+              className="text-brand/60 hover:text-brand text-sm font-semibold transition-colors"
             >
               Stäng
             </button>
           </div>
 
           {savedChars.length === 0 ? (
-            <p className="text-blue-600 text-sm py-4 text-center">
+            <p className="text-brand/70 text-sm py-4 text-center">
               Inga sparade karaktärer än. Godkänn en karaktär och klicka &quot;Spara till register&quot; för att börja bygga ditt karaktärsbibliotek.
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {savedChars.map(saved => (
-                <div key={saved.id} className="bg-white rounded-lg border border-blue-100 overflow-hidden">
+                <div key={saved.id} className="card-glass rounded-2xl overflow-hidden">
                   {/* Thumbnail */}
-                  <div className="bg-gray-100 h-32 flex items-center justify-center">
+                  <div className="bg-brand/5 h-32 flex items-center justify-center">
                     {saved.referenceImage ? (
                       <img
                         src={`data:image/png;base64,${saved.referenceImage}`}
@@ -344,16 +342,16 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   </div>
                   <div className="p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <h4 className="font-bold text-gray-800 text-sm">
+                      <h4 className="font-heading font-bold text-gray-800 text-sm">
                         {saved.name}
                         {saved.heroName && (
-                          <span className="text-purple-600 ml-1 font-normal">({saved.heroName})</span>
+                          <span className="text-magic ml-1 font-normal">({saved.heroName})</span>
                         )}
                       </h4>
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                        saved.role === 'main' ? 'bg-blue-100 text-blue-700' :
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        saved.role === 'main' ? 'bg-brand/10 text-brand ring-1 ring-brand/15' :
                         saved.role === 'villain' ? 'bg-red-100 text-red-700' :
-                        'bg-gray-100 text-gray-600'
+                        'bg-magic/10 text-magic ring-1 ring-magic/15'
                       }`}>
                         {saved.role === 'main' ? 'Huvud' : saved.role === 'villain' ? 'Skurk' : 'Bi'}
                       </span>
@@ -365,14 +363,14 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                     <div className="flex gap-1">
                       <button
                         onClick={() => handleImportFromRegistry(saved)}
-                        className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs rounded-lg
-                                   hover:bg-blue-700 transition-colors font-medium"
+                        className="flex-1 px-3 py-1.5 bg-gradient-to-r from-brand to-magic text-white text-xs rounded-full
+                                   shadow-glow hover:shadow-glow-lg transition-all font-heading font-bold"
                       >
                         Använd i boken
                       </button>
                       <button
                         onClick={() => handleDeleteFromRegistry(saved.id)}
-                        className="px-2 py-1.5 bg-red-100 text-red-600 text-xs rounded-lg
+                        className="px-2 py-1.5 bg-red-100 text-red-600 text-xs rounded-full
                                    hover:bg-red-200 transition-colors"
                         title="Ta bort från registret"
                       >
@@ -398,10 +396,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
           return (
             <div
               key={char.id}
-              className={`border-2 rounded-xl overflow-hidden transition-colors ${
+              className={`card-glass overflow-hidden ${
                 char.approved
-                  ? 'border-green-400 bg-green-50'
-                  : 'border-gray-200 bg-white'
+                  ? 'ring-2 ring-emerald-400/70 shadow-glow-lg'
+                  : ''
               }`}
             >
               {/* Header */}
@@ -415,14 +413,14 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                             type="text"
                             value={char.name}
                             onChange={(e) => updateCharField(char.id, 'name', e.target.value)}
-                            className="flex-1 px-2 py-1 border rounded text-lg font-bold focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                            className="field flex-1 py-2 text-lg font-heading font-bold"
                             placeholder="Namn"
                           />
                           <input
                             type="text"
                             value={char.heroName || ''}
                             onChange={(e) => updateCharField(char.id, 'heroName', e.target.value)}
-                            className="w-32 px-2 py-1 border rounded text-sm text-purple-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                            className="field w-32 py-2 text-sm text-magic"
                             placeholder="Hjältenamn"
                           />
                         </div>
@@ -431,13 +429,13 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                             type="text"
                             value={char.age || ''}
                             onChange={(e) => updateCharField(char.id, 'age', e.target.value)}
-                            className="w-24 px-2 py-1 border rounded text-sm focus:border-blue-500"
+                            className="field w-24 py-2 text-sm"
                             placeholder="Ålder"
                           />
                           <select
                             value={char.role}
                             onChange={(e) => updateCharField(char.id, 'role', e.target.value)}
-                            className="px-2 py-1 border rounded text-sm focus:border-blue-500"
+                            className="field py-2 text-sm"
                           >
                             <option value="main">Huvudkaraktär</option>
                             <option value="supporting">Bikaraktär</option>
@@ -447,20 +445,20 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                       </div>
                     ) : (
                       <>
-                        <h3 className="text-lg font-bold text-gray-800">
+                        <h3 className="text-lg font-heading font-bold text-gray-800">
                           {char.name}
                           {char.heroName && (
-                            <span className="text-purple-600 ml-2">({char.heroName})</span>
+                            <span className="text-magic ml-2">({char.heroName})</span>
                           )}
                         </h3>
                         <div className="flex items-center gap-2">
                           {char.age && (
                             <span className="text-sm text-gray-500">{char.age}</span>
                           )}
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            char.role === 'main' ? 'bg-blue-100 text-blue-700' :
+                          <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                            char.role === 'main' ? 'bg-brand/10 text-brand ring-1 ring-brand/15' :
                             char.role === 'villain' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-700'
+                            'bg-magic/10 text-magic ring-1 ring-magic/15'
                           }`}>
                             {char.role === 'main' ? 'Huvudkaraktär' :
                              char.role === 'villain' ? 'Skurk' : 'Bikaraktär'}
@@ -471,10 +469,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   </div>
                   <button
                     onClick={() => setEditingId(isEditing ? null : char.id)}
-                    className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                    className={`px-4 py-1.5 text-xs rounded-full font-heading font-semibold transition-all ${
                       isEditing
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                        : 'text-brand border border-brand/30 bg-white/60 hover:bg-white hover:border-brand/50'
                     }`}
                   >
                     {isEditing ? 'Klar' : 'Redigera'}
@@ -487,50 +485,50 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                 {isEditing ? (
                   <div className="space-y-2">
                     <div>
-                      <label className="text-xs text-gray-500 font-medium">Utseende</label>
+                      <label className="text-xs text-brand/70 font-heading font-semibold">Utseende</label>
                       <textarea
                         value={char.appearance}
                         onChange={(e) => updateCharField(char.id, 'appearance', e.target.value)}
-                        className="w-full h-20 px-2 py-1 border rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-200 resize-y"
+                        className="field h-20 py-2 text-sm resize-y"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 font-medium">Vanliga kläder</label>
+                      <label className="text-xs text-brand/70 font-heading font-semibold">Vanliga kläder</label>
                       <input
                         type="text"
                         value={char.normalClothes || ''}
                         onChange={(e) => updateCharField(char.id, 'normalClothes', e.target.value)}
-                        className="w-full px-2 py-1 border rounded text-sm focus:border-blue-500"
+                        className="field py-2 text-sm"
                         placeholder="T.ex. jeans och hoodie"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 font-medium">Superhjältedräkt</label>
+                      <label className="text-xs text-brand/70 font-heading font-semibold">Superhjältedräkt</label>
                       <input
                         type="text"
                         value={char.heroCostume || ''}
                         onChange={(e) => updateCharField(char.id, 'heroCostume', e.target.value)}
-                        className="w-full px-2 py-1 border rounded text-sm focus:border-blue-500"
+                        className="field py-2 text-sm"
                         placeholder="T.ex. bla cape med blixtlogo"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 font-medium">Personlighet</label>
+                      <label className="text-xs text-brand/70 font-heading font-semibold">Personlighet</label>
                       <input
                         type="text"
                         value={char.personality || ''}
                         onChange={(e) => updateCharField(char.id, 'personality', e.target.value)}
-                        className="w-full px-2 py-1 border rounded text-sm focus:border-blue-500"
+                        className="field py-2 text-sm"
                         placeholder="T.ex. modig, nyfiken, lite busig"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 font-medium">Kraft/förmåga</label>
+                      <label className="text-xs text-brand/70 font-heading font-semibold">Kraft/förmåga</label>
                       <input
                         type="text"
                         value={char.power || ''}
                         onChange={(e) => updateCharField(char.id, 'power', e.target.value)}
-                        className="w-full px-2 py-1 border rounded text-sm focus:border-blue-500"
+                        className="field py-2 text-sm"
                         placeholder="T.ex. kan kontrollera blixtar"
                       />
                     </div>
@@ -543,11 +541,11 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
               </div>
 
               {/* Character image */}
-              <div className="mx-4 mb-3 bg-gray-100 rounded-lg overflow-hidden" style={{ minHeight: '200px' }}>
+              <div className="mx-4 mb-3 bg-brand/5 rounded-2xl overflow-hidden" style={{ minHeight: '200px' }}>
                 {generatingIds.has(char.id) ? (
                   <div className="flex items-center justify-center h-48">
                     <div className="text-center">
-                      <svg className="animate-spin h-8 w-8 text-purple-600 mx-auto mb-2" viewBox="0 0 24 24">
+                      <svg className="animate-spin h-8 w-8 text-brand mx-auto mb-2" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
@@ -572,8 +570,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                 <button
                   onClick={() => generateCharacterImage(char.id)}
                   disabled={isGenerating}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg
-                             hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                  className="btn-primary flex-1 px-4 py-2 text-sm"
                 >
                   {char.referenceImage ? 'Regenerera' : 'Generera'}
                 </button>
@@ -581,10 +578,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                 {/* Map from saved character button */}
                 <button
                   onClick={() => setMappingCharId(mappingCharId === char.id ? null : char.id)}
-                  className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-1 ${
+                  className={`px-4 py-2 text-sm rounded-full transition-all flex items-center gap-1 font-heading font-semibold ${
                     mappingCharId === char.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                      : 'text-brand border border-brand/30 bg-white/60 hover:bg-white hover:border-brand/50'
                   }`}
                   title="Välj sparad karaktär från registret"
                 >
@@ -599,10 +596,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   <>
                     <button
                       onClick={() => toggleApproval(char.id)}
-                      className={`flex-1 px-4 py-2 text-sm rounded-lg font-semibold transition-colors ${
+                      className={`flex-1 px-4 py-2 text-sm rounded-full font-heading font-bold transition-all ${
                         char.approved
-                          ? 'bg-green-600 text-white hover:bg-green-700'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5'
+                          : 'text-emerald-700 border border-emerald-300 bg-emerald-50/60 hover:bg-emerald-50'
                       }`}
                     >
                       {char.approved ? 'Godkänd ✓' : 'Godkänn'}
@@ -611,8 +608,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                     {char.approved && (
                       <button
                         onClick={() => handleSaveToRegistry(char)}
-                        className="px-3 py-2 bg-yellow-500 text-white text-sm rounded-lg
-                                   hover:bg-yellow-600 transition-colors flex items-center gap-1"
+                        className="btn-action px-4 py-2 text-sm"
                         title="Spara till karaktärsregistret"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -628,8 +624,8 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
 
               {/* Inline saved character picker */}
               {mappingCharId === char.id && (
-                <div className="mx-4 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-semibold text-blue-800 mb-2">
+                <div className="mx-4 mb-4 p-4 glass rounded-2xl">
+                  <p className="text-sm font-heading font-semibold text-brand mb-2">
                     Välj sparad karaktär för {char.name}:
                   </p>
                   {savedChars.filter(sc => sc.referenceImage).length > 0 ? (
@@ -638,13 +634,13 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                         <button
                           key={saved.id}
                           onClick={() => handleMapFromRegistry(char.id, saved)}
-                          className="border-2 border-gray-200 rounded-lg overflow-hidden hover:border-blue-400
-                                     transition-colors text-left"
+                          className="border-2 border-white/60 bg-white/60 rounded-2xl overflow-hidden hover:border-brand/40 hover:shadow-glow
+                                     transition-all text-left"
                         >
                           <img
                             src={`data:image/png;base64,${saved.referenceImage}`}
                             alt={saved.name}
-                            className="w-full h-20 object-contain bg-gray-100"
+                            className="w-full h-20 object-contain bg-brand/5"
                           />
                           <div className="p-1.5">
                             <p className="text-xs font-medium text-gray-800 truncate">{saved.name}</p>
@@ -656,13 +652,13 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-blue-600 text-center py-2">
+                    <p className="text-xs text-brand/70 text-center py-2">
                       Inga sparade karaktärer med bilder. Godkänn en karaktär och spara den först.
                     </p>
                   )}
                   <button
                     onClick={() => setMappingCharId(null)}
-                    className="mt-2 text-xs text-blue-500 hover:text-blue-700"
+                    className="mt-2 text-xs text-brand/60 hover:text-brand font-semibold transition-colors"
                   >
                     Avbryt
                   </button>
@@ -678,9 +674,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
           <button
             onClick={() => onCharactersApproved(chars)}
             disabled={!allApproved}
-            className="px-8 py-3 bg-green-600 text-white font-semibold rounded-lg
-                       hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed
-                       transition-colors"
+            className="btn-action px-8 py-3 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none disabled:cursor-not-allowed"
           >
             {allApproved
               ? 'Fortsätt till sidgenerering'

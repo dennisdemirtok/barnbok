@@ -173,8 +173,8 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     <div className="absolute top-3 right-3 z-10">
       <button
         onClick={(e) => { e.stopPropagation(); setSelectedSpread(spread); }}
-        className="px-3 py-1.5 bg-white/90 backdrop-blur-sm text-blue-600 rounded-lg
-                   text-sm font-medium hover:bg-blue-50 transition-colors shadow-sm"
+        className="px-4 py-1.5 bg-white/90 backdrop-blur-sm text-brand rounded-full
+                   text-sm font-semibold hover:bg-white transition-colors shadow-glow"
       >
         Redigera
       </button>
@@ -490,7 +490,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">
+          <h2 className="text-2xl font-heading font-bold text-gray-800 mb-1">
             Steg 4: Granska & redigera
           </h2>
           <p className="text-gray-600">
@@ -503,10 +503,10 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       </div>
 
       {/* Book info + Action buttons */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4">
+      <div className="glass rounded-4xl p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h3 className="text-xl font-bold text-gray-800">{book.title}</h3>
+            <h3 className="text-xl font-heading font-bold text-gray-800">{book.title}</h3>
             {book.subtitle && <p className="text-gray-600">{book.subtitle}</p>}
             <div className="flex gap-4 mt-2 text-sm text-gray-500">
               <span>{book.spreads.length} uppslag</span>
@@ -519,9 +519,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             <button
               onClick={handleSaveBook}
               disabled={saving}
-              className="px-5 py-2.5 bg-green-600 text-white font-semibold rounded-lg
-                         hover:bg-green-700 disabled:bg-gray-400 transition-colors
-                         flex items-center gap-2"
+              className="btn-primary"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -533,9 +531,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             <button
               onClick={handleExportPDF}
               disabled={exporting}
-              className="px-5 py-2.5 bg-purple-600 text-white font-semibold rounded-lg
-                         hover:bg-purple-700 disabled:bg-gray-400 transition-colors
-                         flex items-center gap-2"
+              className="btn-ghost"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -547,9 +543,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             <button
               onClick={handleCheckCharacters}
               disabled={checking}
-              className="px-5 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg
-                         hover:bg-indigo-700 disabled:bg-gray-400 transition-colors
-                         flex items-center gap-2"
+              className="btn-ghost"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -560,8 +554,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
 
             <button
               onClick={handleMarkDone}
-              className="px-5 py-2.5 bg-yellow-500 text-white font-semibold rounded-lg
-                         hover:bg-yellow-600 transition-colors flex items-center gap-2"
+              className="btn-action"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -572,10 +565,10 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
         </div>
 
         {saveMessage && (
-          <div className={`mt-3 p-2 rounded-lg text-sm font-medium text-center ${
+          <div className={`mt-3 p-3 rounded-2xl text-sm font-medium text-center ${
             saveMessage.includes('sparats') || saveMessage.includes('klar')
-              ? 'bg-green-100 text-green-700'
-              : 'bg-red-100 text-red-700'
+              ? 'bg-green-100/80 text-green-700'
+              : 'bg-red-100/80 text-red-700'
           }`}>
             {saveMessage}
           </div>
@@ -583,8 +576,8 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
 
         {/* Character check results summary */}
         {Object.keys(checkResults).length > 0 && (
-          <div className="mt-3 p-3 rounded-lg bg-gray-50 border">
-            <h4 className="font-semibold text-sm mb-2">Karaktärskontroll:</h4>
+          <div className="mt-3 p-4 rounded-2xl glass">
+            <h4 className="font-heading font-semibold text-sm mb-2">Karaktärskontroll:</h4>
             {(() => {
               const passed = Object.values(checkResults).filter(r => r.passed).length;
               const failed = Object.values(checkResults).filter(r => !r.passed).length;
@@ -598,7 +591,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             {Object.entries(checkResults).filter(([, r]) => !r.passed).map(([spreadId, result]) => {
               const spread = book.spreads.find(s => s.id === spreadId);
               return (
-                <div key={spreadId} className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700">
+                <div key={spreadId} className="mt-2 p-3 bg-red-50/80 rounded-2xl text-xs text-red-700">
                   <strong>Sida {spread?.pages}:</strong> {result.summary}
                   {result.issues?.map((issue, i) => (
                     <div key={i} className="ml-2 mt-1">
@@ -616,7 +609,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       <div className="flex items-center gap-3">
         <button
           onClick={() => setViewMode(viewMode === 'grid' ? 'book' : 'grid')}
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+          className="btn-ghost"
         >
           {viewMode === 'grid' ? 'Bokvy' : 'Rutnät'}
         </button>
@@ -638,8 +631,8 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
               <div
                 key={spread.id}
                 onClick={() => setSelectedSpread(spread)}
-                className="border-2 border-gray-200 rounded-xl overflow-hidden cursor-pointer
-                           hover:border-blue-400 hover:shadow-lg transition-all group"
+                className="card-glass overflow-hidden cursor-pointer
+                           hover:-translate-y-1 transition-all group"
               >
                 {showLuna && layout ? (
                   renderGridLuna(spread, layout)
@@ -652,12 +645,12 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
                 {/* Info footer */}
                 <div className="p-3">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-gray-700">
+                    <span className="font-heading font-semibold text-gray-700">
                       {spread.pages === 'omslag' ? 'Omslag' :
                        spread.pages === 'slutsida' ? 'Slutsida' :
                        `Sida ${spread.pages}`}
                     </span>
-                    <span className="text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-xs text-brand opacity-0 group-hover:opacity-100 transition-opacity">
                       Klicka för att redigera
                     </span>
                   </div>
@@ -680,7 +673,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             return (
               <div
                 key={spread.id}
-                className="border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                className="card-glass overflow-hidden hover:-translate-y-1 transition-all"
               >
                 {/* Chapter heading bar - only for non-Luna formats, only first spread of each chapter */}
                 {spread.chapter && !showLuna && firstChapterSpreadIds.has(spread.id) && (
@@ -698,8 +691,8 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
                     <div className="absolute top-4 right-4">
                       <button
                         onClick={() => setSelectedSpread(spread)}
-                        className="px-3 py-1.5 bg-white/90 backdrop-blur-sm text-blue-600 rounded-lg
-                                   text-sm font-medium hover:bg-blue-50 transition-colors shadow-sm"
+                        className="px-4 py-1.5 bg-white/90 backdrop-blur-sm text-brand rounded-full
+                                   text-sm font-semibold hover:bg-white transition-colors shadow-glow"
                       >
                         Redigera
                       </button>

@@ -199,8 +199,8 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setShowRefManager(true)}
-                className="px-3 py-1.5 text-sm text-indigo-600 hover:text-indigo-800 border border-indigo-200
-                           rounded-lg hover:bg-indigo-50 transition-colors"
+                className="hidden sm:inline-flex px-4 py-1.5 text-sm text-brand font-medium border border-brand/25
+                           rounded-full hover:bg-brand/5 transition-colors"
               >
                 Referensdata
               </button>
@@ -212,8 +212,8 @@ export default function Home() {
                     </span>
                     <button
                       onClick={signOut}
-                      className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
-                                 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
+                                 rounded-full hover:bg-gray-50 transition-colors"
                     >
                       Logga ut
                     </button>
@@ -221,8 +221,7 @@ export default function Home() {
                 ) : (
                   <button
                     onClick={() => setShowLogin(true)}
-                    className="px-4 py-1.5 text-sm bg-blue-600 text-white font-medium
-                               rounded-lg hover:bg-blue-700 transition-colors"
+                    className="btn-primary !px-5 !py-2 text-sm"
                   >
                     Logga in
                   </button>
@@ -236,8 +235,8 @@ export default function Home() {
                   </div>
                   <button
                     onClick={handleBackToLibrary}
-                    className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
-                               rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
+                               rounded-full hover:bg-gray-50 transition-colors"
                   >
                     Bibliotek
                   </button>
@@ -250,14 +249,14 @@ export default function Home() {
 
       {/* Step indicator */}
       {showSteps && (
-        <div className="bg-white border-b">
+        <div className="bg-white/60 backdrop-blur-md border-b border-white/60">
           <div className="max-w-7xl mx-auto px-6 py-3">
             <div className="flex items-center gap-2">
               {steps.map((s, idx) => (
                 <div key={s.key} className="flex items-center">
                   {idx > 0 && (
                     <div className={`w-8 h-0.5 mx-1 ${
-                      idx <= currentStepIndex ? 'bg-blue-400' : 'bg-gray-200'
+                      idx <= currentStepIndex ? 'bg-brand/40' : 'bg-gray-200'
                     }`} />
                   )}
                   <button
@@ -268,19 +267,19 @@ export default function Home() {
                       }
                     }}
                     disabled={idx > currentStepIndex || !book}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-heading transition-colors ${
                       s.key === step
-                        ? 'bg-blue-100 text-blue-700 font-semibold'
+                        ? 'bg-brand/10 text-brand font-semibold'
                         : idx < currentStepIndex
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer'
+                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer'
                         : 'bg-gray-100 text-gray-400 cursor-default'
                     }`}
                   >
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                       s.key === step
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-gradient-to-br from-brand to-magic text-white'
                         : idx < currentStepIndex
-                        ? 'bg-green-600 text-white'
+                        ? 'bg-emerald-600 text-white'
                         : 'bg-gray-300 text-white'
                     }`}>
                       {idx < currentStepIndex ? '\u2713' : s.num}

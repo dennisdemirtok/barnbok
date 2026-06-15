@@ -193,32 +193,32 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="font-heading text-2xl font-bold text-gray-800 mb-2">
             Steg 3: Generera sidor
           </h2>
           <p className="text-gray-600">
             Genererar {totalSpreads} uppslag med dina godkända karaktärer.
             {generatingCount > 0 && (
-              <span className="text-blue-600 ml-1 font-medium">
+              <span className="text-brand ml-1 font-medium">
                 ({generatingCount} bilder genereras parallellt)
               </span>
             )}
             {failedCount > 0 && (
-              <span className="text-orange-600 ml-1">
+              <span className="text-sunset ml-1">
                 ({failedCount} misslyckade)
               </span>
             )}
           </p>
         </div>
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-700">
+        <button onClick={onBack} className="btn-ghost">
           Tillbaka
         </button>
       </div>
 
       {/* Progress bar */}
-      <div className="bg-gray-200 rounded-full h-4 overflow-hidden">
+      <div className="bg-gray-200/70 rounded-full h-4 overflow-hidden">
         <div
-          className="bg-blue-600 h-full transition-all duration-500 ease-out"
+          className="bg-gradient-to-r from-trust via-brand to-magic animate-shimmer h-full rounded-full transition-all duration-500 ease-out"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -226,7 +226,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         <span>
           {completedSpreads} av {totalSpreads} uppslag klara
           {generatingCount > 0 && (
-            <span className="text-blue-500 ml-2">({generatingCount} genereras...)</span>
+            <span className="text-brand ml-2">({generatingCount} genereras...)</span>
           )}
           {failedCount > 0 && (
             <span className="text-red-500 ml-2">({failedCount} misslyckade)</span>
@@ -247,16 +247,14 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
             <button
               onClick={generateAllPages}
               disabled={allDone}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700
-                         disabled:bg-gray-400 transition-colors"
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {completedSpreads > 0 ? 'Fortsätt generera' : 'Starta generering'}
             </button>
             {failedCount > 0 && (
               <button
                 onClick={retryFailed}
-                className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700
-                           transition-colors"
+                className="btn-action"
               >
                 Försök igen alla ({failedCount} misslyckade)
               </button>
@@ -265,8 +263,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         ) : (
           <button
             onClick={stopGeneration}
-            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700
-                       transition-colors"
+            className="px-6 py-2 bg-red-500 text-white rounded-full font-semibold hover:bg-red-600 transition-colors"
           >
             Stoppa
           </button>
@@ -275,11 +272,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         {canProceedToReview && (
           <button
             onClick={() => onPagesGenerated(spreads)}
-            className={`px-8 py-2 font-semibold rounded-lg transition-colors ${
-              allDone
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'bg-yellow-500 text-white hover:bg-yellow-600'
-            }`}
+            className="btn-action"
           >
             {allDone
               ? 'Granska boken'
@@ -289,14 +282,14 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
       </div>
 
       {canProceedToReview && !allDone && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+        <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl text-amber-800 text-sm">
           <strong>{failedCount} sidor</strong> kunde inte genereras. Du kan fortsätta till granskning ändå
           - misslyckade sidor visas som tomma och kan regenereras därifrån.
         </div>
       )}
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="p-4 bg-red-50/80 border border-red-200 rounded-2xl text-red-700">
           {error}
         </div>
       )}
@@ -306,17 +299,17 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         {spreads.map((spread) => (
           <div
             key={spread.id}
-            className={`border rounded-lg overflow-hidden ${
-              spread.status === 'generating' ? 'border-blue-400 ring-2 ring-blue-200' :
-              spread.status === 'done' ? 'border-green-300' :
-              spread.status === 'error' ? 'border-red-300' :
-              'border-gray-200'
+            className={`card-glass overflow-hidden ${
+              spread.status === 'generating' ? 'ring-2 ring-brand/50' :
+              spread.status === 'done' ? 'ring-2 ring-emerald-300' :
+              spread.status === 'error' ? 'ring-2 ring-red-300' :
+              ''
             }`}
           >
-            <div className="bg-gray-100 aspect-[3/2] flex items-center justify-center">
+            <div className="bg-gray-100/70 aspect-[3/2] flex items-center justify-center">
               {spread.status === 'generating' ? (
                 <div className="text-center">
-                  <svg className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-2" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-8 w-8 text-brand mx-auto mb-2" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
@@ -335,8 +328,8 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                   {!isGenerating && (
                     <button
                       onClick={() => retrySingle(spread.id)}
-                      className="px-3 py-1 bg-orange-500 text-white text-xs rounded-lg
-                                 hover:bg-orange-600 transition-colors"
+                      className="px-3 py-1 bg-sunset text-white text-xs rounded-full font-medium
+                                 hover:opacity-90 transition-opacity"
                     >
                       Försök igen
                     </button>
@@ -354,10 +347,10 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                    spread.pages === 'slutsida' ? 'Slutsida' :
                    `Sida ${spread.pages}`}
                 </span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  spread.status === 'done' ? 'bg-green-100 text-green-700' :
-                  spread.status === 'generating' ? 'bg-blue-100 text-blue-700' :
-                  spread.status === 'error' ? 'bg-red-100 text-red-700' :
+                <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                  spread.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
+                  spread.status === 'generating' ? 'bg-brand/10 text-brand' :
+                  spread.status === 'error' ? 'bg-red-100 text-red-600' :
                   'bg-gray-100 text-gray-500'
                 }`}>
                   {spread.status === 'done' ? 'Klar' :
@@ -370,7 +363,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               )}
               {spread.status === 'done' && spread.qualityCheck && (
                 <p className={`text-xs mt-1 ${
-                  spread.qualityCheck.passed ? 'text-green-600' : 'text-amber-600'
+                  spread.qualityCheck.passed ? 'text-emerald-600' : 'text-amber-600'
                 }`}>
                   {spread.qualityCheck.passed
                     ? `✓ Kvalitetskontrollerad${spread.qualityCheck.autoFixed ? ' (auto-förbättrad)' : ''}`

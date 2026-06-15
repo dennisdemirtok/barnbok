@@ -201,7 +201,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">
+          <h2 className="text-2xl font-heading font-bold text-brand mb-1">
             Skapa ny bok med AI
           </h2>
           <p className="text-gray-600">
@@ -210,15 +210,15 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               : 'Steg 2: Handling, miljö och bildstil'}
           </p>
         </div>
-        <button onClick={onBack} className="px-4 py-2 text-gray-500 hover:text-gray-700">
+        <button onClick={onBack} className="btn-ghost">
           Tillbaka
         </button>
       </div>
 
       {/* Step indicator */}
       <div className="flex gap-2">
-        <div className={`flex-1 h-2 rounded-full ${currentStep >= 1 ? 'bg-blue-500' : 'bg-gray-200'}`} />
-        <div className={`flex-1 h-2 rounded-full ${currentStep >= 2 ? 'bg-blue-500' : 'bg-gray-200'}`} />
+        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 1 ? 'bg-gradient-to-r from-brand to-magic' : 'bg-brand/10'}`} />
+        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 2 ? 'bg-gradient-to-r from-brand to-magic' : 'bg-brand/10'}`} />
       </div>
 
       {currentStep === 1 ? (
@@ -233,8 +233,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="T.ex. Stjärnpatrullen, Mattemonster, Äventyret i Skogen..."
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg
-                         focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-colors"
+              className="field text-lg"
             />
           </div>
 
@@ -249,23 +248,23 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                   key={fmt.value}
                   onClick={() => !fmt.comingSoon && setBookFormat(fmt.value)}
                   disabled={fmt.comingSoon}
-                  className={`relative p-4 border-2 rounded-xl text-left transition-all ${
+                  className={`relative p-4 rounded-4xl text-left transition-all ${
                     fmt.comingSoon
-                      ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                      ? 'bg-gray-100/70 border border-gray-200 opacity-60 cursor-not-allowed'
                       : bookFormat === fmt.value
-                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'card-glass ring-2 ring-brand bg-gradient-to-br from-brand/10 to-magic/10'
+                      : 'card-glass'
                   }`}
                 >
                   {fmt.comingSoon && (
-                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-amber-100 text-amber-700
-                                     text-xs font-semibold rounded-full">
+                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-gradient-to-r from-sunset to-amber-400 text-white
+                                     text-xs font-semibold rounded-full shadow-glow">
                       Kommer snart
                     </span>
                   )}
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-2xl">{fmt.icon}</span>
-                    <span className={`font-semibold ${fmt.comingSoon ? 'text-gray-500' : 'text-gray-800'}`}>{fmt.label}</span>
+                    <span className={`font-heading font-semibold ${fmt.comingSoon ? 'text-gray-500' : 'text-brand'}`}>{fmt.label}</span>
                   </div>
                   <p className="text-xs text-gray-500">{fmt.description}</p>
                 </button>
@@ -284,8 +283,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="T.ex. Matematik, Svenska, Naturkunskap..."
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg
-                           focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                className="field"
               />
             </div>
           )}
@@ -300,10 +298,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={age}
                   onClick={() => setTargetAge(age)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                     targetAge === age
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                      : 'glass text-brand hover:shadow-glow'
                   }`}
                 >
                   {age}
@@ -322,15 +320,15 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={opt.value}
                   onClick={() => setTextDensity(opt.value)}
-                  className={`p-3 border-2 rounded-xl text-center transition-all ${
+                  className={`p-3 rounded-2xl text-center transition-all ${
                     textDensity === opt.value
-                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'card-glass ring-2 ring-brand bg-gradient-to-br from-brand/10 to-magic/10'
+                      : 'card-glass'
                   }`}
                 >
-                  <div className="font-semibold text-sm text-gray-800">{opt.label}</div>
+                  <div className="font-heading font-semibold text-sm text-brand">{opt.label}</div>
                   <div className="text-xs text-gray-500">{opt.desc}</div>
-                  <div className="text-xs text-blue-500 mt-1">{opt.words}</div>
+                  <div className="text-xs text-magic mt-1">{opt.words}</div>
                 </button>
               ))}
             </div>
@@ -354,7 +352,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                   onChange={(e) => setNumCharacters(parseInt(e.target.value))}
                   className="flex-1"
                 />
-                <span className="w-8 text-center font-bold text-blue-600 text-lg">{numCharacters}</span>
+                <span className="w-8 text-center font-heading font-bold text-brand text-lg">{numCharacters}</span>
               </div>
             </div>
             <div>
@@ -367,8 +365,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 value={characterNames}
                 onChange={(e) => setCharacterNames(e.target.value)}
                 placeholder="T.ex. Ella, Max, Saga (kommaseparerat)"
-                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg
-                           focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-sm"
+                className="field py-2 text-sm"
               />
               <p className="text-xs text-gray-400 mt-1">Lämna tomt för automatiska namn</p>
             </div>
@@ -384,10 +381,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={preset.pages}
                   onClick={() => setNumPages(preset.pages)}
-                  className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                  className={`px-4 py-2 rounded-full text-sm transition-all ${
                     numPages === preset.pages
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                      : 'glass text-brand hover:shadow-glow'
                   }`}
                 >
                   {preset.label}
@@ -403,12 +400,11 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 step={2}
                 value={numPages}
                 onChange={(e) => setNumPages(parseInt(e.target.value) || 24)}
-                className="w-20 px-3 py-2 border-2 border-gray-300 rounded-lg text-center
-                           focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                className="field w-20 px-3 py-2 text-center"
               />
               <span className="text-sm text-gray-500">sidor</span>
             </div>
-            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+            <div className="mt-2 glass rounded-2xl p-3">
               <p className="text-sm text-gray-600">
                 <span className="font-medium">{contentSpreads()} uppslag + omslag + slutsida</span>
                 {' · '}
@@ -423,8 +419,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           <button
             onClick={() => setCurrentStep(2)}
             disabled={!title.trim()}
-            className="w-full px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg
-                       hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-lg"
+            className="btn-primary w-full text-lg"
           >
             Nästa: Handling & stil →
           </button>
@@ -441,10 +436,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={tag}
                   onClick={() => togglePlotTag(tag)}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                     selectedPlotTags.includes(tag)
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                      : 'magic-chip hover:shadow-glow'
                   }`}
                 >
                   {tag}
@@ -455,8 +450,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               value={plotText}
               onChange={(e) => setPlotText(e.target.value)}
               placeholder="Beskriv handlingen fritt... T.ex. 'Fyra barn som går i skolan upptäcker att de har magiska krafter. De måste samarbeta för att stoppa en mystisk skurk.'"
-              className="w-full h-24 p-3 border-2 border-gray-300 rounded-lg text-sm
-                         focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-y"
+              className="field h-24 text-sm resize-y"
             />
           </div>
 
@@ -470,10 +464,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={tag}
                   onClick={() => toggleSettingTag(tag)}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                     selectedSettingTags.includes(tag)
-                      ? 'bg-green-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                      : 'magic-chip hover:shadow-glow'
                   }`}
                 >
                   {tag}
@@ -485,8 +479,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               value={setting}
               onChange={(e) => setSetting(e.target.value)}
               placeholder="Beskriv miljön mer detaljerat... T.ex. 'Liten svensk stad vid kusten, gammal skola från 1800-talet'"
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm
-                         focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              className="field py-2 text-sm"
             />
           </div>
 
@@ -499,8 +492,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               value={imageStyle}
               onChange={(e) => { setImageStyle(e.target.value); setStyleSeries(undefined); }}
               placeholder="Beskriv hur bilderna ska se ut..."
-              className="w-full h-20 p-3 border-2 border-gray-300 rounded-lg text-sm
-                         focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-y"
+              className="field h-20 text-sm resize-y"
             />
             <div className="flex flex-wrap gap-2 mt-2">
               {[
@@ -513,10 +505,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={style.label}
                   onClick={() => { setImageStyle(style.value); setStyleSeries(style.series); }}
-                  className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
                     imageStyle === style.value
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-sunset to-magic text-white shadow-glow'
+                      : 'magic-chip hover:shadow-glow'
                   }`}
                 >
                   {style.series ? '✨ ' : ''}{style.label}
@@ -524,16 +516,16 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               ))}
             </div>
             {styleSeries && (
-              <p className="text-xs text-green-600 mt-2">
+              <p className="text-xs text-brand mt-2">
                 ✨ Stilprofil analyserad från riktiga böcker används - text och bild kalibreras automatiskt mot seriens stil.
               </p>
             )}
           </div>
 
           {/* Summary */}
-          <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-            <h4 className="font-semibold text-blue-800 mb-2">Sammanfattning</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm text-blue-700">
+          <div className="glass-strong rounded-4xl p-4">
+            <h4 className="font-heading font-semibold text-brand mb-2">Sammanfattning</h4>
+            <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
               <div><span className="font-medium">Titel:</span> {title}</div>
               <div><span className="font-medium">Format:</span> {FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}</div>
               <div><span className="font-medium">Sidor:</span> {numPages} ({contentSpreads()} uppslag + omslag + slutsida)</div>
@@ -545,15 +537,15 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Error */}
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+            <div className="glass rounded-2xl p-4 border-red-200 bg-red-50/80 text-red-700">
               {error}
             </div>
           )}
 
           {/* Progress */}
           {progress && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 flex items-center gap-3">
-              <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
+            <div className="glass rounded-2xl p-4 text-brand flex items-center gap-3">
+              <svg className="animate-spin h-5 w-5 text-brand" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -566,17 +558,14 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             <button
               onClick={() => setCurrentStep(1)}
               disabled={loading}
-              className="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg
-                         hover:bg-gray-300 disabled:opacity-50 transition-colors"
+              className="btn-ghost disabled:opacity-50"
             >
               ← Tillbaka
             </button>
             <button
               onClick={handleGenerate}
               disabled={loading || !title.trim()}
-              className="flex-1 px-8 py-3 bg-green-600 text-white font-semibold rounded-lg
-                         hover:bg-green-700 disabled:bg-gray-400 transition-colors text-lg
-                         flex items-center justify-center gap-2"
+              className="btn-action flex-1 text-lg disabled:opacity-50"
             >
               {loading ? (
                 <>

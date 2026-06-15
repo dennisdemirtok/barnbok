@@ -41,13 +41,13 @@ export default function LoginModal({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+        className="glass-strong rounded-4xl w-full max-w-md p-7"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-xl font-bold text-gray-800">
+          <h2 className="text-2xl font-heading font-bold text-gray-800">
             {mode === 'login' ? 'Logga in' : 'Skapa konto'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
@@ -67,8 +67,7 @@ export default function LoginModal({ onClose }: Props) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="namn@exempel.se"
-              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg
-                         focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+              className="field"
             />
           </div>
           <div>
@@ -80,8 +79,7 @@ export default function LoginModal({ onClose }: Props) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Minst 6 tecken"
-              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg
-                         focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+              className="field"
             />
           </div>
 
@@ -91,8 +89,7 @@ export default function LoginModal({ onClose }: Props) {
           <button
             type="submit"
             disabled={busy}
-            className="w-full py-2.5 bg-blue-600 text-white font-semibold rounded-lg
-                       hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+            className="btn-primary w-full"
           >
             {busy ? 'Vänta...' : mode === 'login' ? 'Logga in' : 'Skapa konto'}
           </button>
@@ -101,13 +98,13 @@ export default function LoginModal({ onClose }: Props) {
         <div className="mt-4 text-center text-sm text-gray-500">
           {mode === 'login' ? (
             <>Har du inget konto?{' '}
-              <button onClick={() => { setMode('signup'); setError(''); setInfo(''); }} className="text-blue-600 font-medium hover:underline">
+              <button onClick={() => { setMode('signup'); setError(''); setInfo(''); }} className="text-brand font-semibold hover:underline">
                 Skapa ett
               </button>
             </>
           ) : (
             <>Har du redan ett konto?{' '}
-              <button onClick={() => { setMode('login'); setError(''); setInfo(''); }} className="text-blue-600 font-medium hover:underline">
+              <button onClick={() => { setMode('login'); setError(''); setInfo(''); }} className="text-brand font-semibold hover:underline">
                 Logga in
               </button>
             </>

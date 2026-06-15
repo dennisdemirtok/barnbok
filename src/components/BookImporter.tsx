@@ -112,7 +112,7 @@ export default function BookImporter({
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="text-2xl font-heading font-bold text-gray-800 mb-2">
             Steg 1: Skapa eller importera bok
           </h2>
           <p className="text-gray-600">
@@ -124,11 +124,10 @@ export default function BookImporter({
           {/* Create new */}
           <button
             onClick={() => onModeChange('create')}
-            className="p-8 border-2 border-gray-200 rounded-2xl text-left hover:border-purple-400
-                       hover:shadow-lg transition-all group"
+            className="card-glass p-8 text-left hover:-translate-y-1 group"
           >
-            <div className="text-5xl mb-4">✨</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-purple-600 transition-colors">
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-magic text-3xl shadow-glow">✨</div>
+            <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-brand transition-colors">
               Skapa ny bok med AI
             </h3>
             <p className="text-gray-500">
@@ -136,20 +135,19 @@ export default function BookImporter({
               - text, kapitel och bildpromptar.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Bildbok</span>
-              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Kapitelbok</span>
-              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Lärobok</span>
+              <span className="magic-chip">Bildbok</span>
+              <span className="magic-chip">Kapitelbok</span>
+              <span className="magic-chip">Lärobok</span>
             </div>
           </button>
 
           {/* Import existing */}
           <button
             onClick={() => onModeChange('import')}
-            className="p-8 border-2 border-gray-200 rounded-2xl text-left hover:border-blue-400
-                       hover:shadow-lg transition-all group"
+            className="card-glass p-8 text-left hover:-translate-y-1 group"
           >
-            <div className="text-5xl mb-4">📋</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-blue-600 transition-colors">
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-trust to-brand text-3xl shadow-glow">📋</div>
+            <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-trust transition-colors">
               Importera befintlig boktext
             </h3>
             <p className="text-gray-500">
@@ -157,20 +155,19 @@ export default function BookImporter({
               Klistra in den och vi parsar den automatiskt.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">SIDA X-Y format</span>
-              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">BILDPROMPT</span>
-              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">KARAKTERER</span>
+              <span className="magic-chip">SIDA X-Y format</span>
+              <span className="magic-chip">BILDPROMPT</span>
+              <span className="magic-chip">KARAKTERER</span>
             </div>
           </button>
 
           {/* Use saved text */}
           <button
             onClick={() => onModeChange('savedTexts')}
-            className="p-8 border-2 border-gray-200 rounded-2xl text-left hover:border-green-400
-                       hover:shadow-lg transition-all group"
+            className="card-glass p-8 text-left hover:-translate-y-1 group"
           >
-            <div className="text-5xl mb-4">📚</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-green-600 transition-colors">
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-sunset to-magic text-3xl shadow-glow">📚</div>
+            <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-magic transition-colors">
               Sparade texter
             </h3>
             <p className="text-gray-500">
@@ -178,8 +175,8 @@ export default function BookImporter({
               med nya karaktärer eller annat bildformat.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Snabb start</span>
-              <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Återanvänd text</span>
+              <span className="magic-chip">Snabb start</span>
+              <span className="magic-chip">Återanvänd text</span>
             </div>
           </button>
         </div>
@@ -212,7 +209,7 @@ export default function BookImporter({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="text-2xl font-heading font-bold text-gray-800 mb-2">
             {parsedBook ? 'Bokdata klar!' : 'Importera bokdata'}
           </h2>
           <p className="text-gray-600">
@@ -223,7 +220,7 @@ export default function BookImporter({
         </div>
         <button
           onClick={() => { onModeChange('choose'); onParsedBookChange(null); }}
-          className="px-4 py-2 text-gray-500 hover:text-gray-700"
+          className="btn-ghost"
         >
           Tillbaka
         </button>
@@ -233,7 +230,7 @@ export default function BookImporter({
         <>
           {/* Book format selector for import */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-heading font-semibold text-gray-700 mb-2">
               Bokformat (viktigt för bildgenerering)
             </label>
             <div className="flex flex-wrap gap-2">
@@ -242,16 +239,16 @@ export default function BookImporter({
                   key={fmt.value}
                   onClick={() => !fmt.comingSoon && onImportFormatChange(fmt.value)}
                   disabled={fmt.comingSoon}
-                  className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                     fmt.comingSoon
-                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                      ? 'bg-white/40 text-gray-400 cursor-not-allowed ring-1 ring-gray-200/60'
                       : importFormat === fmt.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                      : 'bg-gradient-to-r from-brand/10 to-magic/10 text-brand ring-1 ring-brand/15 hover:ring-brand/30'
                   }`}
                 >
                   {fmt.label}
-                  {fmt.comingSoon && <span className="ml-1.5 text-xs text-amber-600 font-medium">(kommer snart)</span>}
+                  {fmt.comingSoon && <span className="ml-1.5 text-xs text-sunset font-semibold">(kommer snart)</span>}
                 </button>
               ))}
             </div>
@@ -272,18 +269,14 @@ Det hade gatt tre manader sedan...
 
 BILDPROMPT - SIDA 6-7:
 Double page spread, Swedish children's book...`}
-            className="w-full h-96 p-4 border-2 border-gray-300 rounded-lg font-mono text-sm
-                       focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-colors
-                       resize-y"
+            className="field h-96 font-mono text-sm resize-y"
           />
 
           <div className="flex items-center gap-4">
             <button
               onClick={handleParse}
               disabled={loading || !rawText.trim()}
-              className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg
-                         hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed
-                         transition-colors"
+              className="btn-action"
             >
               {loading ? (
                 <span className="flex items-center gap-2">
@@ -306,49 +299,49 @@ Double page spread, Swedish children's book...`}
       )}
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="p-4 glass border-red-200/70 rounded-2xl text-red-600">
           {error}
         </div>
       )}
 
       {/* Parsing results summary */}
       {parsedBook && (
-        <div className={`p-6 rounded-lg space-y-4 ${
+        <div className={`card-glass p-6 space-y-4 ${
           parsedBook.spreads.length === 0 || parsedBook.characters.length === 0
-            ? 'bg-yellow-50 border border-yellow-300'
-            : 'bg-green-50 border border-green-200'
+            ? 'ring-1 ring-sunset/30'
+            : 'ring-1 ring-brand/15'
         }`}>
           {/* Warning if parsing found nothing */}
           {(parsedBook.spreads.length === 0 || parsedBook.characters.length === 0) && (
-            <div className="p-3 bg-yellow-100 border border-yellow-300 rounded-lg text-yellow-800 text-sm">
+            <div className="p-3 bg-sunset/10 ring-1 ring-sunset/30 rounded-2xl text-amber-700 text-sm">
               <strong>Parsningen hittade {parsedBook.spreads.length === 0 ? 'inga uppslag' : ''}{parsedBook.spreads.length === 0 && parsedBook.characters.length === 0 ? ' och ' : ''}{parsedBook.characters.length === 0 ? 'inga karaktärer' : ''}.</strong>
               <br />
               Klicka &quot;Redigera text&quot; för att se och redigera den genererade texten, och försök parsa igen.
               AI-texten kan ibland använda ett format som parsern inte känner igen.
             </div>
           )}
-          <h3 className={`text-lg font-bold ${
-            parsedBook.spreads.length === 0 ? 'text-yellow-800' : 'text-green-800'
+          <h3 className={`text-lg font-heading font-bold ${
+            parsedBook.spreads.length === 0 ? 'text-amber-700' : 'text-brand'
           }`}>
             {parsedBook.title || 'Parsning klar!'}
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-blue-600">{parsedBook.spreads.length}</p>
+            <div className="glass rounded-2xl p-3 text-center">
+              <p className="text-2xl font-heading font-bold text-trust">{parsedBook.spreads.length}</p>
               <p className="text-xs text-gray-500">Uppslag</p>
             </div>
-            <div className="bg-white rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-purple-600">{parsedBook.characters.length}</p>
+            <div className="glass rounded-2xl p-3 text-center">
+              <p className="text-2xl font-heading font-bold text-brand">{parsedBook.characters.length}</p>
               <p className="text-xs text-gray-500">Karaktärer</p>
             </div>
-            <div className="bg-white rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-green-600">
+            <div className="glass rounded-2xl p-3 text-center">
+              <p className="text-2xl font-heading font-bold text-magic">
                 {parsedBook.spreads.filter(s => s.pages === 'omslag').length > 0 ? 'Ja' : 'Nej'}
               </p>
               <p className="text-xs text-gray-500">Omslag</p>
             </div>
-            <div className="bg-white rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-orange-600">
+            <div className="glass rounded-2xl p-3 text-center">
+              <p className="text-2xl font-heading font-bold text-sunset">
                 {parsedBook.spreads.reduce((sum, s) => sum + s.textBlocks.length, 0)}
               </p>
               <p className="text-xs text-gray-500">Textblock</p>
@@ -357,10 +350,10 @@ Double page spread, Swedish children's book...`}
 
           {/* List all spreads */}
           <div className="max-h-48 overflow-y-auto">
-            <p className="text-sm font-semibold text-gray-700 mb-2">Hittade uppslag:</p>
+            <p className="text-sm font-heading font-semibold text-gray-700 mb-2">Hittade uppslag:</p>
             <div className="flex flex-wrap gap-1">
               {parsedBook.spreads.map((s) => (
-                <span key={s.id} className="text-xs bg-white border border-gray-200 rounded px-2 py-1">
+                <span key={s.id} className="text-xs bg-white/70 ring-1 ring-brand/15 text-brand rounded-full px-2 py-1">
                   {s.pages === 'omslag' ? 'Omslag' :
                    s.pages === 'slutsida' ? 'Slutsida' :
                    `S.${s.pages}`}
@@ -372,18 +365,17 @@ Double page spread, Swedish children's book...`}
           <div className="flex gap-3">
             <button
               onClick={() => onBookParsed(parsedBook)}
-              className="flex-1 px-8 py-3 bg-green-600 text-white font-semibold rounded-lg
-                         hover:bg-green-700 transition-colors"
+              className="btn-action flex-1"
             >
               Ser bra ut - fortsatt till karaktärer
             </button>
             <button
               onClick={handleSaveText}
               disabled={textSaved}
-              className={`px-4 py-3 rounded-lg transition-colors flex items-center gap-2 ${
+              className={`px-5 py-3 rounded-full font-heading font-semibold transition-all flex items-center gap-2 ${
                 textSaved
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-yellow-500 text-white hover:bg-yellow-600'
+                  ? 'bg-brand/10 text-brand ring-1 ring-brand/20'
+                  : 'bg-gradient-to-r from-sunset to-magic text-white shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,7 +386,7 @@ Double page spread, Swedish children's book...`}
             </button>
             <button
               onClick={() => onParsedBookChange(null)}
-              className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              className="btn-ghost"
             >
               Redigera text
             </button>
