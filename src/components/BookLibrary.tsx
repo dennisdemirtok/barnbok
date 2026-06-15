@@ -82,43 +82,74 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
   return (
     <div className="space-y-8">
       {/* Hero / landningssektion */}
-      <section className="relative overflow-hidden rounded-4xl px-6 sm:px-12 py-12 sm:py-16 text-white
-                          bg-gradient-to-br from-brand via-magic to-trust shadow-glow-lg">
+      <section className="relative overflow-hidden rounded-4xl px-6 sm:px-12 py-10 sm:py-14
+                          bg-gradient-to-br from-brand via-magic to-trust shadow-glow-lg text-white">
         {/* Dekorativa blobbar (Level 1) */}
-        <div className="absolute -top-20 -right-10 w-72 h-72 rounded-full bg-white/15 blur-3xl animate-float" />
+        <div className="absolute -top-20 -right-10 w-72 h-72 rounded-full bg-white/15 blur-3xl" />
         <div className="absolute -bottom-24 -left-10 w-80 h-80 rounded-full bg-sunset/20 blur-3xl" />
-        <div className="relative z-10 max-w-2xl">
-          <h1 className="text-4xl sm:text-5xl font-bold leading-[1.1] tracking-tight">
-            Skapa din egen barnbok – på minuter
-          </h1>
-          <p className="mt-4 text-white/85 text-lg leading-relaxed">
-            Berätta din idé, så skriver och illustrerar AI:n en komplett bok med
-            konsekventa karaktärer – i din favoritstil.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            {['Handbok för Superhjältar', 'Mamma Mu', 'Luna'].map((s) => (
-              <span key={s} className="inline-flex items-center gap-1 px-3 py-1 rounded-full
-                                       bg-white/15 backdrop-blur text-sm font-medium ring-1 ring-white/25 animate-shimmer">
-                ✨ {s}
-              </span>
-            ))}
+        <div className="relative z-10 grid lg:grid-cols-2 gap-8 items-center">
+          {/* Text */}
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15
+                             backdrop-blur text-sm font-medium ring-1 ring-white/25">
+              ✨ AI-drivet magiskt skapande
+            </span>
+            <h1 className="mt-4 text-4xl sm:text-5xl font-bold leading-[1.1] tracking-tight">
+              Skapa din egen barnbok – på minuter
+            </h1>
+            <p className="mt-4 text-white/85 text-lg leading-relaxed max-w-lg">
+              Förvandla godnattsagan till ett riktigt äventyr. Berätta din idé, så skriver
+              och illustrerar AI:n en komplett bok med konsekventa karaktärer.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {['Handbok för Superhjältar', 'Mamma Mu', 'Luna'].map((s) => (
+                <span key={s} className="inline-flex items-center gap-1 px-3 py-1 rounded-full
+                                         bg-white/15 backdrop-blur text-sm font-medium ring-1 ring-white/25">
+                  ✨ {s}
+                </span>
+              ))}
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={onNewBook}
+                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-brand
+                           font-heading font-bold text-lg shadow-xl shadow-black/10 hover:-translate-y-0.5
+                           hover:shadow-2xl active:translate-y-0 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                Börja skapa
+              </button>
+              <a
+                href="#hur-magin-skapas"
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/10 backdrop-blur
+                           text-white font-heading font-semibold ring-1 ring-white/30 hover:bg-white/20 transition-colors"
+              >
+                Se hur det går till
+              </a>
+            </div>
           </div>
-          <button
-            onClick={onNewBook}
-            className="mt-8 inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-brand
-                       font-heading font-bold text-lg shadow-xl shadow-black/10 hover:-translate-y-0.5
-                       hover:shadow-2xl active:translate-y-0 transition-all"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-            </svg>
-            Skapa en bok
-          </button>
+          {/* Illustration med floating chips */}
+          <div className="relative hidden lg:flex justify-center items-center">
+            <div className="absolute inset-0 bg-white/10 blur-3xl rounded-full" />
+            <div className="relative w-full max-w-md animate-float">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/hero-book.png" alt="Magisk barnbok" className="w-full h-auto rounded-3xl drop-shadow-2xl" />
+              <div className="absolute top-3 -right-3 glass rounded-2xl px-3 py-2 flex items-center gap-2 text-gray-800">
+                <span className="text-sunset text-lg">★</span>
+                <span className="font-heading font-bold text-sm">Magisk AI</span>
+              </div>
+              <div className="absolute bottom-6 -left-4 glass rounded-2xl px-3 py-2 text-gray-800">
+                <span className="font-heading font-bold text-sm">3 bokstilar att välja på</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Hur magin skapas */}
-      <section>
+      <section id="hur-magin-skapas" className="scroll-mt-24">
         <h2 className="text-center text-sm font-heading font-semibold text-brand/70 tracking-widest uppercase mb-6">
           Hur magin skapas
         </h2>
@@ -201,7 +232,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
 
                 {/* Info */}
                 <div className="p-4">
-                  <h3 className="font-bold text-gray-800 mb-1 group-hover:text-indigo-600 transition-colors">
+                  <h3 className="font-heading font-bold text-gray-800 mb-1 group-hover:text-brand transition-colors">
                     {book.title}
                   </h3>
                   {book.subtitle && (
@@ -222,7 +253,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
                           e.stopPropagation();
                           onReuseBook(book);
                         }}
-                        className="text-xs text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="text-xs text-brand/60 hover:text-brand opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         Återanvänd
                       </button>
@@ -263,6 +294,36 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
           </button>
         </div>
       )}
+
+      {/* Konverterings-CTA */}
+      <section className="relative overflow-hidden rounded-4xl px-6 sm:px-12 py-14 text-center
+                          bg-gradient-to-br from-brand-dark via-brand to-magic text-white shadow-glow-lg mt-4">
+        <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full bg-magic/30 blur-3xl" />
+        <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-trust/30 blur-3xl" />
+        <div className="relative z-10 max-w-2xl mx-auto">
+          <h2 className="text-3xl sm:text-4xl font-bold">Redo att skriva historia?</h2>
+          <p className="mt-3 text-white/85 text-lg">
+            Det tar bara några minuter att skapa den första versionen av din bok.
+          </p>
+          <button
+            onClick={onNewBook}
+            className="mt-7 inline-flex items-center gap-2 px-8 py-4 rounded-full bg-white text-brand
+                       font-heading font-bold text-lg shadow-xl shadow-black/10 hover:-translate-y-0.5
+                       hover:shadow-2xl transition-all"
+          >
+            Skapa din bok nu
+          </button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="pt-6 pb-2 text-center">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand to-magic" />
+          <span className="font-heading font-bold brand-text">Bokverktyget</span>
+        </div>
+        <p className="text-sm text-gray-400 italic">Skapa barnböcker med AI · Magic included ✨</p>
+      </footer>
     </div>
   );
 }
