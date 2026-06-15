@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BookProject, Spread, TextBlock } from '@/lib/types';
 import { saveBook } from '@/lib/storage';
 import { exportBookToPDF } from '@/lib/pdf-export';
 import { pickLunaLayout, LunaLayout } from '@/lib/luna-layouts';
+import { setBookPublished, getBookPublishState } from '@/lib/supabase-db';
+import { useAuth } from '@/lib/auth';
 import PageEditor from './PageEditor';
 
 interface Props {
@@ -26,6 +28,37 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     summary: string;
     issues: Array<{ character: string; issue: string; severity: string }>;
   }>>({});
+  const { user } = useAuth();
+  const [isPublic, setIsPublic] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  // Hämta nuvarande publiceringsstatus när boken öppnas (om inloggad)
+  useEffect(() => {
+    if (!user) return;
+    getBookPublishState(book.id).then(setIsPublic).catch(() => {});
+  }, [book.id, user]);
+
+  const handlePublishToggle = async () => {
+    if (!user) return;
+    setPublishing(true);
+    setSaveMessage('');
+    try {
+      const next = !isPublic;
+      // Spara först till molnet så boken finns där, sätt sedan publik-flaggan
+      await saveBook({ ...book, status: 'reviewing' as const });
+      const authorName = user.email ? user.email.split('@')[0] : undefined;
+      await setBookPublished(book.id, next, authorName);
+      setIsPublic(next);
+      setSaveMessage(next
+        ? 'Boken är publicerad i bokhandeln – nu kan alla läsa den! 🎉'
+        : 'Boken är avpublicerad och åter privat.');
+      setTimeout(() => setSaveMessage(''), 5000);
+    } catch (err) {
+      setSaveMessage(err instanceof Error ? err.message : 'Kunde inte ändra publicering');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const isSeparateTextFormat = book.bookFormat === 'bildbok-separat-text';
 
@@ -560,6 +593,19 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               Markera klar
+            </button>
+
+            <button
+              onClick={handlePublishToggle}
+              disabled={publishing || !user}
+              title={!user ? 'Logga in för att publicera' : undefined}
+              className={isPublic ? 'btn-ghost' : 'btn-primary'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+              </svg>
+              {publishing ? 'Vänta...' : isPublic ? 'Publicerad ✓ – avpublicera' : 'Publicera i bokhandeln'}
             </button>
           </div>
         </div>

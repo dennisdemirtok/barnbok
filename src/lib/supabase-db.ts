@@ -188,6 +188,72 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
   };
 }
 
+// ═══════════════════════════════════════════
+//  Publicering / Bokhandel
+// ═══════════════════════════════════════════
+
+export interface PublicBookSummary {
+  id: string;
+  title: string;
+  authorName?: string;
+  bookFormat?: string;
+  numSpreads: number;
+  publishedAt?: string;
+  coverUrl?: string;
+}
+
+// Publicera/avpublicera en bok. Publicerade böcker blir läsbara för alla via RLS.
+export async function setBookPublished(bookId: string, isPublic: boolean, authorName?: string): Promise<void> {
+  const update: Record<string, unknown> = {
+    is_public: isPublic,
+    published_at: isPublic ? new Date().toISOString() : null,
+  };
+  if (authorName !== undefined) update.author_name = authorName;
+  const { error } = await supabase.from('barnbok_books').update(update).eq('id', bookId);
+  if (error) throw new Error(`Kunde inte ${isPublic ? 'publicera' : 'avpublicera'} boken: ${error.message}`);
+}
+
+// Hämta nuvarande publiceringsstatus för en bok (ägaren)
+export async function getBookPublishState(bookId: string): Promise<boolean> {
+  const { data } = await supabase.from('barnbok_books').select('is_public').eq('id', bookId).maybeSingle();
+  return !!data?.is_public;
+}
+
+// Lista alla publicerade böcker (för bokhandeln) - fungerar utan inloggning via RLS
+export async function listPublicBooks(): Promise<PublicBookSummary[]> {
+  const { data, error } = await supabase
+    .from('barnbok_books')
+    .select('id, title, author_name, book_format, num_spreads, published_at')
+    .eq('is_public', true)
+    .order('published_at', { ascending: false });
+
+  if (error || !data) return [];
+
+  // Hämta omslagsbild per bok
+  return Promise.all(data.map(async (b) => {
+    const { data: cover } = await supabase
+      .from('barnbok_spreads')
+      .select('image_url')
+      .eq('book_id', b.id)
+      .eq('pages', 'omslag')
+      .maybeSingle();
+    return {
+      id: b.id,
+      title: b.title,
+      authorName: b.author_name || undefined,
+      bookFormat: b.book_format,
+      numSpreads: b.num_spreads,
+      publishedAt: b.published_at || undefined,
+      coverUrl: cover?.image_url || undefined,
+    };
+  }));
+}
+
+// Läs en publicerad bok (återanvänder molnladdningen - RLS tillåter publik läsning)
+export async function loadPublicBook(id: string): Promise<BookProject | null> {
+  return loadBookFromCloud(id);
+}
+
 export async function listBooksFromCloud(): Promise<BookProject[]> {
   const { data, error } = await supabase
     .from('barnbok_books')

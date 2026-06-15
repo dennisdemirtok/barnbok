@@ -11,8 +11,9 @@ import PageGenerator from '@/components/PageGenerator';
 import BookPreview from '@/components/BookPreview';
 import ReferenceManager from '@/components/ReferenceManager';
 import LoginModal from '@/components/LoginModal';
+import Bookstore from '@/components/Bookstore';
 
-type Step = 'library' | 'import' | 'characters' | 'generate' | 'review';
+type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore';
 type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts';
 
 export default function Home() {
@@ -171,7 +172,7 @@ export default function Home() {
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === step);
-  const showSteps = step !== 'library';
+  const showSteps = step !== 'library' && step !== 'bookstore';
 
   return (
     <main className="min-h-screen">
@@ -198,8 +199,15 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-4">
               <button
+                onClick={() => setStep('bookstore')}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm text-brand font-heading font-semibold
+                           border border-brand/25 rounded-full hover:bg-brand/5 transition-colors"
+              >
+                📚 Bokhandel
+              </button>
+              <button
                 onClick={() => setShowRefManager(true)}
-                className="hidden sm:inline-flex px-4 py-1.5 text-sm text-brand font-medium border border-brand/25
+                className="hidden md:inline-flex px-4 py-1.5 text-sm text-brand font-medium border border-brand/25
                            rounded-full hover:bg-brand/5 transition-colors"
               >
                 Referensdata
@@ -301,6 +309,10 @@ export default function Home() {
             onNewBook={handleNewBook}
             onReuseBook={handleReuseBook}
           />
+        )}
+
+        {step === 'bookstore' && (
+          <Bookstore onBack={() => setStep('library')} />
         )}
 
         {step === 'import' && (
