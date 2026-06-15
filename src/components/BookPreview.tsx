@@ -8,6 +8,7 @@ import { pickLunaLayout, LunaLayout } from '@/lib/luna-layouts';
 import { setBookPublished, getBookPublishState } from '@/lib/supabase-db';
 import { useAuth } from '@/lib/auth';
 import PageEditor from './PageEditor';
+import Workshop from './Workshop';
 
 interface Props {
   book: BookProject;
@@ -18,7 +19,7 @@ interface Props {
 
 export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }: Props) {
   const [selectedSpread, setSelectedSpread] = useState<Spread | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'book'>('grid');
+  const [viewMode, setViewMode] = useState<'workshop' | 'grid' | 'book'>('workshop');
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -652,17 +653,31 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       </div>
 
       {/* View controls */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setViewMode(viewMode === 'grid' ? 'book' : 'grid')}
-          className="btn-ghost"
-        >
-          {viewMode === 'grid' ? 'Bokvy' : 'Rutnät'}
-        </button>
+      <div className="inline-flex items-center gap-1 p-1 glass rounded-full">
+        {([
+          { key: 'workshop', label: '✨ Verkstad' },
+          { key: 'grid', label: 'Rutnät' },
+          { key: 'book', label: 'Bokvy' },
+        ] as const).map((v) => (
+          <button
+            key={v.key}
+            onClick={() => setViewMode(v.key)}
+            className={`px-4 py-1.5 rounded-full text-sm font-heading font-semibold transition-all ${
+              viewMode === v.key ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow' : 'text-gray-600 hover:text-brand'
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
       </div>
 
-      {/* ─── GRID VIEW ─── */}
-      {viewMode === 'grid' ? (
+      {/* ─── WORKSHOP (immersiv editor) ─── */}
+      {viewMode === 'workshop' && (
+        <Workshop book={book} onUpdateSpread={onUpdateSpread} />
+      )}
+
+      {/* ─── GRID / BOK ─── */}
+      {viewMode !== 'workshop' && (viewMode === 'grid' ? (
         <div className={`grid gap-6 ${
           isSeparateTextFormat
             ? 'grid-cols-1 lg:grid-cols-2'
@@ -760,7 +775,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             );
           })}
         </div>
-      )}
+      ))}
 
       {/* Page Editor Modal */}
       {selectedSpread && (
