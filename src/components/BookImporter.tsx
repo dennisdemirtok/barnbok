@@ -111,51 +111,60 @@ export default function BookImporter({
   // Choose mode screen
   if (mode === 'choose') {
     return (
-      <div className="space-y-6">
+      <div className="space-y-7">
         <div>
-          <h2 className="text-2xl font-heading font-bold text-gray-800 mb-2">
-            Steg 1: Skapa eller importera bok
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
+            <Icon name="counter_1" filled size={16} /> Steg 1
+          </span>
+          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
+            Hur vill du börja?
           </h2>
-          <p className="text-gray-600">
-            Välj om du vill skapa en helt ny bok med AI, importera befintlig boktext, eller använda en sparad text.
+          <p className="mt-1.5 text-gray-500 max-w-2xl">
+            Skapa en helt ny bok med AI, importera en befintlig boktext, eller återanvänd en sparad text.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Create new */}
+          {/* Create new — recommended */}
           <button
             onClick={() => onModeChange('create')}
-            className="card-glass p-8 text-left hover:-translate-y-1 group"
+            className="relative card-glass p-7 text-left hover:-translate-y-1.5 group ring-1 ring-brand/15 hover:ring-brand/40 flex flex-col"
           >
-            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-magic text-white shadow-glow">
+            <span className="absolute top-4 right-4 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-brand to-magic text-white text-[10px] font-heading font-bold uppercase tracking-wide shadow-glow">
+              <Icon name="star" filled size={13} /> Populärast
+            </span>
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-magic text-white shadow-glow group-hover:scale-105 group-hover:rotate-3 transition-transform">
               <Icon name="auto_awesome" filled size={32} />
             </div>
             <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-brand transition-colors">
               Skapa ny bok med AI
             </h3>
-            <p className="text-gray-500">
+            <p className="text-gray-500 text-sm leading-relaxed flex-1">
               Fyll i titel, karaktärer, handling och stil. Claude AI skapar hela boken
-              - text, kapitel och bildpromptar.
+              — text, kapitel och bildpromptar.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="magic-chip">Bildbok</span>
               <span className="magic-chip">Kapitelbok</span>
               <span className="magic-chip">Lärobok</span>
             </div>
+            <span className="mt-5 inline-flex items-center gap-1.5 text-brand font-heading font-bold text-sm group-hover:gap-2.5 transition-all">
+              Kom igång <Icon name="arrow_forward" size={18} />
+            </span>
           </button>
 
           {/* Import existing */}
           <button
             onClick={() => onModeChange('import')}
-            className="card-glass p-8 text-left hover:-translate-y-1 group"
+            className="card-glass p-7 text-left hover:-translate-y-1.5 group ring-1 ring-transparent hover:ring-trust/30 flex flex-col"
           >
-            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-trust to-brand text-white shadow-glow">
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-trust to-brand text-white shadow-glow group-hover:scale-105 group-hover:rotate-3 transition-transform">
               <Icon name="content_paste" filled size={30} />
             </div>
             <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-trust transition-colors">
               Importera befintlig boktext
             </h3>
-            <p className="text-gray-500">
+            <p className="text-gray-500 text-sm leading-relaxed flex-1">
               Har du redan text med karaktärer, sidtexter och bildpromptar?
               Klistra in den och vi parsar den automatiskt.
             </p>
@@ -164,20 +173,23 @@ export default function BookImporter({
               <span className="magic-chip">BILDPROMPT</span>
               <span className="magic-chip">KARAKTERER</span>
             </div>
+            <span className="mt-5 inline-flex items-center gap-1.5 text-trust font-heading font-bold text-sm group-hover:gap-2.5 transition-all">
+              Klistra in text <Icon name="arrow_forward" size={18} />
+            </span>
           </button>
 
           {/* Use saved text */}
           <button
             onClick={() => onModeChange('savedTexts')}
-            className="card-glass p-8 text-left hover:-translate-y-1 group"
+            className="card-glass p-7 text-left hover:-translate-y-1.5 group ring-1 ring-transparent hover:ring-magic/30 flex flex-col"
           >
-            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-sunset to-magic text-white shadow-glow">
+            <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-sunset to-magic text-white shadow-glow group-hover:scale-105 group-hover:rotate-3 transition-transform">
               <Icon name="bookmarks" filled size={30} />
             </div>
             <h3 className="text-xl font-heading font-bold text-gray-800 mb-2 group-hover:text-magic transition-colors">
               Sparade texter
             </h3>
-            <p className="text-gray-500">
+            <p className="text-gray-500 text-sm leading-relaxed flex-1">
               Använd en tidigare sparad boktext. Perfekt för att testa samma historia
               med nya karaktärer eller annat bildformat.
             </p>
@@ -185,6 +197,9 @@ export default function BookImporter({
               <span className="magic-chip">Snabb start</span>
               <span className="magic-chip">Återanvänd text</span>
             </div>
+            <span className="mt-5 inline-flex items-center gap-1.5 text-magic font-heading font-bold text-sm group-hover:gap-2.5 transition-all">
+              Bläddra <Icon name="arrow_forward" size={18} />
+            </span>
           </button>
         </div>
       </div>
@@ -214,22 +229,25 @@ export default function BookImporter({
   // Import mode (also shows results after AI creation)
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-heading font-bold text-gray-800 mb-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
+            <Icon name="counter_1" filled size={16} /> Steg 1
+          </span>
+          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
             {parsedBook ? 'Bokdata klar!' : 'Importera bokdata'}
           </h2>
-          <p className="text-gray-600">
+          <p className="mt-1.5 text-gray-500 max-w-2xl">
             {parsedBook
-              ? 'Granska resultatet och fortsatt till karaktärer.'
+              ? 'Granska resultatet och fortsätt till karaktärerna.'
               : 'Klistra in din boktext med karaktärer, sidtexter och bildpromptar.'}
           </p>
         </div>
         <button
           onClick={() => { onModeChange('choose'); onParsedBookChange(null); }}
-          className="btn-ghost"
+          className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors"
         >
-          Tillbaka
+          <Icon name="arrow_back" size={18} /> Tillbaka
         </button>
       </div>
 
@@ -283,18 +301,18 @@ Double page spread, Swedish children's book...`}
             <button
               onClick={handleParse}
               disabled={loading || !rawText.trim()}
-              className="btn-action"
+              className="btn-action inline-flex items-center gap-2"
             >
               {loading ? (
-                <span className="flex items-center gap-2">
+                <>
                   <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   Parsar...
-                </span>
+                </>
               ) : (
-                'Parsa bokdata'
+                <><Icon name="auto_fix_high" filled size={19} /> Parsa bokdata</>
               )}
             </button>
 
@@ -372,9 +390,9 @@ Double page spread, Swedish children's book...`}
           <div className="flex gap-3">
             <button
               onClick={() => onBookParsed(parsedBook)}
-              className="btn-action flex-1"
+              className="btn-action flex-1 inline-flex items-center justify-center gap-2"
             >
-              Ser bra ut - fortsatt till karaktärer
+              Ser bra ut – fortsätt till karaktärer <Icon name="arrow_forward" size={19} />
             </button>
             <button
               onClick={handleSaveText}
@@ -385,17 +403,14 @@ Double page spread, Swedish children's book...`}
                   : 'bg-gradient-to-r from-sunset to-magic text-white shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-              </svg>
+              <Icon name={textSaved ? 'check' : 'bookmark_add'} filled={!textSaved} size={18} />
               {textSaved ? 'Sparad!' : 'Spara text'}
             </button>
             <button
               onClick={() => onParsedBookChange(null)}
-              className="btn-ghost"
+              className="btn-ghost inline-flex items-center gap-1.5"
             >
-              Redigera text
+              <Icon name="edit" size={17} /> Redigera text
             </button>
           </div>
         </div>

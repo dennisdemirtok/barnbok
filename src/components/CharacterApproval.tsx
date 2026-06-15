@@ -243,21 +243,53 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
 
   const allApproved = chars.every(c => c.approved && c.referenceImage);
   const anyGenerated = chars.some(c => c.referenceImage);
+  const approvedCount = chars.filter(c => c.approved && c.referenceImage).length;
+  const approvalPct = chars.length ? Math.round((approvedCount / chars.length) * 100) : 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-heading font-bold brand-text mb-2">
-            Steg 2: Godkänn karaktärer
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
+            <Icon name="counter_2" filled size={16} /> Steg 2
+          </span>
+          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
+            Väck dina karaktärer till liv
           </h2>
-          <p className="text-gray-600">
-            Redigera detaljer, generera referensbilder och godkänn varje karaktär.
+          <p className="mt-1.5 text-gray-500 max-w-2xl">
+            Finjustera detaljer, generera konsekventa referensbilder och godkänn varje karaktär innan boken illustreras.
           </p>
         </div>
-        <button onClick={onBack} className="text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
-          Tillbaka
+        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
+          <Icon name="arrow_back" size={18} /> Tillbaka
         </button>
+      </div>
+
+      {/* Progress summary */}
+      <div className="glass rounded-3xl p-4 flex items-center gap-4">
+        <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
+          allApproved ? 'bg-emerald-500 text-white shadow-glow' : 'bg-brand/10 text-brand'
+        }`}>
+          <Icon name={allApproved ? 'verified' : 'groups'} filled size={26} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-sm font-heading font-semibold text-gray-700">
+              {allApproved
+                ? 'Alla karaktärer godkända – redo att generera sidor!'
+                : `${approvedCount} av ${chars.length} karaktärer godkända`}
+            </p>
+            <span className="text-xs font-heading font-bold text-brand">{approvalPct}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-gray-200/80 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                allApproved ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-brand to-magic'
+              }`}
+              style={{ width: `${approvalPct}%` }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Action buttons */}
@@ -265,18 +297,26 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         <button
           onClick={generateAll}
           disabled={isGenerating}
-          className="btn-primary"
+          className="btn-primary inline-flex items-center gap-2"
         >
-          {isGenerating
-            ? `Genererar ${generatingIds.size} referensbilder... (~30 sek/bild)`
-            : 'Generera alla karaktärer'}
+          {isGenerating ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {`Genererar ${generatingIds.size} bilder... (~30 sek/bild)`}
+            </>
+          ) : (
+            <><Icon name="auto_fix_high" filled size={20} /> Generera alla karaktärer</>
+          )}
         </button>
         {isGenerating && (
           <button
             onClick={stopGeneration}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-red-600 text-white font-heading font-bold shadow-glow hover:bg-red-700 hover:-translate-y-0.5 transition-all"
+            className="inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-full bg-red-600 text-white font-heading font-bold shadow-glow hover:bg-red-700 hover:-translate-y-0.5 transition-all"
           >
-            Stoppa
+            <Icon name="stop_circle" filled size={20} /> Stoppa
           </button>
         )}
         <button
@@ -287,10 +327,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
               : 'btn-ghost'
           }`}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <Icon name="groups" filled size={20} />
           Karaktärsregister ({savedChars.length})
         </button>
       </div>
@@ -579,25 +616,23 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                 <button
                   onClick={() => generateCharacterImage(char.id)}
                   disabled={isGenerating}
-                  className="btn-primary flex-1 px-4 py-2 text-sm"
+                  className="btn-primary flex-1 px-4 py-2 text-sm inline-flex items-center justify-center gap-1.5"
                 >
+                  <Icon name={char.referenceImage ? 'refresh' : 'auto_fix_high'} filled size={17} />
                   {char.referenceImage ? 'Regenerera' : 'Generera'}
                 </button>
 
                 {/* Map from saved character button */}
                 <button
                   onClick={() => setMappingCharId(mappingCharId === char.id ? null : char.id)}
-                  className={`px-4 py-2 text-sm rounded-full transition-all flex items-center gap-1 font-heading font-semibold ${
+                  className={`px-4 py-2 text-sm rounded-full transition-all flex items-center gap-1.5 font-heading font-semibold ${
                     mappingCharId === char.id
                       ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
                       : 'text-brand border border-brand/30 bg-white/60 hover:bg-white hover:border-brand/50'
                   }`}
                   title="Välj sparad karaktär från registret"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+                  <Icon name="groups" filled size={17} />
                   Välj sparad
              </button>
 
@@ -605,25 +640,23 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   <>
                     <button
                       onClick={() => toggleApproval(char.id)}
-                      className={`flex-1 px-4 py-2 text-sm rounded-full font-heading font-bold transition-all ${
+                      className={`flex-1 px-4 py-2 text-sm rounded-full font-heading font-bold transition-all inline-flex items-center justify-center gap-1.5 ${
                         char.approved
                           ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5'
                           : 'text-emerald-700 border border-emerald-300 bg-emerald-50/60 hover:bg-emerald-50'
                       }`}
                     >
-                      {char.approved ? 'Godkänd ✓' : 'Godkänn'}
+                      <Icon name={char.approved ? 'check_circle' : 'check'} filled={char.approved} size={17} />
+                      {char.approved ? 'Godkänd' : 'Godkänn'}
                     </button>
 
                     {char.approved && (
                       <button
                         onClick={() => handleSaveToRegistry(char)}
-                        className="btn-action px-4 py-2 text-sm"
+                        className="btn-action px-4 py-2 text-sm inline-flex items-center gap-1.5"
                         title="Spara till karaktärsregistret"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                        </svg>
+                        <Icon name="bookmark_add" filled size={17} />
                         Spara
                       </button>
                     )}
@@ -683,10 +716,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
           <button
             onClick={() => onCharactersApproved(chars)}
             disabled={!allApproved}
-            className="btn-action px-8 py-3 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none disabled:cursor-not-allowed"
+            className="btn-action px-8 py-3 inline-flex items-center gap-2 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none disabled:cursor-not-allowed"
           >
             {allApproved
-              ? 'Fortsätt till sidgenerering'
+              ? <>Fortsätt till sidgenerering <Icon name="arrow_forward" size={19} /></>
               : `Godkänn alla karaktärer först (${chars.filter(c => c.approved).length}/${chars.length})`}
           </button>
         </div>

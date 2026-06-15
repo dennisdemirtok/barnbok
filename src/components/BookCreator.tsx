@@ -17,27 +17,27 @@ const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; i
     value: 'bildbok-text-pa-bild',
     label: 'Bildbok med text pa bild',
     description: 'Likt "Handbok för Superhjältar" - helsides illustrationer med text integrerad i bilden. Kort text, mycket visuellt.',
-    icon: '🦸',
+    icon: 'wallpaper',
   },
   {
     value: 'bildbok-separat-text',
     label: 'Bildbok med separat text',
     description: 'Likt "Luna"-böcker - text ovanför/under eller bredvid bilderna. Mer text, bild och text kompletterar varandra.',
-    icon: '🌙',
+    icon: 'article',
     comingSoon: true,
   },
   {
     value: 'kapitelbok',
     label: 'Kapitelbok',
     description: 'Likt Harry Potter / Bert-böcker - mest text med enstaka illustrationer. Längre kapitel och detaljerat berättande.',
-    icon: '📖',
+    icon: 'menu_book',
     comingSoon: true,
   },
   {
     value: 'larobok',
     label: 'Lärobok / Aktivitetsbok',
     description: 'Likt "Artan, Partan" - blandning av text, bilder och uppgifter. Pedagogiskt upplag.',
-    icon: '📐',
+    icon: 'school',
     comingSoon: true,
   },
 ];
@@ -263,8 +263,16 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                       Kommer snart
                     </span>
                   )}
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl">{fmt.icon}</span>
+                  <div className="flex items-center gap-2.5 mb-1.5">
+                    <span className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ${
+                      fmt.comingSoon
+                        ? 'bg-gray-200 text-gray-400'
+                        : bookFormat === fmt.value
+                        ? 'bg-gradient-to-br from-brand to-magic text-white shadow-glow'
+                        : 'bg-brand/10 text-brand'
+                    }`}>
+                      <Icon name={fmt.icon} filled size={20} />
+                    </span>
                     <span className={`font-heading font-semibold ${fmt.comingSoon ? 'text-gray-500' : 'text-brand'}`}>{fmt.label}</span>
                   </div>
                   <p className="text-xs text-gray-500">{fmt.description}</p>

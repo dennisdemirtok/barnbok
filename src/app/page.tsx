@@ -165,11 +165,11 @@ export default function Home() {
     setStep('library');
   };
 
-  const steps: { key: Step; label: string; num: number }[] = [
-    { key: 'import', label: 'Importera', num: 1 },
-    { key: 'characters', label: 'Karaktarer', num: 2 },
-    { key: 'generate', label: 'Generera', num: 3 },
-    { key: 'review', label: 'Granska', num: 4 },
+  const steps: { key: Step; label: string; num: number; icon: string }[] = [
+    { key: 'import', label: 'Importera', num: 1, icon: 'upload_file' },
+    { key: 'characters', label: 'Karaktarer', num: 2, icon: 'diversity_3' },
+    { key: 'generate', label: 'Generera', num: 3, icon: 'auto_fix_high' },
+    { key: 'review', label: 'Granska', num: 4, icon: 'menu_book' },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === step);
@@ -185,13 +185,10 @@ export default function Home() {
               className="flex items-center gap-3 cursor-pointer group"
               onClick={handleBackToLibrary}
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-fuchsia-500
-                              flex items-center justify-center shadow-sm shadow-indigo-500/30
-                              group-hover:scale-105 transition-transform">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand to-magic
+                              flex items-center justify-center shadow-glow
+                              group-hover:scale-105 group-hover:rotate-3 transition-transform">
+                <Icon name="auto_stories" filled size={24} className="text-white" />
               </div>
               <div>
                 <h1 className="text-xl font-extrabold brand-text leading-none">Bokverktyget</h1>
@@ -208,10 +205,10 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setShowRefManager(true)}
-                className="hidden md:inline-flex px-4 py-1.5 text-sm text-brand font-medium border border-brand/25
+                className="hidden md:inline-flex items-center gap-1.5 px-4 py-1.5 text-sm text-brand font-heading font-semibold border border-brand/25
                            rounded-full hover:bg-brand/5 transition-colors"
               >
-                Referensdata
+                <Icon name="photo_library" filled size={18} /> Referensdata
               </button>
               {!authLoading && (
                 user ? (
@@ -259,45 +256,47 @@ export default function Home() {
 
       {/* Step indicator */}
       {showSteps && (
-        <div className="bg-white/60 backdrop-blur-md border-b border-white/60">
-          <div className="max-w-7xl mx-auto px-6 py-3">
-            <div className="flex items-center gap-2">
-              {steps.map((s, idx) => (
-                <div key={s.key} className="flex items-center">
-                  {idx > 0 && (
-                    <div className={`w-8 h-0.5 mx-1 ${
-                      idx <= currentStepIndex ? 'bg-brand/40' : 'bg-gray-200'
-                    }`} />
-                  )}
-                  <button
-                    onClick={() => {
-                      // Allow navigating back to completed steps
-                      if (idx <= currentStepIndex && book) {
-                        setStep(s.key);
-                      }
-                    }}
-                    disabled={idx > currentStepIndex || !book}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-heading transition-colors ${
-                      s.key === step
-                        ? 'bg-brand/10 text-brand font-semibold'
-                        : idx < currentStepIndex
-                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer'
-                        : 'bg-gray-100 text-gray-400 cursor-default'
-                    }`}
-                  >
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      s.key === step
-                        ? 'bg-gradient-to-br from-brand to-magic text-white'
-                        : idx < currentStepIndex
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-gray-300 text-white'
-                    }`}>
-                      {idx < currentStepIndex ? '\u2713' : s.num}
-                    </span>
-                    <span className="hidden sm:inline">{s.label}</span>
-                  </button>
-                </div>
-              ))}
+        <div className="bg-white/70 backdrop-blur-md border-b border-white/60">
+          <div className="max-w-3xl mx-auto px-6 py-4">
+            <div className="flex items-center">
+              {steps.map((s, idx) => {
+                const isCurrent = s.key === step;
+                const isDone = idx < currentStepIndex;
+                const clickable = idx <= currentStepIndex && !!book;
+                return (
+                  <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                    <button
+                      onClick={() => clickable && setStep(s.key)}
+                      disabled={!clickable}
+                      className="group flex items-center gap-2.5 disabled:cursor-default"
+                    >
+                      <span className={`relative w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all duration-300 ${
+                        isCurrent
+                          ? 'bg-gradient-to-br from-brand to-magic text-white shadow-glow ring-4 ring-brand/15'
+                          : isDone
+                          ? 'bg-emerald-500 text-white group-hover:scale-110'
+                          : 'bg-gray-200 text-gray-400'
+                      }`}>
+                        {isDone
+                          ? <Icon name="check" size={20} />
+                          : <Icon name={s.icon} filled={isCurrent} size={19} />}
+                      </span>
+                      <span className={`hidden sm:block text-sm font-heading font-semibold transition-colors ${
+                        isCurrent ? 'text-brand' : isDone ? 'text-emerald-600' : 'text-gray-400'
+                      }`}>
+                        {s.label}
+                      </span>
+                    </button>
+                    {idx < steps.length - 1 && (
+                      <div className="flex-1 h-1 mx-3 rounded-full bg-gray-200/80 overflow-hidden">
+                        <div className={`h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ${
+                          isDone ? 'w-full' : 'w-0'
+                        }`} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
