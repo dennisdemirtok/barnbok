@@ -192,7 +192,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
   // Import character from registry into current book
   const handleImportFromRegistry = (saved: SavedCharacter) => {
     const newChar: Character = {
-      id: `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: crypto.randomUUID(),
       name: saved.name,
       heroName: saved.heroName,
       age: saved.age,

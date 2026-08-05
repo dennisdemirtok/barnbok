@@ -46,7 +46,10 @@ export default function Home() {
   const autoSave = useCallback(async (bookToSave: BookProject) => {
     try {
       // Endast lokal sparning - molnsynk (med bilduppladdning) sker vid explicit "Spara bok"
-      await saveBook(bookToSave, { cloud: false });
+      const result = await saveBook(bookToSave, { cloud: false });
+      // Om gamla korta id:n migrerades till UUID: uppdatera state så att
+      // fortsatt arbete (och molnsparning) använder de nya id:na
+      if (result.idsMigrated) setBook(result.book);
       console.log('Auto-sparad:', new Date().toLocaleTimeString());
     } catch (err) {
       console.error('Auto-sparning misslyckades:', err);
@@ -143,7 +146,7 @@ export default function Home() {
   const handleReuseBook = (sourceBook: BookProject) => {
     const clonedBook: BookProject = {
       ...sourceBook,
-      id: Math.random().toString(36).substring(2, 11),
+      id: crypto.randomUUID(),
       title: sourceBook.title + ' (kopia)',
       status: 'characters' as const,
       createdAt: new Date().toISOString(),
@@ -153,7 +156,7 @@ export default function Home() {
       // Reset spreads: keep text and image prompts, clear generated images
       spreads: sourceBook.spreads.map(s => ({
         ...s,
-        id: Math.random().toString(36).substring(2, 11),
+        id: crypto.randomUUID(),
         generatedImage: undefined,
         status: 'pending' as const,
         error: undefined,

@@ -45,9 +45,10 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     try {
       const next = !isPublic;
       // Spara först till molnet så boken finns där, sätt sedan publik-flaggan
-      await saveBook({ ...book, status: 'reviewing' as const });
+      const result = await saveBook({ ...book, status: 'reviewing' as const });
+      onSaveBook(result.book);
       const authorName = user?.email ? user.email.split('@')[0] : undefined;
-      await setBookPublished(book.id, next, authorName);
+      await setBookPublished(result.book.id, next, authorName);
       setIsPublic(next);
       setSaveMessage(next
         ? 'Boken är publicerad i bokhandeln – nu kan alla läsa den! 🎉'
@@ -68,10 +69,11 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     setSaveMessage('');
     try {
       const result = await saveBook({ ...book, status: 'reviewing' as const });
+      onSaveBook(result.book);
       if (result.cloud !== 'synced') {
         throw new Error(`Kunde inte spara boken till molnet: ${result.cloudError || 'okänt fel'}`);
       }
-      const url = `${window.location.origin}/?bok=${book.id}`;
+      const url = `${window.location.origin}/?bok=${result.book.id}`;
       if (typeof navigator.share === 'function') {
         try {
           await navigator.share({ title: book.title, url });
@@ -122,7 +124,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     try {
       const bookToSave = { ...book, status: 'reviewing' as const };
       const result = await saveBook(bookToSave);
-      onSaveBook(bookToSave);
+      onSaveBook(result.book);
       setSaveMessage(formatSaveMessage(result, 'Boken har sparats'));
       setTimeout(() => setSaveMessage(''), result.cloud === 'failed' ? 8000 : 4000);
     } catch (err) {
@@ -148,7 +150,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
   const handleMarkDone = async () => {
     const doneBook = { ...book, status: 'done' as const };
     const result = await saveBook(doneBook);
-    onSaveBook(doneBook);
+    onSaveBook(result.book);
     setSaveMessage(formatSaveMessage(result, 'Boken är markerad som klar'));
     setTimeout(() => setSaveMessage(''), result.cloud === 'failed' ? 8000 : 4000);
   };

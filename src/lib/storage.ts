@@ -67,15 +67,23 @@ function migrateBookIds(book: BookProject): { book: BookProject; oldId?: string 
 export interface SaveResult {
   cloud: 'synced' | 'failed' | 'disabled' | 'skipped';
   cloudError?: string;
+  // Boken som faktiskt sparades - id:n kan ha migrerats till UUID
+  book: BookProject;
+  idsMigrated: boolean;
 }
 
 export async function saveBook(
   book: BookProject,
   options?: { cloud?: boolean }
 ): Promise<SaveResult> {
+  // Migrera ev. gamla korta id:n till UUID innan sparning - Supabase-kolumnerna
+  // är uuid och avvisar annars boken ("invalid input syntax for type uuid")
+  const { book: migrated, oldId } = migrateBookIds(book);
+  const idsMigrated = migrated !== book;
+
   const db = await openDB();
   const bookWithTimestamp = {
-    ...book,
+    ...migrated,
     updatedAt: new Date().toISOString(),
   };
 
@@ -93,18 +101,21 @@ export async function saveBook(
     };
   });
 
+  // Ta bort den gamla lokala posten om bokens id byttes vid migreringen
+  if (oldId) await deleteLocalBookRecord(oldId);
+
   // Cloud sync: explicit saves await the result so the UI can show it.
   // Auto-saves pass cloud:false - syncing every keystroke would re-upload all images.
-  if (options?.cloud === false) return { cloud: 'skipped' };
-  if (!isCloudEnabled()) return { cloud: 'disabled' };
+  if (options?.cloud === false) return { cloud: 'skipped', book: bookWithTimestamp, idsMigrated };
+  if (!isCloudEnabled()) return { cloud: 'disabled', book: bookWithTimestamp, idsMigrated };
 
   try {
     await saveBookToCloud(bookWithTimestamp);
-    return { cloud: 'synced' };
+    return { cloud: 'synced', book: bookWithTimestamp, idsMigrated };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn('Cloud-synk misslyckades:', message);
-    return { cloud: 'failed', cloudError: message };
+    return { cloud: 'failed', cloudError: message, book: bookWithTimestamp, idsMigrated };
   }
 }
 
