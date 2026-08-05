@@ -29,9 +29,18 @@ export async function saveBookToCloud(book: BookProject): Promise<void> {
       style: book.styleGuide,
       status: mapStatus(book.status),
       updated_at: now,
+      // Alla skapade böcker ska synas i bokhandeln - publicera automatiskt.
+      is_public: true,
     }, { onConflict: 'id' });
 
   if (bookError) throw new Error(`Kunde inte spara bok: ${bookError.message}`);
+
+  // Sätt publiceringsdatum första gången (skrivs inte över vid senare sparningar)
+  await supabase
+    .from('barnbok_books')
+    .update({ published_at: now })
+    .eq('id', book.id)
+    .is('published_at', null);
 
   // 2. Save characters
   if (book.characters.length > 0) {
