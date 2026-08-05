@@ -26,6 +26,37 @@ function getClient() {
   return new Anthropic({ apiKey });
 }
 
+// Alias utan datumsuffix - pekar alltid på aktuell Opus-modell hos Anthropic.
+const FALLBACK_MODEL = 'claude-opus-5';
+const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+let cachedModel: { id: string; fetchedAt: number } | null = null;
+
+/**
+ * Hämtar senaste Opus-modellen från Anthropics Models API så att appen
+ * inte fastnar på en pensionerad modellversion. Resultatet cachas i 24h
+ * och vid fel används FALLBACK_MODEL.
+ */
+async function resolveLatestModel(client: Anthropic): Promise<string> {
+  if (cachedModel && Date.now() - cachedModel.fetchedAt < MODEL_CACHE_TTL_MS) {
+    return cachedModel.id;
+  }
+  try {
+    const models: { id: string; created_at: string }[] = [];
+    for await (const m of client.models.list()) {
+      models.push({ id: m.id, created_at: m.created_at });
+    }
+    const latestOpus = models
+      .filter(m => m.id.includes('opus'))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+    const id = latestOpus?.id ?? FALLBACK_MODEL;
+    cachedModel = { id, fetchedAt: Date.now() };
+    return id;
+  } catch {
+    return FALLBACK_MODEL;
+  }
+}
+
 function getFormatDescription(format: BookConfig['bookFormat']): string {
   switch (format) {
     case 'bildbok-text-pa-bild':
@@ -228,16 +259,9 @@ ${config.bookFormat === 'kapitelbok' ? '5. Varje kapitel ska ha en KAPITEL-rubri
 10. ${config.bookFormat === 'bildbok-text-pa-bild' ? 'Inkludera i bildprompten var texten ska placeras (t.ex. "text box in upper left", "speech bubble")' : 'Bildprompten ska INTE inkludera text i bilden'}
 11. Bildpromptarna får ALDRIG be om rubriker, kapitelbanderoller, sidnummer eller annan text utöver berättelsetexten${config.bookFormat === 'bildbok-text-pa-bild' ? ' i textrutor/pratbubblor' : ''}`;
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 16000,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-  });
+  const model = await resolveLatestModel(client);
+
+  const message = await createWithModelFallback(client, model, prompt);
 
   // Extract text content
   const textContent = message.content.find(c => c.type === 'text');
@@ -246,4 +270,33 @@ ${config.bookFormat === 'kapitelbok' ? '5. Varje kapitel ska ha en KAPITEL-rubri
   }
 
   return textContent.text;
+}
+
+async function createWithModelFallback(client: Anthropic, model: string, prompt: string) {
+  try {
+    return await generate(client, model, prompt);
+  } catch (err) {
+    // Om modellen hunnit pensioneras (404) - rensa cachen och kör fallback-aliaset.
+    if (err instanceof Anthropic.NotFoundError && model !== FALLBACK_MODEL) {
+      cachedModel = null;
+      return generate(client, FALLBACK_MODEL, prompt);
+    }
+    throw err;
+  }
+}
+
+async function generate(client: Anthropic, model: string, prompt: string) {
+  // Streaming krävs vid höga max_tokens och skyddar långa genereringar mot timeout.
+  const stream = client.messages.stream({
+    model,
+    max_tokens: 64000,
+    thinking: { type: 'adaptive' },
+    messages: [
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+  });
+  return stream.finalMessage();
 }
