@@ -8,11 +8,11 @@ import { BookProject, Character, Spread, TextBlock, SavedCharacter, SavedText } 
 export async function saveBookToCloud(book: BookProject): Promise<void> {
   const now = new Date().toISOString();
 
-  // Knyt boken till inloggad användare så RLS kan skydda den. Utan inloggning
-  // sparas inget i molnet (boken finns ändå lokalt i IndexedDB).
+  // Knyt boken till inloggad användare om det finns en. Ej inloggade sparar
+  // med user_id = null (testläge - kräver anon-policies i
+  // scripts/anon-save-migration.sql så RLS släpper igenom skrivningen).
   const { data: userData } = await supabase.auth.getUser();
-  const userId = userData.user?.id;
-  if (!userId) throw new Error('Du måste vara inloggad för att spara i molnet');
+  const userId = userData.user?.id ?? null;
 
   // 1. Upsert the book record
   const { error: bookError } = await supabase

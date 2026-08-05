@@ -34,21 +34,19 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
   const [isPublic, setIsPublic] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
-  // Hämta nuvarande publiceringsstatus när boken öppnas (om inloggad)
+  // Hämta nuvarande publiceringsstatus när boken öppnas
   useEffect(() => {
-    if (!user) return;
     getBookPublishState(book.id).then(setIsPublic).catch(() => {});
   }, [book.id, user]);
 
   const handlePublishToggle = async () => {
-    if (!user) return;
     setPublishing(true);
     setSaveMessage('');
     try {
       const next = !isPublic;
       // Spara först till molnet så boken finns där, sätt sedan publik-flaggan
       await saveBook({ ...book, status: 'reviewing' as const });
-      const authorName = user.email ? user.email.split('@')[0] : undefined;
+      const authorName = user?.email ? user.email.split('@')[0] : undefined;
       await setBookPublished(book.id, next, authorName);
       setIsPublic(next);
       setSaveMessage(next
@@ -59,6 +57,36 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       setSaveMessage(err instanceof Error ? err.message : 'Kunde inte ändra publicering');
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const [sharing, setSharing] = useState(false);
+
+  // Dela boken: spara till molnet (auto-publiceras) och kopiera/dela länken
+  const handleShare = async () => {
+    setSharing(true);
+    setSaveMessage('');
+    try {
+      const result = await saveBook({ ...book, status: 'reviewing' as const });
+      if (result.cloud !== 'synced') {
+        throw new Error(`Kunde inte spara boken till molnet: ${result.cloudError || 'okänt fel'}`);
+      }
+      const url = `${window.location.origin}/?bok=${book.id}`;
+      if (typeof navigator.share === 'function') {
+        try {
+          await navigator.share({ title: book.title, url });
+          return;
+        } catch {
+          // Användaren avbröt - fall tillbaka på kopiering
+        }
+      }
+      await navigator.clipboard.writeText(url);
+      setSaveMessage('Delningslänk kopierad! Skicka den till vem som helst så öppnas boken direkt. 🔗');
+      setTimeout(() => setSaveMessage(''), 6000);
+    } catch (err) {
+      setSaveMessage(err instanceof Error ? err.message : 'Kunde inte skapa delningslänk');
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -598,9 +626,20 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
             </button>
 
             <button
+              onClick={handleShare}
+              disabled={sharing}
+              className="btn-primary"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m8.328-2.828a4 4 0 015.656 0 4 4 0 010 5.656l-1.5 1.5m-7.156-7.156l4.328-4.328" />
+              </svg>
+              {sharing ? 'Vänta...' : 'Dela boken (kopiera länk)'}
+            </button>
+
+            <button
               onClick={handlePublishToggle}
-              disabled={publishing || !user}
-              title={!user ? 'Logga in för att publicera' : undefined}
+              disabled={publishing}
               className={isPublic ? 'btn-ghost' : 'btn-primary'}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -614,7 +653,8 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
 
         {saveMessage && (
           <div className={`mt-3 p-3 rounded-2xl text-sm font-medium text-center ${
-            saveMessage.includes('sparats') || saveMessage.includes('klar')
+            saveMessage.includes('sparats') || saveMessage.includes('klar') ||
+            saveMessage.includes('kopierad') || saveMessage.includes('publicerad')
               ? 'bg-green-100/80 text-green-700'
               : 'bg-red-100/80 text-red-700'
           }`}>

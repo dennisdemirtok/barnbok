@@ -7,6 +7,8 @@ import Icon from './Icon';
 
 interface Props {
   onBack: () => void;
+  // Bok-id från en delningslänk (/?bok=<id>) - öppnas direkt i läsaren
+  initialBookId?: string;
 }
 
 const FORMAT_LABEL: Record<string, string> = {
@@ -16,12 +18,13 @@ const FORMAT_LABEL: Record<string, string> = {
   'larobok': 'Lärobok',
 };
 
-export default function Bookstore({ onBack }: Props) {
+export default function Bookstore({ onBack, initialBookId }: Props) {
   const [books, setBooks] = useState<PublicBookSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [reading, setReading] = useState<BookProject | null>(null);
   const [loadingRead, setLoadingRead] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     listPublicBooks()
@@ -30,13 +33,47 @@ export default function Bookstore({ onBack }: Props) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Öppna delad bok direkt när sidan laddas via en delningslänk
+  useEffect(() => {
+    if (initialBookId) openBook(initialBookId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialBookId]);
+
   const openBook = async (id: string) => {
     setLoadingRead(true);
     try {
       const book = await loadPublicBook(id);
-      if (book) setReading(book);
+      if (book) {
+        setReading(book);
+        // Visa delningslänken i adressfältet så den kan kopieras direkt
+        window.history.replaceState(null, '', `${window.location.pathname}?bok=${id}`);
+      }
     } finally {
       setLoadingRead(false);
+    }
+  };
+
+  const closeReader = () => {
+    setReading(null);
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
+  const shareBook = async (id: string, title: string) => {
+    const url = `${window.location.origin}/?bok=${id}`;
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title, url });
+        return;
+      } catch {
+        // Användaren avbröt delningen - fall tillbaka på kopiering
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch {
+      window.prompt('Kopiera länken:', url);
     }
   };
 
@@ -57,7 +94,16 @@ export default function Bookstore({ onBack }: Props) {
             <h2 className="text-2xl font-heading font-bold text-gray-800">{reading.title}</h2>
             <p className="text-sm text-gray-500">{spreads.length} uppslag</p>
           </div>
-          <button onClick={() => setReading(null)} className="btn-ghost">← Tillbaka till bokhandeln</button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => shareBook(reading.id, reading.title)}
+              className="btn-primary"
+            >
+              <Icon name={copiedId === reading.id ? 'check' : 'share'} size={18} />
+              {copiedId === reading.id ? 'Länk kopierad!' : 'Dela boken'}
+            </button>
+            <button onClick={closeReader} className="btn-ghost">← Tillbaka till bokhandeln</button>
+          </div>
         </div>
         <div className="space-y-6 max-w-3xl mx-auto">
           {spreads.map((s) => (
@@ -120,11 +166,15 @@ export default function Bookstore({ onBack }: Props) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map((b) => (
-            <button
+            <div
               key={b.id}
-              onClick={() => openBook(b.id)}
-              disabled={loadingRead}
-              className="card-glass overflow-hidden text-left hover:-translate-y-1 group disabled:opacity-60"
+              role="button"
+              tabIndex={0}
+              onClick={() => !loadingRead && openBook(b.id)}
+              onKeyDown={(e) => e.key === 'Enter' && !loadingRead && openBook(b.id)}
+              className={`card-glass overflow-hidden text-left hover:-translate-y-1 group cursor-pointer ${
+                loadingRead ? 'opacity-60 pointer-events-none' : ''
+              }`}
             >
               <div className="aspect-[3/2] bg-brand/5 relative overflow-hidden">
                 {b.coverUrl ? (
@@ -139,13 +189,25 @@ export default function Bookstore({ onBack }: Props) {
                   {FORMAT_LABEL[b.bookFormat || ''] || 'Bok'}
                 </span>
               </div>
-              <div className="p-4">
-                <h3 className="font-heading font-bold text-gray-800 group-hover:text-brand transition-colors">{b.title}</h3>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {b.authorName ? `av ${b.authorName}` : 'Anonym skapare'} · {b.numSpreads} uppslag
-                </p>
+              <div className="p-4 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-heading font-bold text-gray-800 group-hover:text-brand transition-colors">{b.title}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {b.authorName ? `av ${b.authorName}` : 'Anonym skapare'} · {b.numSpreads} uppslag
+                  </p>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    shareBook(b.id, b.title);
+                  }}
+                  title={copiedId === b.id ? 'Länk kopierad!' : 'Dela boken - kopiera länk'}
+                  className="shrink-0 p-2 rounded-full text-brand/60 hover:text-brand hover:bg-brand/10 transition-colors"
+                >
+                  <Icon name={copiedId === b.id ? 'check' : 'share'} size={18} />
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}

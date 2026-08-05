@@ -30,7 +30,17 @@ export default function Home() {
   const [isClonedBook, setIsClonedBook] = useState(false);
   const [showRefManager, setShowRefManager] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [sharedBookId, setSharedBookId] = useState<string | null>(null);
   const { user, signOut, loading: authLoading } = useAuth();
+
+  // Delningslänk: /?bok=<id> öppnar boken direkt i bokhandelns läsare
+  useEffect(() => {
+    const bokId = new URLSearchParams(window.location.search).get('bok');
+    if (bokId) {
+      setSharedBookId(bokId);
+      setStep('bookstore');
+    }
+  }, []);
 
   // Auto-save whenever book changes (debounced)
   const autoSave = useCallback(async (bookToSave: BookProject) => {
@@ -313,7 +323,10 @@ export default function Home() {
         )}
 
         {step === 'bookstore' && (
-          <Bookstore onBack={() => setStep('library')} />
+          <Bookstore
+            onBack={() => setStep('library')}
+            initialBookId={sharedBookId || undefined}
+          />
         )}
 
         {step === 'import' && (
