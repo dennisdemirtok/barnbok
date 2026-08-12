@@ -553,104 +553,83 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-heading font-bold text-gray-800 mb-1">
-            Steg 4: Granska & redigera
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
+            <Icon name="counter_4" filled size={16} /> Steg 4
+          </span>
+          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
+            Granska &amp; dela din bok
           </h2>
-          <p className="text-gray-600">
-            Klicka på ett uppslag för att redigera text eller regenerera bilden.
+          <p className="mt-1.5 text-gray-500 max-w-2xl">
+            Klicka på ett uppslag för att redigera text eller regenerera bilden. Spara, ladda ner eller dela när du är nöjd.
           </p>
         </div>
-        <button onClick={onBack} className="px-4 py-2 text-gray-500 hover:text-gray-700">
-          Tillbaka
+        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
+          <Icon name="arrow_back" size={18} /> Tillbaka
         </button>
       </div>
 
       {/* Book info + Action buttons */}
-      <div className="glass rounded-4xl p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-heading font-bold text-gray-800">{book.title}</h3>
-            {book.subtitle && <p className="text-gray-600">{book.subtitle}</p>}
-            <div className="flex gap-4 mt-2 text-sm text-gray-500">
-              <span>{book.spreads.length} uppslag</span>
-              <span>{book.characters.length} karaktärer</span>
-              <span>{book.spreads.filter(s => s.status === 'done').length} bilder klara</span>
+      <div className="glass rounded-4xl p-5 sm:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-brand to-magic flex items-center justify-center text-white shadow-glow">
+              <Icon name="menu_book" filled size={26} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-xl font-heading font-bold text-gray-800 truncate">{book.title}</h3>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-gray-500">
+                <span>{book.spreads.length} uppslag</span>
+                <span>{book.characters.length} karaktärer</span>
+                <span>{book.spreads.filter(s => s.status === 'done').length} bilder klara</span>
+                {isPublic && (
+                  <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                    <Icon name="public" filled size={15} /> I bokhandeln
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleSaveBook}
-              disabled={saving}
-              className="btn-primary"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
-              {saving ? 'Sparar...' : 'Spara bok'}
-            </button>
+        {/* Primära åtgärder */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleSaveBook} disabled={saving} className="btn-primary !py-2.5 text-sm">
+            {saving ? <span className="spinner !w-4 !h-4" /> : <Icon name="cloud_upload" filled size={18} />}
+            {saving ? 'Sparar...' : 'Spara bok'}
+          </button>
 
-            <button
-              onClick={handleExportPDF}
-              disabled={exporting}
-              className="btn-ghost"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              {exporting ? 'Exporterar...' : 'Ladda ner PDF'}
-            </button>
+          <button onClick={handleShare} disabled={sharing} className="btn-action !py-2.5 text-sm">
+            {sharing ? <span className="spinner !w-4 !h-4" /> : <Icon name="share" filled size={18} />}
+            {sharing ? 'Vänta...' : 'Dela boken'}
+          </button>
 
-            <button
-              onClick={handleCheckCharacters}
-              disabled={checking}
-              className="btn-ghost"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              {checking ? 'Kontrollerar...' : 'Kontrollera karaktärer'}
-            </button>
+          <span className="hidden sm:block w-px h-7 bg-brand/15 mx-1" />
 
-            <button
-              onClick={handleMarkDone}
-              className="btn-action"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Markera klar
-            </button>
+          {/* Sekundära åtgärder */}
+          <button onClick={handleExportPDF} disabled={exporting} className="btn-ghost !py-2 text-sm">
+            {exporting ? <span className="spinner !w-4 !h-4" /> : <Icon name="download" size={18} />}
+            {exporting ? 'Exporterar...' : 'PDF'}
+          </button>
 
-            <button
-              onClick={handleShare}
-              disabled={sharing}
-              className="btn-primary"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m8.328-2.828a4 4 0 015.656 0 4 4 0 010 5.656l-1.5 1.5m-7.156-7.156l4.328-4.328" />
-              </svg>
-              {sharing ? 'Vänta...' : 'Dela boken (kopiera länk)'}
-            </button>
+          <button onClick={handleCheckCharacters} disabled={checking} className="btn-ghost !py-2 text-sm">
+            {checking ? <span className="spinner !w-4 !h-4" /> : <Icon name="verified_user" size={18} />}
+            {checking ? 'Kontrollerar...' : 'Kontrollera karaktärer'}
+          </button>
 
-            <button
-              onClick={handlePublishToggle}
-              disabled={publishing}
-              className={isPublic ? 'btn-ghost' : 'btn-primary'}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
-              </svg>
-              {publishing ? 'Vänta...' : isPublic ? 'Publicerad ✓ – avpublicera' : 'Publicera i bokhandeln'}
-            </button>
-          </div>
+          <button onClick={handleMarkDone} className="btn-ghost !py-2 text-sm">
+            <Icon name="task_alt" size={18} /> Markera klar
+          </button>
+
+          <button
+            onClick={handlePublishToggle}
+            disabled={publishing}
+            className={`btn-ghost !py-2 text-sm ${isPublic ? '!text-gray-500' : ''}`}
+          >
+            {publishing ? <span className="spinner !w-4 !h-4" /> : <Icon name={isPublic ? 'visibility_off' : 'storefront'} size={18} />}
+            {publishing ? 'Vänta...' : isPublic ? 'Avpublicera' : 'Publicera'}
+          </button>
         </div>
 
         {saveMessage && (

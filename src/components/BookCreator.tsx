@@ -200,19 +200,22 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-heading font-bold text-brand mb-1">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
+            <Icon name="counter_1" filled size={16} /> Steg 1
+          </span>
+          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
             Skapa ny bok med AI
           </h2>
-          <p className="text-gray-600">
+          <p className="mt-1.5 text-gray-500">
             {currentStep === 1
-              ? 'Steg 1: Grundinställningar - format, karaktärer och längd'
-              : 'Steg 2: Handling, miljö och bildstil'}
+              ? 'Grundinställningar – format, karaktärer och längd'
+              : 'Handling, miljö och bildstil'}
           </p>
         </div>
-        <button onClick={onBack} className="btn-ghost">
-          Tillbaka
+        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
+          <Icon name="arrow_back" size={18} /> Tillbaka
         </button>
       </div>
 
@@ -557,10 +560,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           {/* Progress */}
           {progress && (
             <div className="glass rounded-2xl p-4 text-brand flex items-center gap-3">
-              <svg className="animate-spin h-5 w-5 text-brand" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <span className="spinner" />
               {progress}
             </div>
           )}
@@ -580,13 +580,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
               className="btn-action flex-1 text-lg disabled:opacity-50"
             >
               {loading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Skapar boken...
-                </>
+                <><span className="spinner" /> Skapar boken...</>
               ) : (
                 <><Icon name="auto_awesome" filled size={20} /> Skapa boken med AI</>
               )}

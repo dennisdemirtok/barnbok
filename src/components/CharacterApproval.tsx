@@ -301,10 +301,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         >
           {isGenerating ? (
             <>
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <span className="spinner !w-4 !h-4" />
               {`Genererar ${generatingIds.size} bilder... (~30 sek/bild)`}
             </>
           ) : (
@@ -333,17 +330,9 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
       </div>
 
       {/* Save message */}
-      {saveMessage && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700 text-sm font-medium">
-          {saveMessage}
-        </div>
-      )}
+      {saveMessage && <div className="note-success animate-pop">{saveMessage}</div>}
 
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="note-error">{error}</div>}
 
       {/* Character Registry Panel */}
       {showRegistry && (
@@ -590,11 +579,8 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
               <div className="mx-4 mb-3 bg-brand/5 rounded-2xl overflow-hidden" style={{ minHeight: '200px' }}>
                 {generatingIds.has(char.id) ? (
                   <div className="flex items-center justify-center h-48">
-                    <div className="text-center">
-                      <svg className="animate-spin h-8 w-8 text-brand mx-auto mb-2" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
+                    <div className="text-center text-brand">
+                      <span className="spinner !w-8 !h-8 mb-2" />
                       <p className="text-sm text-gray-500">Genererar...</p>
                     </div>
                   </div>

@@ -75,8 +75,11 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-gray-500">Laddar sparade böcker...</div>
+      <div className="space-y-8">
+        <div className="skeleton h-72 rounded-4xl" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          {[0, 1, 2, 3].map(i => <div key={i} className="skeleton h-44 rounded-4xl" />)}
+        </div>
       </div>
     );
   }
@@ -187,10 +190,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
         </div>
         {books.length > 0 && (
           <button onClick={onNewBook} className="btn-primary">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Ny bok
+            <Icon name="add" size={20} /> Ny bok
           </button>
         )}
       </div>
@@ -210,21 +210,26 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
                 onClick={() => onLoadBook(book)}
               >
                 {/* Thumbnail */}
-                <div className="bg-gray-100 aspect-[3/2] relative">
+                <div className="bg-gray-100 aspect-[3/2] relative overflow-hidden">
                   {thumbnailSpread?.generatedImage ? (
                     <img
                       src={`data:image/png;base64,${thumbnailSpread.generatedImage}`}
                       alt={book.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <svg className="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
-                          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                      </svg>
+                    <div className="flex items-center justify-center h-full text-brand/25">
+                      <Icon name="auto_stories" size={52} />
                     </div>
                   )}
+                  {/* Öppna-overlay vid hover */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent
+                                  opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
+                    <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/95 text-brand
+                                     text-sm font-heading font-bold shadow-glow">
+                      <Icon name="menu_book" filled size={17} /> Öppna boken
+                    </span>
+                  </div>
                   {/* Status badge */}
                   <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
                     {status.text}
@@ -248,29 +253,39 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
                     <span className="text-xs text-gray-400">
                       {new Date((book as any).updatedAt || book.createdAt).toLocaleDateString('sv-SE')}
                     </span>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onReuseBook(book);
                         }}
-                        className="text-xs text-brand/60 hover:text-brand opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Återanvänd - skapa en kopia med nya bilder"
+                        className="btn-icon !w-8 !h-8"
                       >
-                        Återanvänd
+                        <Icon name="content_copy" size={17} />
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(book.id);
-                        }}
-                        className={`text-xs transition-all ${
-                          confirmDeleteId === book.id
-                            ? 'px-2 py-0.5 bg-red-600 text-white rounded font-semibold opacity-100'
-                            : 'text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100'
-                        }`}
-                      >
-                        {confirmDeleteId === book.id ? 'Klicka igen för att ta bort' : 'Ta bort'}
-                      </button>
+                      {confirmDeleteId === book.id ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(book.id);
+                          }}
+                          className="px-2.5 py-1 bg-red-600 text-white rounded-full text-xs font-semibold animate-pop"
+                        >
+                          Ta bort?
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(book.id);
+                          }}
+                          title="Ta bort boken"
+                          className="btn-icon !w-8 !h-8 !text-red-300 hover:!text-red-600 hover:!bg-red-50"
+                        >
+                          <Icon name="delete" size={17} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -282,11 +297,8 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
 
       {books.length === 0 && (
         <div className="text-center py-14 glass rounded-4xl border-dashed border-2 border-brand/20">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center">
-            <svg className="w-8 h-8 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center text-brand">
+            <Icon name="auto_stories" size={32} />
           </div>
           <h3 className="text-lg font-semibold text-gray-700 mb-1">Inga böcker än</h3>
           <p className="text-gray-400 mb-6">Skapa din första bok med hjälp av knappen ovan ✨</p>

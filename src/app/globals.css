@@ -25,6 +25,23 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.01em;
 }
 
+/* Markerad text i varumärkets färg */
+::selection {
+  background: rgba(124, 58, 237, 0.18);
+}
+
+/* Tydliga fokusringar för tangentbordsnavigering (a11y) */
+:focus-visible {
+  outline: 2px solid #7C3AED;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Sliders i varumärkesfärg */
+input[type='range'] {
+  accent-color: #7C3AED;
+}
+
 /* Material Symbols Rounded - enhetlig ikonografi */
 .material-symbols-rounded {
   font-family: 'Material Symbols Rounded';
@@ -116,4 +133,62 @@ h1, h2, h3, h4, h5, h6 {
     @apply w-full px-4 py-3 rounded-2xl bg-white/80 border border-gray-200
            focus:border-brand focus:ring-4 focus:ring-brand/15 outline-none transition-all;
   }
+
+  /* Farlig handling: röd pillerknapp */
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
+           bg-red-500 text-white font-heading font-bold shadow-lg shadow-red-500/25
+           hover:bg-red-600 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]
+           transition-all duration-200 disabled:opacity-50;
+  }
+
+  /* Rund ikonknapp (delningar, små actions) */
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-9 h-9 rounded-full
+           text-brand/60 hover:text-brand hover:bg-brand/10 active:scale-95 transition-all;
+  }
+
+  /* Snurrande laddningsindikator - ersätter alla inline-SVG-spinners */
+  .spinner {
+    @apply inline-block w-5 h-5 rounded-full border-2 border-current border-t-transparent animate-spin;
+  }
+
+  /* Skeleton: skimrande platshållare medan innehåll laddas */
+  .skeleton {
+    @apply relative overflow-hidden rounded-2xl bg-brand/5;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+    animation: skeleton-sweep 1.6s ease-in-out infinite;
+  }
+
+  /* Valbara chips (taggar, format, åldrar): av- och på-läge */
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium
+           bg-gradient-to-r from-brand/10 to-magic/10 text-brand ring-1 ring-brand/15
+           hover:ring-brand/35 active:scale-[0.97] transition-all;
+  }
+  .chip-on {
+    @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium
+           bg-gradient-to-r from-brand to-magic text-white shadow-glow
+           active:scale-[0.97] transition-all;
+  }
+
+  /* Statusmeddelanden */
+  .note-success {
+    @apply p-3 rounded-2xl bg-emerald-50/90 ring-1 ring-emerald-200 text-emerald-700 text-sm font-medium;
+  }
+  .note-error {
+    @apply p-3 rounded-2xl bg-red-50/90 ring-1 ring-red-200 text-red-700 text-sm font-medium;
+  }
+  .note-warning {
+    @apply p-3 rounded-2xl bg-amber-50/90 ring-1 ring-amber-200 text-amber-800 text-sm font-medium;
+  }
+}
+
+@keyframes skeleton-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }

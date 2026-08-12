@@ -205,19 +205,26 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-xl font-extrabold brand-text leading-none">Bokverktyget</h1>
-                <p className="text-xs text-gray-400 mt-0.5">Skapa barnböcker med AI</p>
+                <p className="hidden sm:block text-xs text-gray-400 mt-0.5">Skapa barnböcker med AI</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => setStep('bookstore')}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm text-brand font-heading font-semibold
-                           border border-brand/25 rounded-full hover:bg-brand/5 transition-colors"
+                title="Bokhandel"
+                className={`inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-sm font-heading font-semibold
+                           rounded-full transition-colors ${
+                             step === 'bookstore'
+                               ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
+                               : 'text-brand border border-brand/25 hover:bg-brand/5'
+                           }`}
               >
-                <Icon name="storefront" filled size={18} /> Bokhandel
+                <Icon name="storefront" filled size={18} />
+                <span className="hidden sm:inline">Bokhandel</span>
               </button>
               <button
                 onClick={() => setShowRefManager(true)}
+                title="Referensdata"
                 className="hidden md:inline-flex items-center gap-1.5 px-4 py-1.5 text-sm text-brand font-heading font-semibold border border-brand/25
                            rounded-full hover:bg-brand/5 transition-colors"
               >
@@ -227,12 +234,12 @@ export default function Home() {
                 user ? (
                   <div className="flex items-center gap-2">
                     <Icon name="account_circle" filled size={26} className="text-brand/70" />
-                    <span className="hidden sm:inline text-sm text-gray-500 max-w-[140px] truncate" title={user.email}>
+                    <span className="hidden lg:inline text-sm text-gray-500 max-w-[140px] truncate" title={user.email}>
                       {user.email}
                     </span>
                     <button
                       onClick={signOut}
-                      className="px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
+                      className="px-3 sm:px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
                                  rounded-full hover:bg-gray-50 transition-colors"
                     >
                       Logga ut
@@ -241,7 +248,7 @@ export default function Home() {
                 ) : (
                   <button
                     onClick={() => setShowLogin(true)}
-                    className="btn-primary !px-5 !py-2 text-sm"
+                    className="btn-primary !px-4 sm:!px-5 !py-2 text-sm whitespace-nowrap"
                   >
                     Logga in
                   </button>
@@ -249,16 +256,18 @@ export default function Home() {
               )}
               {book && step !== 'library' && (
                 <>
-                  <div className="text-right">
-                    <p className="font-semibold text-gray-700">{book.title}</p>
+                  <div className="hidden xl:block text-right">
+                    <p className="font-semibold text-gray-700 max-w-[200px] truncate">{book.title}</p>
                     {book.subtitle && <p className="text-sm text-gray-500">{book.subtitle}</p>}
                   </div>
                   <button
                     onClick={handleBackToLibrary}
-                    className="px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
+                    title="Till biblioteket"
+                    className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
                                rounded-full hover:bg-gray-50 transition-colors"
                   >
-                    Bibliotek
+                    <Icon name="collections_bookmark" size={17} />
+                    <span className="hidden sm:inline">Bibliotek</span>
                   </button>
                 </>
               )}
@@ -271,6 +280,10 @@ export default function Home() {
       {showSteps && (
         <div className="bg-white/70 backdrop-blur-md border-b border-white/60">
           <div className="max-w-3xl mx-auto px-6 py-4">
+            {/* Mobil: aktuellt steg i klartext */}
+            <p className="sm:hidden text-center text-xs font-heading font-bold text-brand mb-3">
+              Steg {currentStepIndex + 1} av {steps.length}: {steps[currentStepIndex]?.label}
+            </p>
             <div className="flex items-center">
               {steps.map((s, idx) => {
                 const isCurrent = s.key === step;
@@ -315,8 +328,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Main content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      {/* Main content - key på step ger mjuk intoning vid stegbyte */}
+      <div key={step} className="max-w-7xl mx-auto px-4 sm:px-6 py-8 animate-fade-up">
         {step === 'library' && (
           <BookLibrary
             onLoadBook={handleLoadBook}

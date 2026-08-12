@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { BookProject, Spread } from '@/lib/types';
+import Icon from './Icon';
 
 const BATCH_SIZE = 3; // Generate 3 images in parallel
 
@@ -191,108 +192,122 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="font-heading text-2xl font-bold text-gray-800 mb-2">
-            Steg 3: Generera sidor
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
+            <Icon name="counter_3" filled size={16} /> Steg 3
+          </span>
+          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
+            Nu illustreras din bok
           </h2>
-          <p className="text-gray-600">
-            Genererar {totalSpreads} uppslag med dina godkända karaktärer.
-            {generatingCount > 0 && (
-              <span className="text-brand ml-1 font-medium">
-                ({generatingCount} bilder genereras parallellt)
-              </span>
-            )}
-            {failedCount > 0 && (
-              <span className="text-sunset ml-1">
-                ({failedCount} misslyckade)
-              </span>
-            )}
+          <p className="mt-1.5 text-gray-500 max-w-2xl">
+            {totalSpreads} uppslag genereras med dina godkända karaktärer – varje bild kvalitetskontrolleras automatiskt.
           </p>
         </div>
-        <button onClick={onBack} className="btn-ghost">
-          Tillbaka
+        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
+          <Icon name="arrow_back" size={18} /> Tillbaka
         </button>
       </div>
 
-      {/* Progress bar */}
-      <div className="bg-gray-200/70 rounded-full h-4 overflow-hidden">
-        <div
-          className="bg-gradient-to-r from-trust via-brand to-magic animate-shimmer h-full rounded-full transition-all duration-500 ease-out"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <div className="flex justify-between text-sm text-gray-600">
-        <span>
-          {completedSpreads} av {totalSpreads} uppslag klara
+      {/* Progress-panel */}
+      <div className="glass rounded-4xl p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
+              allDone ? 'bg-emerald-500 text-white shadow-glow' : 'bg-gradient-to-br from-brand to-magic text-white shadow-glow'
+            }`}>
+              {isGenerating
+                ? <span className="spinner !w-6 !h-6" />
+                : <Icon name={allDone ? 'celebration' : 'auto_fix_high'} filled size={26} />}
+            </div>
+            <div>
+              <p className="font-heading font-bold text-gray-800">
+                {allDone
+                  ? 'Alla uppslag är klara! 🎉'
+                  : isGenerating
+                  ? `Genererar ${generatingCount} bilder parallellt...`
+                  : 'Redo att generera'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {completedSpreads} av {totalSpreads} uppslag klara
+                {isGenerating && remainingSpreads > 0 && ` · ~${estimatedMinutes} min kvar`}
+              </p>
+            </div>
+          </div>
+          <span className="text-2xl font-heading font-bold text-brand">{Math.round(progress)}%</span>
+        </div>
+
+        <div className="bg-gray-200/70 rounded-full h-3 overflow-hidden">
+          <div
+            className="bg-gradient-to-r from-trust via-brand to-magic animate-shimmer h-full rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Statuschips */}
+        <div className="flex flex-wrap gap-2 text-xs font-heading font-semibold">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700">
+            <Icon name="check_circle" filled size={15} /> {completedSpreads} klara
+          </span>
           {generatingCount > 0 && (
-            <span className="text-brand ml-2">({generatingCount} genereras...)</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand/10 text-brand">
+              <span className="spinner !w-3.5 !h-3.5" /> {generatingCount} genereras
+            </span>
+          )}
+          {pendingCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500">
+              <Icon name="schedule" size={15} /> {pendingCount} väntar
+            </span>
           )}
           {failedCount > 0 && (
-            <span className="text-red-500 ml-2">({failedCount} misslyckade)</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-100 text-red-600">
+              <Icon name="error" filled size={15} /> {failedCount} misslyckade
+            </span>
           )}
-        </span>
-        <span>
-          {isGenerating && remainingSpreads > 0 && (
-            <span className="text-gray-500 mr-3">~{estimatedMinutes} min kvar</span>
-          )}
-          {Math.round(progress)}%
-        </span>
-      </div>
+        </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap gap-3">
-        {!isGenerating ? (
-          <>
-            <button
-              onClick={generateAllPages}
-              disabled={allDone}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {completedSpreads > 0 ? 'Fortsätt generera' : 'Starta generering'}
-            </button>
-            {failedCount > 0 && (
+        {/* Controls */}
+        <div className="flex flex-wrap gap-3 pt-1">
+          {!isGenerating ? (
+            <>
               <button
-                onClick={retryFailed}
-                className="btn-action"
+                onClick={generateAllPages}
+                disabled={allDone}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Försök igen alla ({failedCount} misslyckade)
+                <Icon name="auto_fix_high" filled size={19} />
+                {completedSpreads > 0 ? 'Fortsätt generera' : 'Starta generering'}
               </button>
-            )}
-          </>
-        ) : (
-          <button
-            onClick={stopGeneration}
-            className="px-6 py-2 bg-red-500 text-white rounded-full font-semibold hover:bg-red-600 transition-colors"
-          >
-            Stoppa
-          </button>
-        )}
+              {failedCount > 0 && (
+                <button onClick={retryFailed} className="btn-action">
+                  <Icon name="refresh" size={19} /> Försök igen ({failedCount} misslyckade)
+                </button>
+              )}
+            </>
+          ) : (
+            <button onClick={stopGeneration} className="btn-danger">
+              <Icon name="stop_circle" filled size={19} /> Stoppa
+            </button>
+          )}
 
-        {canProceedToReview && (
-          <button
-            onClick={() => onPagesGenerated(spreads)}
-            className="btn-action"
-          >
-            {allDone
-              ? 'Granska boken'
-              : `Granska boken (${failedCount} saknas)`}
-          </button>
-        )}
+          {canProceedToReview && (
+            <button onClick={() => onPagesGenerated(spreads)} className="btn-action">
+              {allDone
+                ? <>Granska boken <Icon name="arrow_forward" size={19} /></>
+                : `Granska boken (${failedCount} saknas)`}
+            </button>
+          )}
+        </div>
       </div>
 
       {canProceedToReview && !allDone && (
-        <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl text-amber-800 text-sm">
+        <div className="note-warning">
           <strong>{failedCount} sidor</strong> kunde inte genereras. Du kan fortsätta till granskning ändå
           - misslyckade sidor visas som tomma och kan regenereras därifrån.
         </div>
       )}
 
-      {error && (
-        <div className="p-4 bg-red-50/80 border border-red-200 rounded-2xl text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="note-error">{error}</div>}
 
       {/* Spread grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -308,11 +323,8 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           >
             <div className="bg-gray-100/70 aspect-[3/2] flex items-center justify-center">
               {spread.status === 'generating' ? (
-                <div className="text-center">
-                  <svg className="animate-spin h-8 w-8 text-brand mx-auto mb-2" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+                <div className="text-center text-brand">
+                  <span className="spinner !w-8 !h-8 mb-2" />
                   <p className="text-sm text-gray-500">Genererar &amp; kvalitetskontrollerar...</p>
                 </div>
               ) : spread.generatedImage ? (
@@ -323,7 +335,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                 />
               ) : spread.status === 'error' ? (
                 <div className="text-center p-4">
-                  <p className="text-red-500 text-sm mb-1">Fel</p>
+                  <Icon name="broken_image" size={28} className="text-red-300 mb-1" />
                   <p className="text-xs text-gray-500 mb-2">{spread.error}</p>
                   {!isGenerating && (
                     <button
@@ -336,7 +348,10 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                   )}
                 </div>
               ) : (
-                <span className="text-gray-400 text-sm">Väntar...</span>
+                <div className="text-center text-gray-400">
+                  <Icon name="hourglass_empty" size={26} className="mb-1" />
+                  <p className="text-sm">Väntar...</p>
+                </div>
               )}
             </div>
 

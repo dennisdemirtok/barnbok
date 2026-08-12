@@ -150,7 +150,9 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
       </div>
 
       {loading ? (
-        <div className="text-center py-16 text-gray-400">Laddar böcker...</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[0, 1, 2].map(i => <div key={i} className="skeleton h-64 rounded-4xl" />)}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 glass rounded-4xl border-dashed border-2 border-brand/20">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center">
