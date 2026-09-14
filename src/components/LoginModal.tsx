@@ -43,7 +43,7 @@ export default function LoginModal({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
         className="glass-strong rounded-4xl w-full max-w-md p-7 animate-pop"
         onClick={(e) => e.stopPropagation()}

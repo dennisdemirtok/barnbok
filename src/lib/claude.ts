@@ -273,16 +273,131 @@ ${config.bookFormat === 'kapitelbok' ? '5. Varje kapitel ska ha en KAPITEL-rubri
 }
 
 async function createWithModelFallback(client: Anthropic, model: string, prompt: string) {
+  return withModelFallback(model, m => generate(client, m, prompt));
+}
+
+async function withModelFallback<T>(model: string, run: (model: string) => Promise<T>): Promise<T> {
   try {
-    return await generate(client, model, prompt);
+    return await run(model);
   } catch (err) {
     // Om modellen hunnit pensioneras (404) - rensa cachen och kör fallback-aliaset.
     if (err instanceof Anthropic.NotFoundError && model !== FALLBACK_MODEL) {
       cachedModel = null;
-      return generate(client, FALLBACK_MODEL, prompt);
+      return run(FALLBACK_MODEL);
     }
     throw err;
   }
+}
+
+// ═══════════════════════════════════════════
+//  Stilprovning: dela upp en textbit i scener
+// ═══════════════════════════════════════════
+
+export interface StyleTestPlan {
+  title: string;
+  characters: {
+    name: string;
+    age: string;
+    role: 'main' | 'supporting';
+    appearance: string;
+    normalClothes: string;
+    personality: string;
+  }[];
+  coverPrompt: string;
+  scenes: {
+    label: string;
+    text: string;
+    imagePrompt: string;
+  }[];
+}
+
+const STYLE_TEST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'characters', 'coverPrompt', 'scenes'],
+  properties: {
+    title: { type: 'string' },
+    characters: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'age', 'role', 'appearance', 'normalClothes', 'personality'],
+        properties: {
+          name: { type: 'string' },
+          age: { type: 'string' },
+          role: { type: 'string', enum: ['main', 'supporting'] },
+          appearance: { type: 'string' },
+          normalClothes: { type: 'string' },
+          personality: { type: 'string' },
+        },
+      },
+    },
+    coverPrompt: { type: 'string' },
+    scenes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['label', 'text', 'imagePrompt'],
+        properties: {
+          label: { type: 'string' },
+          text: { type: 'string' },
+          imagePrompt: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+export async function planStyleTest(rawText: string, numScenes: number, title?: string): Promise<StyleTestPlan> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+
+  const prompt = `Du hjälper en barnboksförfattare att prova olika illustrationsstilar på början av sitt manus, innan hela boken skapas.
+
+MANUS (början av boken):
+"""
+${rawText}
+"""
+
+${title ? `Författarens titel: "${title}"` : 'Ingen titel angiven - föreslå en kort, lockande titel på svenska utifrån texten.'}
+
+UPPGIFT:
+1. KARAKTÄRER: Lista alla namngivna figurer som syns i texten. Om utseendet inte beskrivs, hitta på ett konkret, konsekvent utseende som passar texten (ålder, hår, ögon, kroppsbyggnad, kläder). Använd det som faktiskt står i texten när det finns.
+2. OMSLAG: Skriv en bildprompt på ENGELSKA för bokens framsida som fångar stämningen och visar huvudkaraktärerna. Instruera att titeln ska stå som stor titeltext på svenska.
+3. SCENER: Dela upp HELA manuset i EXAKT ${numScenes} på varandra följande delar i ordning, så att varje del täcker en sammanhängande bit av berättelsen och alla delar tillsammans täcker all text. För varje del:
+   - label: kort svensk rubrik för scenen (t.ex. "Drömmen i skogen")
+   - text: delens text ORDAGRANT som den står i manuset (ändra inga ord, behåll radbrytningar och repliker)
+   - imagePrompt: detaljerad bildprompt på ENGELSKA för det mest bildstarka ögonblicket i delen. Beskriv komposition, miljö, ljus och stämning. Skriv in varje närvarande karaktärs fullständiga utseende i prompten (namn + hår, ögon, kläder) så att figurerna blir likadana på alla bilder.
+
+Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget).`;
+
+  return withModelFallback(model, async (m) => {
+    // Strömmar - ordagrann text + tänkande kan bli långt och skulle annars slå i timeout
+    const stream = client.messages.stream({
+      model: m,
+      max_tokens: 32000,
+      output_config: {
+        effort: 'medium',
+        format: { type: 'json_schema', schema: STYLE_TEST_SCHEMA },
+      },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const message = await stream.finalMessage();
+
+    if (message.stop_reason === 'refusal') {
+      throw new Error('Claude avböjde att analysera texten');
+    }
+    if (message.stop_reason === 'max_tokens') {
+      throw new Error('Texten är för lång för en stilprovning - korta ner den till början av boken');
+    }
+    const textBlock = message.content.find(c => c.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+      throw new Error('Inget svar från Claude');
+    }
+    return JSON.parse(textBlock.text) as StyleTestPlan;
+  });
 }
 
 async function generate(client: Anthropic, model: string, prompt: string) {

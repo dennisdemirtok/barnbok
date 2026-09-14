@@ -1,0 +1,791 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BookFormat, BookProject, Spread } from '@/lib/types';
+import type { StyleTestPlan } from '@/lib/claude';
+import { STYLE_PRESETS, getStylePreset } from '@/lib/styles';
+import { saveStyleTest, loadStyleTest, clearStyleTest } from '@/lib/storage';
+import Icon from './Icon';
+
+interface Props {
+  onContinue: (book: BookProject) => void;
+  onBack: () => void;
+}
+
+type CellStatus = 'pending' | 'generating' | 'done' | 'error';
+
+interface Cell {
+  status: CellStatus;
+  image?: string;
+  error?: string;
+}
+
+interface TestState {
+  title: string;
+  rawText: string;
+  numScenes: number;
+  textOnImage: boolean;
+  selectedStyles: string[];
+  plan: StyleTestPlan | null;
+  styleGuides: Record<string, string>;
+  cells: Record<string, Cell>;
+}
+
+interface PageRow {
+  id: string;
+  label: string;
+  spread: Spread;
+}
+
+const DEFAULT_STYLES = ['luna', 'knyckertz', 'handbok', 'mammamu'];
+const CONCURRENCY = 3;
+const SECONDS_PER_IMAGE = 35;
+
+const EMPTY_STATE: TestState = {
+  title: '',
+  rawText: '',
+  numScenes: 3,
+  textOnImage: false,
+  selectedStyles: DEFAULT_STYLES,
+  plan: null,
+  styleGuides: {},
+  cells: {},
+};
+
+const cellKey = (pageId: string, styleId: string) => `${pageId}|${styleId}`;
+
+function buildPages(plan: StyleTestPlan, title: string): PageRow[] {
+  const cover: PageRow = {
+    id: 'cover',
+    label: 'Omslag',
+    spread: {
+      id: 'cover',
+      spreadNumber: 0,
+      pages: 'omslag',
+      textBlocks: [],
+      imagePrompt: `${plan.coverPrompt}\n\nThe exact Swedish title text on the cover is: "${title}"`,
+      status: 'pending',
+    },
+  };
+  const scenes = plan.scenes.map((scene, i): PageRow => ({
+    id: `scene-${i}`,
+    label: scene.label,
+    spread: {
+      id: `scene-${i}`,
+      spreadNumber: i + 1,
+      pages: `${6 + i * 2}-${7 + i * 2}`,
+      // Stycken blir egna textblock så layouterna kan fördela texten
+      textBlocks: scene.text
+        .split(/\n\s*\n/)
+        .map(t => t.trim())
+        .filter(Boolean)
+        .map((text, j) => ({ position: `stycke ${j + 1}`, text })),
+      imagePrompt: scene.imagePrompt,
+      status: 'pending',
+    },
+  }));
+  return [cover, ...scenes];
+}
+
+export default function StyleTester({ onContinue, onBack }: Props) {
+  const [state, setState] = useState<TestState>(EMPTY_STATE);
+  const [loaded, setLoaded] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState('');
+  const [showScenes, setShowScenes] = useState(false);
+  const [lightboxKey, setLightboxKey] = useState<string | null>(null);
+  const [confirmStyle, setConfirmStyle] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  // Refs så att parallella genereringar alltid läser senaste state
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const abortRef = useRef(false);
+
+  const effectiveTitle = state.plan ? (state.title.trim() || state.plan.title) : state.title;
+  const pages = useMemo(
+    () => (state.plan ? buildPages(state.plan, effectiveTitle) : []),
+    [state.plan, effectiveTitle]
+  );
+  const bookFormat: BookFormat = state.textOnImage ? 'bildbok-text-pa-bild' : 'bildbok-separat-text';
+  const activeStyles = STYLE_PRESETS.filter(s => state.selectedStyles.includes(s.id));
+
+  // ── Ladda senaste provningen ──
+  useEffect(() => {
+    loadStyleTest<TestState>()
+      .then(saved => {
+        if (saved) {
+          // Bilder som höll på att genereras vid omladdning ska göras om
+          const cells: Record<string, Cell> = {};
+          for (const [k, c] of Object.entries(saved.cells || {})) {
+            cells[k] = c.status === 'generating' ? { status: 'pending' } : c;
+          }
+          setState({ ...EMPTY_STATE, ...saved, cells });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+    return () => { abortRef.current = true; };
+  }, []);
+
+  // ── Spara löpande (debounce) ──
+  useEffect(() => {
+    if (!loaded) return;
+    const t = setTimeout(() => {
+      saveStyleTest(state).catch(err => console.warn('Kunde inte spara stilprovning:', err));
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [state, loaded]);
+
+  const setCell = (key: string, cell: Cell) =>
+    setState(prev => ({ ...prev, cells: { ...prev.cells, [key]: cell } }));
+
+  const generateCell = useCallback(async (key: string) => {
+    const s = stateRef.current;
+    if (!s.plan) return;
+    const [pageId, styleId] = key.split('|');
+    const page = buildPages(s.plan, s.title.trim() || s.plan.title).find(p => p.id === pageId);
+    const styleGuide = s.styleGuides[styleId] || getStylePreset(styleId)?.value;
+    if (!page || !styleGuide) return;
+
+    setCell(key, { status: 'generating' });
+    try {
+      const res = await fetch('/api/style-test/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spread: page.spread,
+          characters: s.plan.characters,
+          styleGuide,
+          bookFormat: s.textOnImage ? 'bildbok-text-pa-bild' : 'bildbok-separat-text',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.image) throw new Error(data.error || 'Ingen bild genererades');
+      setCell(key, { status: 'done', image: data.image });
+    } catch (err) {
+      setCell(key, { status: 'error', error: err instanceof Error ? err.message : 'Okänt fel' });
+    }
+  }, []);
+
+  const runQueue = useCallback(async (keys: string[]) => {
+    if (keys.length === 0) return;
+    abortRef.current = false;
+    setRunning(true);
+    const queue = [...keys];
+    const worker = async () => {
+      while (queue.length > 0 && !abortRef.current) {
+        const key = queue.shift()!;
+        await generateCell(key);
+      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    setRunning(false);
+  }, [generateCell]);
+
+  // Kö: omslag i alla stilar först, sedan sida för sida - så jämförelsen syns tidigt
+  const missingKeys = (s: TestState = stateRef.current) => {
+    if (!s.plan) return [];
+    const rows = buildPages(s.plan, s.title.trim() || s.plan.title);
+    const keys: string[] = [];
+    for (const row of rows) {
+      for (const styleId of s.selectedStyles) {
+        const key = cellKey(row.id, styleId);
+        const cell = s.cells[key];
+        if (!cell || cell.status === 'pending' || cell.status === 'error') keys.push(key);
+      }
+    }
+    return keys;
+  };
+
+  // ── Analysera texten och starta generering ──
+  const handleStart = async () => {
+    setError('');
+    setPlanning(true);
+    try {
+      const res = await fetch('/api/style-test/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawText: state.rawText, numScenes: state.numScenes, title: state.title }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Kunde inte analysera texten');
+
+      const next: TestState = { ...stateRef.current, plan: data.plan, styleGuides: data.styleGuides, cells: {} };
+      stateRef.current = next;
+      setState(next);
+      setPlanning(false);
+      runQueue(missingKeys(next));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Något gick fel');
+      setPlanning(false);
+    }
+  };
+
+  const toggleStyle = (id: string) => {
+    setState(prev => {
+      const selected = prev.selectedStyles.includes(id)
+        ? prev.selectedStyles.filter(s => s !== id)
+        : [...prev.selectedStyles, id];
+      // Behåll stillistans ordning
+      return { ...prev, selectedStyles: STYLE_PRESETS.map(s => s.id).filter(s => selected.includes(s)) };
+    });
+  };
+
+  const handleReset = async () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      setTimeout(() => setConfirmReset(false), 4000);
+      return;
+    }
+    abortRef.current = true;
+    setConfirmReset(false);
+    setState(prev => ({ ...prev, plan: null, cells: {}, styleGuides: {} }));
+    await clearStyleTest().catch(() => {});
+  };
+
+  const handleChooseStyle = (styleId: string) => {
+    const s = stateRef.current;
+    if (!s.plan) return;
+    abortRef.current = true;
+    const title = s.title.trim() || s.plan.title;
+    const rows = buildPages(s.plan, title);
+
+    const book: BookProject = {
+      id: crypto.randomUUID(),
+      title,
+      subtitle: '',
+      bookFormat: s.textOnImage ? 'bildbok-text-pa-bild' : 'bildbok-separat-text',
+      characters: s.plan.characters.map(c => ({
+        id: crypto.randomUUID(),
+        name: c.name,
+        age: c.age,
+        role: c.role,
+        appearance: c.appearance,
+        normalClothes: c.normalClothes,
+        personality: c.personality,
+        approved: false,
+      })),
+      // Bilderna görs om i steg 3 med godkända karaktärsreferenser för konsekventa figurer
+      spreads: rows.map(r => ({ ...r.spread, id: crypto.randomUUID() })),
+      styleGuide: s.styleGuides[styleId] || getStylePreset(styleId)?.value || '',
+      status: 'characters',
+      createdAt: new Date().toISOString(),
+    };
+    onContinue(book);
+  };
+
+  // ── Lightbox-navigering över klara bilder ──
+  const doneKeys = activeStyles.flatMap(style =>
+    pages.map(p => cellKey(p.id, style.id)).filter(k => state.cells[k]?.status === 'done')
+  );
+  const stepLightbox = useCallback((dir: 1 | -1) => {
+    setLightboxKey(current => {
+      if (!current || doneKeys.length === 0) return current;
+      const idx = doneKeys.indexOf(current);
+      return doneKeys[(idx + dir + doneKeys.length) % doneKeys.length];
+    });
+  }, [doneKeys]);
+
+  useEffect(() => {
+    if (!lightboxKey) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxKey(null);
+      if (e.key === 'ArrowRight') stepLightbox(1);
+      if (e.key === 'ArrowLeft') stepLightbox(-1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxKey, stepLightbox]);
+
+  // ── Statistik ──
+  const totalCells = pages.length * activeStyles.length;
+  const doneCount = doneKeys.length;
+  const errorCount = activeStyles.reduce((n, style) =>
+    n + pages.filter(p => state.cells[cellKey(p.id, style.id)]?.status === 'error').length, 0);
+  const missingCount = state.plan ? missingKeys(state).length : 0;
+  const wordCount = state.rawText.trim() ? state.rawText.trim().split(/\s+/).length : 0;
+  const plannedImages = (state.numScenes + 1) * state.selectedStyles.length;
+  const estimatedMinutes = Math.max(1, Math.round((plannedImages / CONCURRENCY) * SECONDS_PER_IMAGE / 60));
+  const imageAspect = state.textOnImage ? 'aspect-[3/2]' : 'aspect-[2/3]';
+
+  const header = (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
+          <Icon name="palette" filled size={16} /> Steg 1 · Stilprovning
+        </span>
+        <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
+          {state.plan ? effectiveTitle : 'Prova stilar på början av din bok'}
+        </h2>
+        <p className="mt-1.5 text-gray-500 max-w-2xl">
+          {state.plan
+            ? 'Varje rad är en stil, varje kolumn en sida. Jämför och välj den väg du vill gå vidare med.'
+            : 'Klistra in en start och ett första kapitel. Vi skapar ett omslag och testbilder för samma sidor i flera stilar – innan du gör hela boken.'}
+        </p>
+      </div>
+      <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
+        <Icon name="arrow_back" size={18} /> Tillbaka
+      </button>
+    </div>
+  );
+
+  if (!loaded) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <div className="skeleton h-96 rounded-4xl" />
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  INMATNING
+  // ════════════════════════════════════════════════════════
+  if (!state.plan) {
+    return (
+      <div className="space-y-6">
+        {header}
+
+        <div className="grid lg:grid-cols-5 gap-6">
+          {/* Text */}
+          <div className="lg:col-span-3 card-glass p-5 sm:p-6 space-y-4 hover:!shadow-glow">
+            <div>
+              <label className="block text-sm font-heading font-semibold text-gray-700 mb-2">
+                Titel <span className="text-gray-400 font-normal">(valfritt – annars föreslår AI:n en)</span>
+              </label>
+              <input
+                type="text"
+                value={state.title}
+                onChange={e => setState(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="T.ex. Allies försvinnande"
+                className="field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-heading font-semibold text-gray-700 mb-2">
+                Början av boken
+              </label>
+              <textarea
+                value={state.rawText}
+                onChange={e => setState(prev => ({ ...prev, rawText: e.target.value }))}
+                placeholder={'Klistra in prolog och kapitel 1 här...\n\n– Vänta på mig! ropar Otis och kippar efter andan.\n\nHan ligger en bra bit efter sin storasyster...'}
+                className="field h-[26rem] text-sm leading-relaxed resize-y"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                {wordCount > 0
+                  ? `${wordCount.toLocaleString('sv-SE')} ord · ${state.rawText.length.toLocaleString('sv-SE')} tecken`
+                  : 'Texten används ordagrant – AI:n delar bara upp den i scener och skriver bildbeskrivningar.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Inställningar */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="card-glass p-5 sm:p-6 space-y-5 hover:!shadow-glow">
+              <div>
+                <label className="block text-sm font-heading font-semibold text-gray-700 mb-2">
+                  Antal testsidor <span className="text-gray-400 font-normal">+ omslag</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[2, 3, 4, 5].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setState(prev => ({ ...prev, numScenes: n }))}
+                      className={state.numScenes === n ? 'chip-on' : 'chip'}
+                    >
+                      {n} sidor
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-heading font-semibold text-gray-700">Stilar att jämföra</label>
+                  <button
+                    onClick={() => setState(prev => ({
+                      ...prev,
+                      selectedStyles: prev.selectedStyles.length === STYLE_PRESETS.length
+                        ? DEFAULT_STYLES
+                        : STYLE_PRESETS.map(s => s.id),
+                    }))}
+                    className="text-xs font-heading font-semibold text-brand/70 hover:text-brand"
+                  >
+                    {state.selectedStyles.length === STYLE_PRESETS.length ? 'Standardval' : 'Välj alla'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2">
+                  {STYLE_PRESETS.map(style => {
+                    const on = state.selectedStyles.includes(style.id);
+                    return (
+                      <button
+                        key={style.id}
+                        onClick={() => toggleStyle(style.id)}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-2xl text-left text-sm transition-all ${
+                          on
+                            ? 'bg-white ring-2 ring-brand shadow-glow'
+                            : 'bg-white/60 ring-1 ring-gray-200 hover:ring-brand/40'
+                        }`}
+                      >
+                        <span className={`w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
+                          {on && <Icon name="check" size={18} />}
+                        </span>
+                        <span className={`font-heading font-semibold leading-tight ${on ? 'text-gray-800' : 'text-gray-500'}`}>
+                          {style.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={state.textOnImage}
+                  onChange={e => setState(prev => ({ ...prev, textOnImage: e.target.checked }))}
+                  className="mt-1 w-4 h-4 accent-brand"
+                />
+                <span className="text-sm">
+                  <span className="font-heading font-semibold text-gray-700">Texten i bilden (serietidning)</span>
+                  <span className="block text-gray-500 text-xs mt-0.5">
+                    Av = illustrationer utan text, som i en kapitelbok. På = pratbubblor i bilden – passar bäst för kort text.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div className="glass rounded-4xl p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-br from-brand to-magic flex items-center justify-center text-white shadow-glow">
+                  <Icon name="photo_library" filled size={22} />
+                </div>
+                <div className="text-sm">
+                  <p className="font-heading font-bold text-gray-800">
+                    {plannedImages} testbilder
+                  </p>
+                  <p className="text-gray-500">
+                    {state.numScenes + 1} sidor × {state.selectedStyles.length} stilar · ca {estimatedMinutes} min
+                  </p>
+                </div>
+              </div>
+
+              {error && <div className="note-error">{error}</div>}
+
+              <button
+                onClick={handleStart}
+                disabled={planning || !state.rawText.trim() || state.selectedStyles.length === 0}
+                className="btn-action w-full text-base disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none"
+              >
+                {planning
+                  ? <><span className="spinner" /> Läser texten och väljer scener...</>
+                  : <><Icon name="auto_awesome" filled size={20} /> Skapa testbilder</>}
+              </button>
+              {planning && (
+                <p className="text-xs text-gray-500 text-center">
+                  Claude delar upp texten i scener och beskriver bildstarka ögonblick. Tar ungefär en minut.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  RESULTAT: stilar × sidor
+  // ════════════════════════════════════════════════════════
+  const plan = state.plan;
+  const progress = totalCells > 0 ? Math.round((doneCount / totalCells) * 100) : 0;
+  const lightboxCell = lightboxKey ? state.cells[lightboxKey] : null;
+  const [lbPageId, lbStyleId] = lightboxKey ? lightboxKey.split('|') : ['', ''];
+
+  return (
+    <div className="space-y-6">
+      {header}
+
+      {/* Kontrollpanel */}
+      <div className="glass rounded-4xl p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-white shadow-glow ${
+              doneCount === totalCells ? 'bg-emerald-500' : 'bg-gradient-to-br from-brand to-magic'
+            }`}>
+              {running
+                ? <span className="spinner !w-6 !h-6" />
+                : <Icon name={doneCount === totalCells ? 'celebration' : 'palette'} filled size={26} />}
+            </div>
+            <div>
+              <p className="font-heading font-bold text-gray-800">
+                {doneCount === totalCells
+                  ? 'Alla testbilder klara – välj en stil!'
+                  : running ? 'Skapar testbilder...' : `${missingCount} bilder återstår`}
+              </p>
+              <p className="text-sm text-gray-500">
+                {doneCount} av {totalCells} bilder
+                {errorCount > 0 && <span className="text-red-500"> · {errorCount} misslyckades</span>}
+                {running && missingCount > 0 && ` · ca ${Math.max(1, Math.round((missingCount / CONCURRENCY) * SECONDS_PER_IMAGE / 60))} min kvar`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {running ? (
+              <button onClick={() => { abortRef.current = true; }} className="btn-danger !py-2.5 text-sm">
+                <Icon name="stop_circle" filled size={18} /> Pausa
+              </button>
+            ) : missingCount > 0 ? (
+              <button onClick={() => runQueue(missingKeys())} className="btn-primary !py-2.5 text-sm">
+                <Icon name="auto_fix_high" filled size={18} /> Generera {missingCount} saknade
+              </button>
+            ) : null}
+            <button onClick={() => setShowScenes(v => !v)} className="btn-ghost !py-2 text-sm">
+              <Icon name={showScenes ? 'expand_less' : 'article'} size={18} />
+              {showScenes ? 'Dölj scenerna' : 'Visa scenerna'}
+            </button>
+            <button
+              onClick={handleReset}
+              className={`btn-ghost !py-2 text-sm ${confirmReset ? '!bg-red-600 !text-white !border-red-600' : ''}`}
+            >
+              <Icon name="restart_alt" size={18} />
+              {confirmReset ? 'Klicka igen – rensar bilderna' : 'Ny provning'}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-gray-200/70 rounded-full h-2.5 overflow-hidden">
+          <div
+            className="bg-gradient-to-r from-trust via-brand to-magic h-full rounded-full transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Lägg till/ta bort stilar i efterhand */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-heading font-semibold text-gray-500 mr-1">Stilar:</span>
+          {STYLE_PRESETS.map(style => {
+            const on = state.selectedStyles.includes(style.id);
+            return (
+              <button
+                key={style.id}
+                onClick={() => toggleStyle(style.id)}
+                disabled={running}
+                title={on ? 'Dölj stilen' : 'Lägg till stilen – generera sedan saknade bilder'}
+                className={`${on ? 'chip-on' : 'chip'} !py-1.5 !text-xs disabled:opacity-60`}
+              >
+                <Icon name={on ? 'check' : 'add'} size={15} /> {style.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Karaktärer */}
+        {plan.characters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-heading font-semibold text-gray-500 mr-1">Karaktärer:</span>
+            {plan.characters.map(c => (
+              <span key={c.name} title={c.appearance} className="magic-chip !text-xs cursor-help">
+                <Icon name={c.role === 'main' ? 'star' : 'person'} filled size={13} />
+                {c.name}{c.age ? `, ${c.age}` : ''}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Scentexter */}
+      {showScenes && (
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-up">
+          {plan.scenes.map((scene, i) => (
+            <div key={i} className="card-glass p-4 hover:!shadow-glow">
+              <p className="text-xs font-heading font-bold text-brand/60 uppercase tracking-wide">Sida {i + 1}</p>
+              <h4 className="font-heading font-bold text-gray-800 mb-2">{scene.label}</h4>
+              <p className="text-sm text-gray-600 whitespace-pre-line max-h-48 overflow-y-auto pr-1">{scene.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {errorCount > 0 && !running && (
+        <div className="note-warning">
+          {errorCount} bilder kunde inte skapas. Klicka &quot;Generera saknade&quot; eller försök igen på enskilda bilder.
+        </div>
+      )}
+
+      {/* Matris: en rad per stil */}
+      <div className="space-y-5">
+        {activeStyles.map(style => {
+          const rowDone = pages.filter(p => state.cells[cellKey(p.id, style.id)]?.status === 'done').length;
+          return (
+            <div key={style.id} className="card-glass p-4 sm:p-5 hover:!shadow-glow animate-fade-up">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <span className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${style.swatch} shadow-glow`} />
+                  <div>
+                    <h3 className="font-heading font-bold text-gray-800 leading-tight">{style.label}</h3>
+                    <p className="text-xs text-gray-500">
+                      {rowDone} av {pages.length} bilder klara
+                      {style.series && state.styleGuides[style.id] && state.styleGuides[style.id] !== style.value && ' · kalibrerad från riktiga böcker'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setConfirmStyle(style.id)}
+                  disabled={rowDone === 0}
+                  className="btn-action !py-2 !px-5 text-sm disabled:opacity-40 disabled:translate-y-0 disabled:shadow-none"
+                >
+                  Välj denna stil <Icon name="arrow_forward" size={18} />
+                </button>
+              </div>
+
+              <div className="overflow-x-auto -mx-1 px-1 pb-1">
+                <div
+                  className="grid gap-3"
+                  // Porträttbilder får en maxbredd så att flera stilrader ryms på skärmen samtidigt
+                  style={{
+                    gridTemplateColumns: state.textOnImage
+                      ? `repeat(${pages.length}, minmax(240px, 1fr))`
+                      : `repeat(${pages.length}, minmax(140px, 200px))`,
+                  }}
+                >
+                  {pages.map(page => {
+                    const key = cellKey(page.id, style.id);
+                    const cell = state.cells[key];
+                    return (
+                      <div key={key} className="min-w-0">
+                        <div className={`${imageAspect} relative rounded-2xl overflow-hidden bg-brand/5 ring-1 ring-brand/10 group`}>
+                          {cell?.status === 'done' && cell.image ? (
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={`data:image/png;base64,${cell.image}`}
+                                alt={`${page.label} i stilen ${style.label}`}
+                                onClick={() => setLightboxKey(key)}
+                                className="w-full h-full object-cover cursor-zoom-in group-hover:scale-[1.03] transition-transform duration-500"
+                              />
+                              {!running && (
+                                <button
+                                  onClick={() => runQueue([key])}
+                                  title="Skapa en ny version av bilden"
+                                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 text-brand shadow-glow
+                                             flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <Icon name="refresh" size={17} />
+                                </button>
+                              )}
+                            </>
+                          ) : cell?.status === 'generating' ? (
+                            <div className="skeleton !rounded-none w-full h-full flex flex-col items-center justify-center text-brand">
+                              <span className="spinner !w-7 !h-7 relative z-10" />
+                              <span className="text-xs text-gray-500 mt-2 relative z-10">Målar...</span>
+                            </div>
+                          ) : cell?.status === 'error' ? (
+                            <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center">
+                              <Icon name="broken_image" size={26} className="text-red-300" />
+                              <p className="text-[11px] text-gray-500 mt-1 line-clamp-3">{cell.error}</p>
+                              {!running && (
+                                <button
+                                  onClick={() => runQueue([key])}
+                                  className="mt-2 px-3 py-1 bg-sunset text-white text-xs rounded-full font-medium hover:opacity-90"
+                                >
+                                  Försök igen
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                              <Icon name="hourglass_empty" size={24} />
+                              <span className="text-xs mt-1">I kö</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="mt-1.5 text-xs font-heading font-semibold text-gray-600 truncate" title={page.label}>
+                          {page.id === 'cover' ? 'Omslag' : page.label}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bekräfta stilval */}
+      {confirmStyle && (
+        <div className="fixed inset-0 !m-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setConfirmStyle(null)}>
+          <div className="glass-strong rounded-4xl w-full max-w-md p-7 animate-pop" onClick={e => e.stopPropagation()}>
+            <span className={`block w-12 h-12 rounded-2xl bg-gradient-to-br ${getStylePreset(confirmStyle)?.swatch} shadow-glow mb-4`} />
+            <h3 className="text-2xl font-heading font-bold text-gray-800 mb-2">
+              Gå vidare med {getStylePreset(confirmStyle)?.label}?
+            </h3>
+            <p className="text-sm text-gray-500 mb-2">
+              Boken skapas med {plan.characters.length} karaktärer och {pages.length} sidor (omslag + {plan.scenes.length} sidor) från din text.
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Nästa steg är karaktärerna. Sidbilderna skapas sedan om med godkända karaktärsreferenser, så att figurerna ser likadana ut på varje sida. Din stilprovning finns kvar om du vill komma tillbaka.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmStyle(null)} className="btn-ghost flex-1">Avbryt</button>
+              <button onClick={() => handleChooseStyle(confirmStyle)} className="btn-action flex-1">
+                Fortsätt <Icon name="arrow_forward" size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxKey && lightboxCell?.image && (
+        <div className="fixed inset-0 !m-0 bg-black/85 backdrop-blur-sm z-50 flex flex-col animate-pop" onClick={() => setLightboxKey(null)}>
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 text-white" onClick={e => e.stopPropagation()}>
+            <div className="min-w-0">
+              <p className="font-heading font-bold truncate">
+                {pages.find(p => p.id === lbPageId)?.label} · {getStylePreset(lbStyleId)?.label}
+              </p>
+              <p className="text-xs text-white/60">Pilar ← → för att bläddra · Esc för att stänga</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => { setLightboxKey(null); setConfirmStyle(lbStyleId); }}
+                className="btn-action !py-2 !px-4 text-sm"
+              >
+                Välj stilen
+              </button>
+              <button onClick={() => setLightboxKey(null)} className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">
+                <Icon name="close" size={22} />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 flex items-center justify-center gap-2 px-2 sm:px-6 pb-6">
+            <button
+              onClick={e => { e.stopPropagation(); stepLightbox(-1); }}
+              className="shrink-0 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+              title="Föregående"
+            >
+              <Icon name="chevron_left" size={28} />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`data:image/png;base64,${lightboxCell.image}`}
+              alt=""
+              onClick={e => e.stopPropagation()}
+              className="max-h-full max-w-full object-contain rounded-2xl shadow-2xl"
+            />
+            <button
+              onClick={e => { e.stopPropagation(); stepLightbox(1); }}
+              className="shrink-0 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+              title="Nästa"
+            >
+              <Icon name="chevron_right" size={28} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

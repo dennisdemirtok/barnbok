@@ -5,6 +5,8 @@ const config: Config = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    // Stilarnas färgmarkeringar (gradientklasser) definieras i lib/styles.ts
+    './src/lib/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
@@ -41,7 +43,7 @@ const config: Config = {
         },
         'fade-up': {
           '0%': { opacity: '0', transform: 'translateY(14px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '100%': { opacity: '1', transform: 'none' },
         },
         pop: {
           '0%': { opacity: '0', transform: 'scale(0.92)' },
@@ -51,7 +53,9 @@ const config: Config = {
       animation: {
         shimmer: 'shimmer 2.5s ease-in-out infinite',
         float: 'float 6s ease-in-out infinite',
-        'fade-up': 'fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
+        // `backwards` (inte `both`): en kvarhängande transform efter animationen skapar
+        // ett nytt containing block och klämmer in position:fixed-modaler i innehållsytan
+        'fade-up': 'fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards',
         pop: 'pop 0.3s cubic-bezier(0.22, 1, 0.36, 1) both',
       },
     },

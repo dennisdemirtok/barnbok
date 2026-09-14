@@ -2,10 +2,11 @@ import { BookProject, SavedCharacter, SavedText } from './types';
 import { saveBookToCloud, deleteBookFromCloud } from './supabase-db';
 
 const DB_NAME = 'book-creator-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const BOOKS_STORE = 'books';
 const CHARACTERS_STORE = 'characters';
 const TEXTS_STORE = 'texts';
+const STYLE_TESTS_STORE = 'styletests';
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -23,7 +24,44 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(TEXTS_STORE)) {
         db.createObjectStore(TEXTS_STORE, { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains(STYLE_TESTS_STORE)) {
+        db.createObjectStore(STYLE_TESTS_STORE, { keyPath: 'id' });
+      }
     };
+  });
+}
+
+// ===== Stilprovning (senaste provningen sparas lokalt) =====
+
+const LATEST_STYLE_TEST_ID = 'latest';
+
+export async function saveStyleTest<T extends object>(data: T): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STYLE_TESTS_STORE, 'readwrite');
+    tx.objectStore(STYLE_TESTS_STORE).put({ ...data, id: LATEST_STYLE_TEST_ID });
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+export async function loadStyleTest<T>(): Promise<T | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STYLE_TESTS_STORE, 'readonly');
+    const request = tx.objectStore(STYLE_TESTS_STORE).get(LATEST_STYLE_TEST_ID);
+    request.onsuccess = () => { db.close(); resolve((request.result as T) || null); };
+    request.onerror = () => { db.close(); reject(request.error); };
+  });
+}
+
+export async function clearStyleTest(): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STYLE_TESTS_STORE, 'readwrite');
+    tx.objectStore(STYLE_TESTS_STORE).delete(LATEST_STYLE_TEST_ID);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
   });
 }
 

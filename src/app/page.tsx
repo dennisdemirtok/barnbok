@@ -15,7 +15,7 @@ import Bookstore from '@/components/Bookstore';
 import Icon from '@/components/Icon';
 
 type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore';
-type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts';
+type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
 
 export default function Home() {
   const [step, setStep] = useState<Step>('library');
@@ -32,6 +32,11 @@ export default function Home() {
   const [showLogin, setShowLogin] = useState(false);
   const [sharedBookId, setSharedBookId] = useState<string | null>(null);
   const { user, signOut, loading: authLoading } = useAuth();
+
+  // Börja överst på varje nytt steg
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step]);
 
   // Delningslänk: /?bok=<id> öppnar boken direkt i bokhandelns läsare
   useEffect(() => {

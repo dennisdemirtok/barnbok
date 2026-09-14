@@ -1,44 +1,9 @@
 import { NextResponse } from 'next/server';
 import { generateBookContent, BookConfig } from '@/lib/claude';
 import { parseBookData } from '@/lib/parser';
+import { fetchStyleProfile, fetchLanguageExamples } from '@/lib/style-profiles';
 
 export const maxDuration = 120; // 2 minutes for long book generation
-
-// Hämta stilprofil (byggd från analyserade referensböcker) från Supabase
-async function fetchStyleProfile(series: string): Promise<{ text_style?: string; image_style?: string } | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  try {
-    const res = await fetch(
-      `${url}/rest/v1/barnbok_style_profiles?book_series=eq.${encodeURIComponent(series)}&select=text_style,image_style`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
-    );
-    if (!res.ok) return null;
-    const rows = await res.json();
-    return rows[0] || null;
-  } catch {
-    return null;
-  }
-}
-
-// Hämta verkliga exempelmeningar (few-shot förebilder) för en bokserie
-async function fetchLanguageExamples(series: string): Promise<string[]> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return [];
-  try {
-    const res = await fetch(
-      `${url}/rest/v1/barnbok_reference_texts?book_series=eq.${encodeURIComponent(series)}&select=text_sample&limit=12`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
-    );
-    if (!res.ok) return [];
-    const rows = await res.json();
-    return rows.map((r: { text_sample: string }) => r.text_sample).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
 
 export async function POST(request: Request) {
   try {

@@ -70,7 +70,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 !m-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="glass-strong rounded-4xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 glass-strong rounded-t-4xl border-b border-white/60 p-4 flex items-center justify-between z-10">

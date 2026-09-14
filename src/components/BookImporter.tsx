@@ -5,9 +5,10 @@ import { BookProject, BookFormat, SavedText } from '@/lib/types';
 import { saveText } from '@/lib/storage';
 import BookCreator from './BookCreator';
 import SavedTextPicker from './SavedTextPicker';
+import StyleTester from './StyleTester';
 import Icon from './Icon';
 
-type Mode = 'choose' | 'import' | 'create' | 'savedTexts';
+type Mode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
 
 interface Props {
   onBookParsed: (book: BookProject) => void;
@@ -202,7 +203,46 @@ export default function BookImporter({
             </span>
           </button>
         </div>
+
+        {/* Stilprovning */}
+        <button
+          onClick={() => onModeChange('styleTest')}
+          className="relative w-full overflow-hidden rounded-4xl p-6 sm:p-7 text-left text-white group
+                     bg-gradient-to-br from-trust via-brand to-magic shadow-glow hover:shadow-glow-lg hover:-translate-y-1 transition-all"
+        >
+          <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/15 blur-3xl pointer-events-none" />
+          <div className="relative flex flex-col md:flex-row md:items-center gap-5">
+            <div className="w-16 h-16 shrink-0 flex items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/30 backdrop-blur group-hover:scale-105 group-hover:rotate-3 transition-transform">
+              <Icon name="palette" filled size={32} />
+            </div>
+            <div className="flex-1">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 text-[10px] font-heading font-bold uppercase tracking-wide">
+                <Icon name="science" filled size={13} /> Nytt · Testa innan du bestämmer dig
+              </span>
+              <h3 className="mt-2 text-xl sm:text-2xl font-heading font-bold">
+                Prova stilar på början av din text
+              </h3>
+              <p className="mt-1 text-white/85 text-sm leading-relaxed max-w-2xl">
+                Klistra in en start och ett första kapitel. Du får ett omslag och testbilder för samma sidor i flera stilar
+                – Luna, Familjen Knyckertz, Handbok för Superhjältar m.fl. – och väljer sedan vilken väg boken ska ta.
+              </p>
+            </div>
+            <span className="shrink-0 inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-brand font-heading font-bold text-sm shadow-lg group-hover:gap-2.5 transition-all">
+              Starta provning <Icon name="arrow_forward" size={18} />
+            </span>
+          </div>
+        </button>
       </div>
+    );
+  }
+
+  // Style test mode
+  if (mode === 'styleTest') {
+    return (
+      <StyleTester
+        onContinue={onBookParsed}
+        onBack={() => onModeChange('choose')}
+      />
     );
   }
 
