@@ -217,8 +217,8 @@ function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: Illust
   if (composition === 'round') {
     return `LAYOUT: ROUND VIGNETTE (square image that will be cropped to a circle).
 - One clear, centered motif: a face close-up, an object, a clue or a small moment
+- Fill the WHOLE square edge to edge with the scene - do NOT draw a circle, frame or border yourself; the book designer crops it to a circle
 - Keep everything important inside the central circle (about 80% of the width); the corners will be cut away
-- Simple background that can fade to the edge
 - Absolutely NO text, letters, numbers or speech bubbles`;
   }
   if (composition === 'band') {
