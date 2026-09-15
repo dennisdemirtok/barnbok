@@ -1,567 +1,293 @@
 'use client';
 
-import { useState } from 'react';
-import { BookProject } from '@/lib/types';
-import { BookConfig, TextDensity } from '@/lib/claude';
-import { STYLE_PRESETS } from '@/lib/styles';
+import { useEffect, useState } from 'react';
+import { STYLE_PRESETS, getStylePreset } from '@/lib/styles';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
+import StylePicker from './StylePicker';
+import CharacterLibraryPicker from './CharacterLibraryPicker';
+import { listSavedCharacters } from '@/lib/storage';
 
 interface Props {
-  onBookCreated: (book: BookProject, rawText: string) => void;
+  onBeginningWritten: (result: {
+    title: string;
+    stylePresetId: string;
+    targetAge: string;
+    rawText: string;
+    outline: string;
+    imageWishes?: string;
+  }) => void;
   onBack: () => void;
 }
 
-type BookFormat = BookConfig['bookFormat'];
+// Åldersval: vanliga spann plus de som boktyperna använder
+const AGE_OPTIONS = Array.from(new Set(['2-5 år', '3-6 år', '6-9 år', '8-12 år', '12+ år', ...STYLE_PRESETS.map(s => s.book.age)]))
+  .sort((a, b) => parseInt(a) - parseInt(b));
 
-const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; icon: string; comingSoon?: boolean }[] = [
-  {
-    value: 'bildbok-text-pa-bild',
-    label: 'Serieformat – text i bilderna',
-    description: 'Likt "Handbok för Superhjältar" - helsides illustrationer med text integrerad i bilden. Kort text, mycket visuellt.',
-    icon: 'wallpaper',
-  },
-  {
-    value: 'bildbok-separat-text',
-    label: 'Bildbok med separat text',
-    description: 'Likt "Luna"-böcker - text ovanför/under eller bredvid bilderna. Mer text, bild och text kompletterar varandra.',
-    icon: 'article',
-  },
-  {
-    value: 'kapitelbok',
-    label: 'Kapitelbok',
-    description: 'Likt Harry Potter / Bert-böcker - mest text med enstaka illustrationer. Längre kapitel och detaljerat berättande.',
-    icon: 'menu_book',
-  },
-  {
-    value: 'larobok',
-    label: 'Lärobok / Aktivitetsbok',
-    description: 'Likt "Ärtan Pärtan" – blandning av text, bilder och uppgifter. Pedagogiskt upplägg.',
-    icon: 'school',
-    comingSoon: true,
-  },
+// Roterande lägesmeddelanden medan AI:n skriver (tar ca 30-60 s)
+const WRITING_STAGES = [
+  'Läser in boktypen och stilen...',
+  'Planerar handlingen för hela boken...',
+  'Lär känna karaktärerna...',
+  'Skriver den första scenen...',
+  'Putsar på språket...',
+  'Nästan klart – de sista meningarna...',
 ];
 
-const PLOT_TAGS = [
-  'Äventyr', 'Drama', 'Komedi', 'Mysterium', 'Fantasy', 'Sci-fi',
-  'Vänskap', 'Skola', 'Familj', 'Djur', 'Natur', 'Sport',
-  'Superhjältar', 'Magi', 'Rymden', 'Pirater', 'Dinosaurier',
-];
+// Början = ca fyra illustrerade sidor (samma formel som beginningWordTarget i lib/claude.ts)
+function beginningWords(book: { targetWords: number; wordsPerImage: number }) {
+  const words = Math.min(book.targetWords, book.wordsPerImage * 4);
+  return words >= 500 ? Math.round(words / 50) * 50 : Math.round(words / 10) * 10;
+}
 
-const SETTING_TAGS = [
-  'Skola', 'Hemma', 'Skog', 'Stad', 'Strand', 'Berg',
-  'Rymden', 'Under vatten', 'Slott', 'Bondgård', 'Lekplats',
-];
-
-const AGE_OPTIONS = ['3-5 år', '6-8 år', '9-12 år', '12+ år'];
-
-const PAGE_PRESETS = [
-  { pages: 24, label: '24 sidor (kort bildbok)' },
-  { pages: 32, label: '32 sidor (standard bildbok)' },
-  { pages: 48, label: '48 sidor (längre bildbok)' },
-  { pages: 64, label: '64 sidor (kort kapitelbok)' },
-  { pages: 96, label: '96 sidor (kapitelbok)' },
-  { pages: 128, label: '128 sidor (lång kapitelbok)' },
-];
-
-export default function BookCreator({ onBookCreated, onBack }: Props) {
-  const [currentStep, setCurrentStep] = useState<1 | 2>(1);
-
-  // Step 1 fields
-  const [title, setTitle] = useState('');
-  const [bookFormat, setBookFormat] = useState<BookFormat>('bildbok-separat-text');
-  const [numCharacters, setNumCharacters] = useState(3);
-  const [characterNames, setCharacterNames] = useState('');
-  const [numPages, setNumPages] = useState(32);
-  const [targetAge, setTargetAge] = useState('6-8 år');
-  const [textDensity, setTextDensity] = useState<TextDensity>('medium');
-  const [subject, setSubject] = useState('');
-
-  // Step 2 fields
-  const [plotText, setPlotText] = useState('');
-  const [selectedPlotTags, setSelectedPlotTags] = useState<string[]>([]);
-  const [setting, setSetting] = useState('');
-  const [selectedSettingTags, setSelectedSettingTags] = useState<string[]>([]);
+export default function BookCreator({ onBeginningWritten, onBack }: Props) {
   const [stylePresetId, setStylePresetId] = useState('luna');
-  const [imageStyle, setImageStyle] = useState(''); // egna tillägg till stilen
+  const [plot, setPlot] = useState('');
+  const [setting, setSetting] = useState('');
+  const [title, setTitle] = useState('');
+  const [characterNotes, setCharacterNotes] = useState('');
+  const [libraryIds, setLibraryIds] = useState<string[]>([]); // sparade karaktärer som ska med
+  const [chosenAge, setChosenAge] = useState<string | null>(null); // null = följ boktypen
+  const [imageWishes, setImageWishes] = useState('');
 
-  // State
-  const [loading, setLoading] = useState(false);
+  // Senaste slumpade förslaget - används inte som ledtråd för nästa slumpning
+  const [lastRandom, setLastRandom] = useState<{ plot: string; title: string } | null>(null);
+  const [randomizing, setRandomizing] = useState(false);
+
+  const [writing, setWriting] = useState(false);
+  const [stage, setStage] = useState(0);
   const [error, setError] = useState('');
-  const [progress, setProgress] = useState('');
 
-  // Word counts per spread based on real book data (Luna ~180 ord/textsida, Handbok ~100 ord/sida)
-  const getWordsPerSpread = () => {
-    const wordsTable: Record<BookFormat, Record<TextDensity, number>> = {
-      'bildbok-text-pa-bild': { minimal: 45, lite: 80, medium: 130, mycket: 200 },
-      'bildbok-separat-text': { minimal: 45, lite: 80, medium: 130, mycket: 190 },
-      'kapitelbok': { minimal: 250, lite: 350, medium: 480, mycket: 630 },
-      'larobok': { minimal: 90, lite: 160, medium: 250, mycket: 350 },
-    };
-    return wordsTable[bookFormat][textDensity];
-  };
+  const preset = getStylePreset(stylePresetId) ?? STYLE_PRESETS[0];
+  const targetAge = chosenAge ?? preset.book.age;
+  const busy = writing || randomizing;
 
-  // Tryckkonvention: sida 1-5 är titelsida/copyright, sista sidan är slutsidan.
-  // Innehållsuppslagen ligger däremellan (samma formel som i claude.ts).
-  const contentSpreads = () => Math.max(1, Math.floor((numPages - 6) / 2));
+  useEffect(() => {
+    if (!writing) return;
+    setStage(0);
+    const timer = setInterval(() => setStage(s => Math.min(s + 1, WRITING_STAGES.length - 1)), 8000);
+    return () => clearInterval(timer);
+  }, [writing]);
 
-  const estimatedWords = () => {
-    return Math.round(contentSpreads() * getWordsPerSpread());
-  };
-
-  // Format-specific word range descriptions for the density buttons
-  const getDensityOptions = (): { value: TextDensity; label: string; desc: string; words: string }[] => {
-    const options: Record<BookFormat, { value: TextDensity; label: string; desc: string; words: string }[]> = {
-      'bildbok-text-pa-bild': [
-        { value: 'minimal', label: 'Minimal', desc: '1-2 meningar/ruta', words: '15-30 ord/sida' },
-        { value: 'lite', label: 'Lite', desc: '2-3 meningar/ruta', words: '30-50 ord/sida' },
-        { value: 'medium', label: 'Medium', desc: '3-5 meningar/ruta', words: '50-80 ord/sida' },
-        { value: 'mycket', label: 'Mycket', desc: '4-6 meningar/ruta', words: '80-120 ord/sida' },
-      ],
-      'bildbok-separat-text': [
-        { value: 'minimal', label: 'Minimal', desc: '2-4 meningar', words: '30-60 ord/sida' },
-        { value: 'lite', label: 'Lite', desc: '4-6 meningar', words: '60-100 ord/sida' },
-        { value: 'medium', label: 'Medium', desc: '6-10 meningar', words: '100-160 ord/sida' },
-        { value: 'mycket', label: 'Mycket', desc: '10+ meningar', words: '160-220 ord/sida' },
-      ],
-      'kapitelbok': [
-        { value: 'minimal', label: 'Minimal', desc: 'Korta stycken', words: '100-150 ord/sida' },
-        { value: 'lite', label: 'Lite', desc: 'Lagom stycken', words: '150-200 ord/sida' },
-        { value: 'medium', label: 'Medium', desc: 'Typisk kapitelbok', words: '200-280 ord/sida' },
-        { value: 'mycket', label: 'Mycket', desc: 'Riklig text', words: '280-350 ord/sida' },
-      ],
-      'larobok': [
-        { value: 'minimal', label: 'Minimal', desc: 'Korta instruktioner', words: '30-60 ord/sida' },
-        { value: 'lite', label: 'Lite', desc: 'Tydliga förklaringar', words: '60-100 ord/sida' },
-        { value: 'medium', label: 'Medium', desc: 'Utförliga övningar', words: '100-150 ord/sida' },
-        { value: 'mycket', label: 'Mycket', desc: 'Detaljerat', words: '150-200 ord/sida' },
-      ],
-    };
-    return options[bookFormat];
-  };
-
-  const togglePlotTag = (tag: string) => {
-    setSelectedPlotTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
-  };
-
-  const toggleSettingTag = (tag: string) => {
-    setSelectedSettingTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
-  };
-
-  const handleGenerate = async () => {
-    setLoading(true);
+  const handleRandomPlot = async () => {
+    setRandomizing(true);
     setError('');
-    setProgress('Skapar din bok med AI... Detta kan ta 1-2 minuter.');
-
-    const config: BookConfig = {
-      title,
-      bookFormat,
-      numCharacters,
-      characterNames: characterNames
-        .split(',')
-        .map(n => n.trim())
-        .filter(Boolean),
-      numPages,
-      targetAge,
-      textDensity,
-      plot: [...selectedPlotTags, plotText].filter(Boolean).join('. '),
-      setting: [...selectedSettingTags, setting].filter(Boolean).join(', '),
-      imageStyle,
-      stylePresetId,
-      subject: bookFormat === 'larobok' ? subject : undefined,
-    };
-
+    // Egen text blir ledtråd - ett tidigare slumpat förslag gör det inte
+    const hint = plot.trim() && plot !== lastRandom?.plot ? plot.trim() : undefined;
     try {
-      const res = await fetch('/api/generate-book', {
+      const res = await fetch('/api/random-plot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ stylePresetId, targetAge, hint }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Kunde inte slumpa en handling');
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Generering misslyckades');
-      }
-
-      const { book, rawText } = await res.json();
-      setProgress('Klar! Boken har skapats.');
-      onBookCreated(book, rawText);
+      setPlot(data.plot);
+      setSetting(data.setting || '');
+      // Skriv inte över en titel som författaren själv har skrivit
+      if (!title.trim() || title === lastRandom?.title) setTitle(data.title || '');
+      setLastRandom({ plot: data.plot, title: data.title || '' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Något gick fel');
     } finally {
-      setLoading(false);
-      setProgress('');
+      setRandomizing(false);
+    }
+  };
+
+  const handleWrite = async () => {
+    setWriting(true);
+    setError('');
+    try {
+      const saved = libraryIds.length > 0 ? await listSavedCharacters() : [];
+      const characters = saved
+        .filter(c => libraryIds.includes(c.id))
+        .map(c => ({ name: c.name, appearance: [c.age && `${c.age}`, c.appearance, c.normalClothes].filter(Boolean).join('. '), personality: c.personality }));
+      const res = await fetch('/api/write-beginning', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stylePresetId,
+          targetAge,
+          title: title.trim() || undefined,
+          plot: plot.trim(),
+          setting: setting.trim() || undefined,
+          characterNotes: characterNotes.trim() || undefined,
+          characters: characters.length > 0 ? characters : undefined,
+        }),
+      });
+      // Tidsgräns på servern kan ge ett svar som inte är JSON
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Det gick inte att skriva början – försök igen');
+
+      onBeginningWritten({
+        title: data.title,
+        stylePresetId,
+        targetAge,
+        rawText: data.rawText,
+        outline: data.outline,
+        imageWishes: imageWishes.trim() || undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Något gick fel');
+    } finally {
+      setWriting(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <StepHeader
         eyebrow="Steg 1 av 4 · Berättelsen"
-        title="Skapa en ny bok med AI"
-        description={currentStep === 1
-          ? 'Börja med grunderna: format, målgrupp, karaktärer och längd.'
-          : 'Beskriv handling, miljö och välj stil – sedan skriver AI:n hela boken.'}
+        title="Skriv en bok med AI"
+        description="Välj boktyp och berätta vad boken ska handla om. AI:n skriver först början, så att du kan läsa texten och prova bilderna innan hela boken skrivs."
         onBack={onBack}
       />
 
-      {/* Step indicator */}
-      <div className="flex gap-2">
-        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 1 ? 'bg-ink' : 'bg-brand/10'}`} />
-        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 2 ? 'bg-ink' : 'bg-brand/10'}`} />
-      </div>
+      {/* Boktyp - styr format, längd och skrivstil */}
+      <section>
+        <h3 className="text-sm font-semibold text-ink/80 mb-1">Boktyp</h3>
+        <p className="text-xs text-ink/55 mb-3">Boktypen bestämmer bildstil, längd och hur texten låter.</p>
+        <StylePicker value={stylePresetId} onChange={setStylePresetId} />
+      </section>
 
-      {currentStep === 1 ? (
-        <div className="space-y-6">
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-2">
-              Titel *
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="T.ex. Stjärnpatrullen, Mattemonster, Äventyret i Skogen..."
-              className="field text-lg"
-            />
-          </div>
-
-          {/* Book Format */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-3">
-              Bokformat *
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {FORMAT_OPTIONS.map((fmt) => (
-                <button
-                  key={fmt.value}
-                  onClick={() => !fmt.comingSoon && setBookFormat(fmt.value)}
-                  disabled={fmt.comingSoon}
-                  className={`relative p-4 rounded-4xl text-left transition-all ${
-                    fmt.comingSoon
-                      ? 'bg-ink/[0.05] border border-line opacity-60 cursor-not-allowed'
-                      : bookFormat === fmt.value
-                      ? 'card-glass ring-2 ring-brand bg-brand/5'
-                      : 'card-glass'
-                  }`}
-                >
-                  {fmt.comingSoon && (
-                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-ink/[0.06] text-ink/55 text-xs font-semibold rounded-full">
-                      Kommer snart
-                    </span>
-                  )}
-                  <div className="flex items-center gap-2.5 mb-1.5">
-                    <span className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ${
-                      fmt.comingSoon
-                        ? 'bg-ink/10 text-ink/40'
-                        : bookFormat === fmt.value
-                        ? 'bg-ink text-white shadow-soft'
-                        : 'bg-paper border border-line text-ink'
-                    }`}>
-                      <Icon name={fmt.icon} filled size={20} />
-                    </span>
-                    <span className={`font-heading font-semibold ${fmt.comingSoon ? 'text-ink/55' : 'text-ink'}`}>{fmt.label}</span>
-                  </div>
-                  <p className="text-xs text-ink/55">{fmt.description}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Subject (for larobok) */}
-          {bookFormat === 'larobok' && (
-            <div>
-              <label className="block text-sm font-semibold text-ink/80 mb-2">
-                Ämne
-              </label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="T.ex. Matematik, Svenska, Naturkunskap..."
-                className="field"
-              />
-            </div>
-          )}
-
-          {/* Target Age */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-2">
-              Målgrupp *
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {AGE_OPTIONS.map((age) => (
-                <button
-                  key={age}
-                  onClick={() => setTargetAge(age)}
-                  className={targetAge === age ? 'chip-on' : 'chip'}
-                >
-                  {age}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Text Density */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-2">
-              Textmängd per sida
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {getDensityOptions().map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setTextDensity(opt.value)}
-                  className={`p-3 rounded-2xl text-center transition-all ${
-                    textDensity === opt.value
-                      ? 'card-glass ring-2 ring-brand bg-brand/5'
-                      : 'card-glass'
-                  }`}
-                >
-                  <div className="font-semibold text-sm text-ink">{opt.label}</div>
-                  <div className="text-xs text-ink/55">{opt.desc}</div>
-                  <div className="text-xs text-ink/45 mt-1">{opt.words}</div>
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-ink/40 mt-2">
-              Styr hur mycket text varje sida får. Anpassat efter valt bokformat ({FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}).
-            </p>
-          </div>
-
-          {/* Characters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-ink/80 mb-2">
-                Antal karaktärer
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={numCharacters}
-                  onChange={(e) => setNumCharacters(parseInt(e.target.value))}
-                  className="flex-1"
-                />
-                <span className="w-8 text-center font-semibold text-ink text-lg">{numCharacters}</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-ink/80 mb-2">
-                Namn på karaktärerna
-                <span className="text-ink/40 font-normal ml-1">(valfritt)</span>
-              </label>
-              <input
-                type="text"
-                value={characterNames}
-                onChange={(e) => setCharacterNames(e.target.value)}
-                placeholder="T.ex. Ella, Max, Saga (kommaseparerat)"
-                className="field py-2 text-sm"
-              />
-              <p className="text-xs text-ink/40 mt-1">Lämna tomt för automatiska namn</p>
-            </div>
-          </div>
-
-          {/* Pages */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-2">
-              Antal sidor
-            </label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {PAGE_PRESETS.map((preset) => (
-                <button
-                  key={preset.pages}
-                  onClick={() => setNumPages(preset.pages)}
-                  className={numPages === preset.pages ? 'chip-on' : 'chip'}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-ink/55">Eget antal:</span>
-              <input
-                type="number"
-                min={8}
-                max={200}
-                step={2}
-                value={numPages}
-                onChange={(e) => setNumPages(parseInt(e.target.value) || 24)}
-                className="field w-20 px-3 py-2 text-center"
-              />
-              <span className="text-sm text-ink/55">sidor</span>
-            </div>
-            <div className="mt-3 rounded-2xl bg-paper border border-line p-3">
-              <p className="text-sm text-ink/65">
-                <span className="font-medium">{contentSpreads()} uppslag + omslag + slutsida</span>
-                {' · '}
-                <span>~{estimatedWords().toLocaleString()} ord</span>
-                {' · '}
-                <span>~{(estimatedWords() * 5.5).toLocaleString()} tecken</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Next button */}
+      {/* Handling */}
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <label htmlFor="plot" className="text-sm font-semibold text-ink/80">Vad handlar boken om?</label>
           <button
-            onClick={() => setCurrentStep(2)}
-            disabled={!title.trim()}
-            className="btn-primary w-full text-lg"
+            type="button"
+            onClick={handleRandomPlot}
+            disabled={busy}
+            className="btn-ghost text-sm py-2"
+            title={plot.trim() && plot !== lastRandom?.plot ? 'Bygger vidare på din text' : 'Hitta på en ny idé'}
           >
-            Nästa: Handling & stil →
+            {randomizing ? <span className="spinner w-4 h-4" /> : <Icon name="casino" size={18} />}
+            Slumpa handling
           </button>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Plot/Story */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-2">
-              Handling / Tema
-            </label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {PLOT_TAGS.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => togglePlotTag(tag)}
-                  className={selectedPlotTags.includes(tag) ? 'chip-on' : 'chip'}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-            <textarea
-              value={plotText}
-              onChange={(e) => setPlotText(e.target.value)}
-              placeholder="Beskriv handlingen fritt... T.ex. 'Fyra barn som går i skolan upptäcker att de har magiska krafter. De måste samarbeta för att stoppa en mystisk skurk.'"
-              className="field h-24 text-sm resize-y"
-            />
-          </div>
-
-          {/* Setting */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-2">
-              Miljö
-            </label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {SETTING_TAGS.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => toggleSettingTag(tag)}
-                  className={selectedSettingTags.includes(tag) ? 'chip-on' : 'chip'}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              value={setting}
-              onChange={(e) => setSetting(e.target.value)}
-              placeholder="Beskriv miljön mer detaljerat... T.ex. 'Liten svensk stad vid kusten, gammal skola från 1800-talet'"
-              className="field py-2 text-sm"
-            />
-          </div>
-
-          {/* Image Style */}
-          <div>
-            <label className="block text-sm font-semibold text-ink/80 mb-1">
-              Stil &amp; bokkoncept
-            </label>
-            <p className="text-xs text-ink/55 mb-3">
-              Stilen styr hur figurerna ritas, bildernas form och typografin i den färdiga boken.
-              Osäker? Prova flera stilar på en textbit via &quot;Stilprovning&quot; i steg 1.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {STYLE_PRESETS.map((style) => {
-                const on = stylePresetId === style.id;
-                return (
-                  <button
-                    key={style.id}
-                    onClick={() => setStylePresetId(style.id)}
-                    className={`flex items-start gap-2.5 p-3 rounded-2xl text-left transition-all ${
-                      on ? 'bg-white ring-2 ring-brand shadow-soft' : 'bg-white ring-1 ring-line hover:ring-ink/20'
-                    }`}
-                  >
-                    <span className={`w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
-                      {on && <Icon name="check" size={18} />}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-ink leading-tight">{style.label}</span>
-                      <span className="block text-xs text-ink/55 mt-0.5 leading-snug">{style.concept}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <label className="block text-xs font-semibold text-ink/65 mt-4 mb-1.5">
-              Egna önskemål om bilderna <span className="font-normal text-ink/40">(valfritt)</span>
-            </label>
-            <textarea
-              value={imageStyle}
-              onChange={(e) => setImageStyle(e.target.value)}
-              placeholder="T.ex. höstiga färger, mycket kvällsljus, Otis har alltid sin gröna mössa..."
-              className="field h-20 text-sm resize-y"
-            />
-          </div>
-
-          {/* Summary */}
-          <div className="rounded-3xl bg-paper border border-line p-5">
-            <h4 className="font-heading text-lg font-semibold text-ink mb-3">Sammanfattning</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm text-ink/80">
-              <div><span className="font-medium">Titel:</span> {title}</div>
-              <div><span className="font-medium">Format:</span> {FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}</div>
-              <div><span className="font-medium">Stil:</span> {STYLE_PRESETS.find(st => st.id === stylePresetId)?.label}</div>
-              <div><span className="font-medium">Sidor:</span> {numPages} ({contentSpreads()} uppslag + omslag + slutsida)</div>
-              <div><span className="font-medium">Karaktärer:</span> {numCharacters}</div>
-              <div><span className="font-medium">Ålder:</span> {targetAge}</div>
-              <div><span className="font-medium">~Ord:</span> {estimatedWords().toLocaleString()}</div>
-            </div>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="note-error">
-              {error}
-            </div>
-          )}
-
-          {/* Progress */}
-          {progress && (
-            <div className="rounded-2xl bg-brand/5 border border-brand/15 p-4 text-brand flex items-center gap-3">
-              <span className="spinner" />
-              {progress}
-            </div>
-          )}
-
-          {/* Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={() => setCurrentStep(1)}
-              disabled={loading}
-              className="btn-ghost disabled:opacity-50"
-            >
-              ← Tillbaka
+        <textarea
+          id="plot"
+          value={plot}
+          onChange={(e) => setPlot(e.target.value)}
+          placeholder="T.ex. Otis hittar en liten drake i mormors vedbod och måste gömma den för hela byn. Eller skriv några ord – ”drakar och vänskap” – och tryck på Slumpa handling."
+          className="field h-28 text-sm resize-y"
+          disabled={writing}
+        />
+        {setting && (
+          <p className="mt-2 flex items-start gap-1.5 text-xs text-ink/55">
+            <Icon name="location_on" size={16} />
+            <span className="flex-1">Miljö: {setting}</span>
+            <button type="button" onClick={() => setSetting('')} className="text-ink/40 hover:text-ink" aria-label="Ta bort miljön">
+              <Icon name="close" size={16} />
             </button>
-            <button
-              onClick={handleGenerate}
-              disabled={loading || !title.trim()}
-              className="btn-action flex-1 text-lg disabled:opacity-50"
-            >
-              {loading ? (
-                <><span className="spinner" /> Skapar boken...</>
-              ) : (
-                <><Icon name="auto_awesome" filled size={20} /> Skapa boken med AI</>
-              )}
-            </button>
-          </div>
+          </p>
+        )}
+      </section>
+
+      {/* Titel */}
+      <section>
+        <label htmlFor="title" className="block text-sm font-semibold text-ink/80 mb-2">
+          Titel <span className="font-normal text-ink/40">(valfritt – AI:n föreslår en annars)</span>
+        </label>
+        <input
+          id="title"
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="T.ex. Draken i vedboden"
+          className="field"
+          disabled={writing}
+        />
+      </section>
+
+      {/* Karaktärer */}
+      <section>
+        <label htmlFor="characters" className="block text-sm font-semibold text-ink/80 mb-1">
+          Karaktärer <span className="font-normal text-ink/40">(valfritt)</span>
+        </label>
+        <p className="text-xs text-ink/55 mb-2">Välj bland dina sparade karaktärer eller beskriv nya. AI:n lägger till fler när berättelsen behöver det.</p>
+        <div className="mb-3">
+          <CharacterLibraryPicker selectedIds={libraryIds} onChange={setLibraryIds} />
         </div>
-      )}
+        <textarea
+          id="characters"
+          value={characterNotes}
+          onChange={(e) => setCharacterNotes(e.target.value)}
+          placeholder="Namn och kort beskrivning, t.ex. Otis 8 år – nyfiken och lite rädd för mörker"
+          className="field h-20 text-sm resize-y"
+          disabled={writing}
+        />
+      </section>
+
+      {/* Ålder - följer boktypen tills författaren väljer själv */}
+      <section>
+        <h3 className="text-sm font-semibold text-ink/80 mb-2">Ålder</h3>
+        <div className="flex flex-wrap gap-2">
+          {AGE_OPTIONS.map((age) => (
+            <button
+              key={age}
+              type="button"
+              onClick={() => setChosenAge(age)}
+              className={targetAge === age ? 'chip-on' : 'chip'}
+            >
+              {age}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Bildönskemål */}
+      <section>
+        <label htmlFor="imageWishes" className="block text-sm font-semibold text-ink/80 mb-2">
+          Egna önskemål om bilderna <span className="font-normal text-ink/40">(valfritt)</span>
+        </label>
+        <textarea
+          id="imageWishes"
+          value={imageWishes}
+          onChange={(e) => setImageWishes(e.target.value)}
+          placeholder="T.ex. höstiga färger, mycket kvällsljus, Otis har alltid sin gröna mössa..."
+          className="field h-20 text-sm resize-y"
+          disabled={writing}
+        />
+      </section>
+
+      {/* Sammanfattning + skriv */}
+      <div className="space-y-3">
+        <p className="rounded-2xl bg-paper border border-line p-3 text-sm text-ink/65">
+          <span className="font-medium text-ink">{preset.label}</span>
+          {' · '}{preset.book.lengthLabel}
+          {' · '}AI skriver först början (ca {beginningWords(preset.book).toLocaleString('sv-SE')} ord) så att du kan prova bilderna
+        </p>
+
+        {error && <div className="note-error">{error}</div>}
+
+        {writing && (
+          <div className="rounded-2xl bg-brand/5 border border-brand/15 p-4 text-brand flex items-center gap-3" role="status">
+            <span className="spinner shrink-0" />
+            <span>
+              {WRITING_STAGES[stage]}
+              <span className="block text-xs text-brand/70 mt-0.5">Det brukar ta 30–60 sekunder.</span>
+            </span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleWrite}
+          disabled={busy || !plot.trim()}
+          className="btn-primary w-full text-lg"
+        >
+          {writing ? (
+            <><span className="spinner" /> Skriver början...</>
+          ) : (
+            <><Icon name="auto_awesome" filled size={20} /> Skriv början av boken</>
+          )}
+        </button>
+        {!plot.trim() && !busy && (
+          <p className="text-xs text-ink/45 text-center">Beskriv handlingen eller tryck på Slumpa handling för att börja.</p>
+        )}
+      </div>
     </div>
   );
 }

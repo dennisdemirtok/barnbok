@@ -1,17 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkCharacterConsistency } from '@/lib/character-check';
-import { Character } from '@/lib/types';
+import { checkCharacterConsistency, reviewPageImage, reviewToCheckResult } from '@/lib/character-check';
+import { Character, Spread, BookFormat, IllustrationShape } from '@/lib/types';
 
-export const maxDuration = 30;
+// Granskning med referensbilder kan ta en stund
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
-    const { generatedImage, characters } = await request.json() as {
+    const { generatedImage, characters, spread, bookFormat, illustrationShape } = await request.json() as {
       generatedImage: string;
       characters: Character[];
+      // Valfritt: med uppslaget granskas bilden mot scenens prompt, format och bildform
+      spread?: Spread;
+      bookFormat?: BookFormat;
+      illustrationShape?: IllustrationShape;
     };
 
-    if (!generatedImage || !characters || characters.length === 0) {
+    if (!generatedImage || !characters) {
+      return NextResponse.json(
+        { error: 'Bild och karaktärer krävs' },
+        { status: 400 }
+      );
+    }
+
+    if (spread) {
+      const review = await reviewPageImage(
+        generatedImage,
+        { spread, characters, bookFormat, shape: illustrationShape },
+        { timeoutMs: 100_000 }
+      );
+      return NextResponse.json(reviewToCheckResult(review));
+    }
+
+    if (characters.length === 0) {
       return NextResponse.json(
         { error: 'Bild och karaktärer krävs' },
         { status: 400 }

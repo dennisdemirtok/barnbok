@@ -54,6 +54,7 @@ export async function POST(request: Request) {
 
     // Set the book format from the config
     book.bookFormat = config.bookFormat;
+    book.targetAge = config.targetAge;
 
     // Stilen som ALL bildgenerering använder (parserns generiska standard får aldrig vinna)
     if (preset) {

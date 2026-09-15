@@ -12,14 +12,22 @@ interface Props {
   bookId?: string;
   bookTitle?: string;
   onCharactersApproved: (characters: Character[]) => void;
+  onCharactersChange?: (characters: Character[]) => void;
   onBack: () => void;
 }
 
-export default function CharacterApproval({ characters, styleGuide, bookId, bookTitle, onCharactersApproved, onBack }: Props) {
+// Grund jämförelse: samma längd och samma objekt-referenser
+const sameCharacters = (a: Character[], b: Character[]) =>
+  a === b || (a.length === b.length && a.every((c, i) => c === b[i]));
+
+export default function CharacterApproval({ characters, styleGuide, bookId, bookTitle, onCharactersApproved, onCharactersChange, onBack }: Props) {
   const [chars, setChars] = useState<Character[]>(characters);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Fel per karaktär (id -> felmeddelande)
+  const [charErrors, setCharErrors] = useState<Record<string, string>>({});
   const abortRef = useRef(false);
+  const autoStartedRef = useRef(false);
 
   const isGenerating = generatingIds.size > 0;
   const BATCH_SIZE = 3;
@@ -33,8 +41,17 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
   // This ensures that if the user goes back to import, re-parses, and comes back,
   // the updated characters are reflected
   useEffect(() => {
-    setChars(characters);
+    // Hoppa över om föräldern bara skickar tillbaka det vi själva rapporterat
+    setChars(prev => (sameCharacters(prev, characters) ? prev : characters));
   }, [characters]);
+
+  // Rapportera varje ändring till föräldern så genererade bilder sparas direkt
+  // (även om användaren laddar om innan "Fortsätt")
+  useEffect(() => {
+    if (sameCharacters(chars, characters)) return;
+    onCharactersChange?.(chars);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chars]);
 
   // Load saved characters on mount
   useEffect(() => {
@@ -56,6 +73,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
 
     setGeneratingIds(prev => new Set(prev).add(charId));
     setError('');
+    clearCharError(charId);
 
     try {
       const res = await fetch('/api/generate-character', {
@@ -75,7 +93,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         c.id === charId ? { ...c, referenceImage: image } : c
       ));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Något gick fel');
+      setCharError(charId, err instanceof Error ? err.message : 'Något gick fel');
     } finally {
       setGeneratingIds(prev => {
         const next = new Set(prev);
@@ -83,6 +101,19 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         return next;
       });
     }
+  };
+
+  const setCharError = (charId: string, message: string) => {
+    setCharErrors(prev => ({ ...prev, [charId]: message }));
+  };
+
+  const clearCharError = (charId: string) => {
+    setCharErrors(prev => {
+      if (!(charId in prev)) return prev;
+      const next = { ...prev };
+      delete next[charId];
+      return next;
+    });
   };
 
   const generateAll = async () => {
@@ -104,6 +135,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         batchIds.forEach(id => next.add(id));
         return next;
       });
+      batchIds.forEach(clearCharError);
 
       try {
         const res = await fetch('/api/generate-character', {
@@ -127,14 +159,18 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
             setChars(prev => prev.map(c =>
               c.id === result.id ? { ...c, referenceImage: result.image } : c
             ));
-          } else if (result.error) {
+          } else {
             console.error(`Karaktär ${result.id} misslyckades:`, result.error);
+            setCharError(result.id, result.error || 'Generering misslyckades');
           }
         }
       } catch (err) {
+        const message = err instanceof Error ? err.message : 'Något gick fel';
         if (!abortRef.current) {
-          setError(err instanceof Error ? err.message : 'Något gick fel');
+          setError(message);
         }
+        // Hela batchen misslyckades – visa felet på varje kort
+        batchIds.forEach(id => setCharError(id, message));
       } finally {
         // Remove this batch from generating set
         setGeneratingIds(prev => {
@@ -150,9 +186,25 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
     abortRef.current = true;
   };
 
+  // Starta generering automatiskt en gång när skärmen öppnas och ingen karaktär har bild än
+  useEffect(() => {
+    if (autoStartedRef.current || chars.length === 0) return;
+    autoStartedRef.current = true;
+    if (!chars.some(c => c.referenceImage) && generatingIds.size === 0) {
+      generateAll();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chars.length]);
+
   const toggleApproval = (charId: string) => {
     setChars(prev => prev.map(c =>
       c.id === charId ? { ...c, approved: !c.approved } : c
+    ));
+  };
+
+  const approveAllWithImage = () => {
+    setChars(prev => prev.map(c =>
+      c.referenceImage && !c.approved ? { ...c, approved: true } : c
     ));
   };
 
@@ -246,6 +298,8 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
   const anyGenerated = chars.some(c => c.referenceImage);
   const approvedCount = chars.filter(c => c.approved && c.referenceImage).length;
   const approvalPct = chars.length ? Math.round((approvedCount / chars.length) * 100) : 0;
+  const unapprovedWithImage = chars.filter(c => c.referenceImage && !c.approved).length;
+  const hasChars = chars.length > 0;
 
   return (
     <div className="space-y-6">
@@ -257,48 +311,61 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
       />
 
       {/* Progress summary */}
-      <div className="glass rounded-3xl p-4 flex items-center gap-4">
-        <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
-          allApproved ? 'bg-emerald-500 text-white shadow-soft' : 'bg-brand/10 text-brand'
-        }`}>
-          <Icon name={allApproved ? 'verified' : 'groups'} filled size={26} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-sm font-semibold text-ink/80">
-              {allApproved
-                ? 'Alla karaktärer godkända – redo att generera sidor!'
-                : `${approvedCount} av ${chars.length} karaktärer godkända`}
-            </p>
-            <span className="text-xs font-semibold text-brand">{approvalPct}%</span>
+      {hasChars && (
+        <div className="glass rounded-3xl p-4 flex items-center gap-4">
+          <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
+            allApproved ? 'bg-emerald-500 text-white shadow-soft' : 'bg-brand/10 text-brand'
+          }`}>
+            <Icon name={allApproved ? 'verified' : 'groups'} filled size={26} />
           </div>
-          <div className="h-2 rounded-full bg-ink/10 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                allApproved ? 'bg-emerald-600' : 'bg-ink'
-              }`}
-              style={{ width: `${approvalPct}%` }}
-            />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-sm font-semibold text-ink/80">
+                {allApproved
+                  ? 'Alla karaktärer godkända – redo att generera sidor!'
+                  : `${approvedCount} av ${chars.length} karaktärer godkända`}
+              </p>
+              <span className="text-xs font-semibold text-brand">{approvalPct}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-ink/10 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  allApproved ? 'bg-emerald-600' : 'bg-ink'
+                }`}
+                style={{ width: `${approvalPct}%` }}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-3">
-        <button
-          onClick={generateAll}
-          disabled={isGenerating}
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          {isGenerating ? (
-            <>
-              <span className="spinner !w-4 !h-4" />
-              {`Genererar ${generatingIds.size} ${generatingIds.size === 1 ? 'bild' : 'bilder'}... (~30 sek/bild)`}
-            </>
-          ) : (
-            <><Icon name="auto_fix_high" filled size={20} /> Generera alla karaktärer</>
-          )}
-        </button>
+        {hasChars && (
+          <button
+            onClick={generateAll}
+            disabled={isGenerating}
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            {isGenerating ? (
+              <>
+                <span className="spinner !w-4 !h-4" />
+                {`Genererar ${generatingIds.size} ${generatingIds.size === 1 ? 'bild' : 'bilder'}... (~30 sek/bild)`}
+              </>
+            ) : (
+              <><Icon name="auto_fix_high" filled size={20} /> Generera alla karaktärer</>
+            )}
+          </button>
+        )}
+        {unapprovedWithImage > 0 && (
+          <button
+            onClick={approveAllWithImage}
+            className="btn-ghost inline-flex items-center gap-2"
+          >
+            <Icon name="done_all" size={20} />
+            Godkänn alla ({unapprovedWithImage})
+          </button>
+        )}
         {isGenerating && (
           <button
             onClick={stopGeneration}
@@ -581,12 +648,38 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                     alt={char.name}
                     className="w-full object-contain max-h-80"
                   />
+                ) : charErrors[char.id] ? (
+                  <div className="flex flex-col items-center justify-center h-48 px-4 text-center">
+                    <Icon name="broken_image" size={28} className="text-red-300 mb-1" />
+                    <p className="text-sm text-red-700 font-medium mb-3 line-clamp-3">{charErrors[char.id]}</p>
+                    <button
+                      onClick={() => generateCharacterImage(char.id)}
+                      disabled={isGenerating}
+                      className="btn-ghost px-4 py-1.5 text-sm"
+                    >
+                      <Icon name="refresh" size={17} /> Försök igen
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-48 text-ink/40">
                     Ingen bild genererad än
                   </div>
                 )}
               </div>
+
+              {/* Fel vid regenerering när en tidigare bild finns kvar */}
+              {char.referenceImage && charErrors[char.id] && !generatingIds.has(char.id) && (
+                <div className="note-error mx-4 mb-3 flex items-center justify-between gap-2">
+                  <span className="min-w-0">{charErrors[char.id]}</span>
+                  <button
+                    onClick={() => generateCharacterImage(char.id)}
+                    disabled={isGenerating}
+                    className="shrink-0 font-semibold underline disabled:opacity-40"
+                  >
+                    Försök igen
+                  </button>
+                </div>
+              )}
 
               {/* Action buttons */}
               <div className="p-4 pt-0 flex gap-2 flex-wrap">
@@ -688,7 +781,25 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         })}
       </div>
 
-      {anyGenerated && (
+      {/* Inga karaktärer – låt användaren gå vidare ändå */}
+      {!hasChars && (
+        <div className="space-y-4">
+          <div className="note-warning flex items-center gap-2">
+            <Icon name="info" size={20} />
+            Inga karaktärer hittades – illustrationerna skapas utan karaktärsreferenser
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={() => onCharactersApproved([])}
+              className="btn-action px-8 py-3 inline-flex items-center gap-2"
+            >
+              Fortsätt till sidgenerering <Icon name="arrow_forward" size={19} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {hasChars && anyGenerated && (
         <div className="flex justify-end">
           <button
             onClick={() => onCharactersApproved(chars)}

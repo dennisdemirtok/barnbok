@@ -1,25 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { regeneratePageImage } from '@/lib/gemini';
-import { generatePageWithQualityCheck } from '@/lib/character-check';
-import { Character, Spread, BookFormat, IllustrationShape } from '@/lib/types';
+import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from '@/lib/character-check';
+import { Character, Spread, BookFormat, IllustrationShape, SpreadQualityCheck } from '@/lib/types';
 
 // Den färdiga boken genereras i tryckupplösning
 const BOOK_IMAGE_SIZE = '2K' as const;
 
-// Generering + kvalitetskontroll + ev. auto-regenerering kan ta ett par minuter
+// Generera → granska → rätta (max 3 bilder + 3 granskningar per uppslag).
+// Loopen slutar starta nya försök vid DEFAULT_QUALITY_BUDGET_MS (250 s) så att svaret hinner ut.
 export const maxDuration = 300;
+
+// Batchen kör så här många uppslag parallellt - alla delar samma tidsbudget
+const CONCURRENCY = 3;
+// Ett uppslag som inte hunnit starta när mindre än så här återstår lämnas till nästa anrop
+const MIN_TIME_TO_START_SPREAD_MS = 90_000;
 
 // Batch endpoint: accepts multiple spreads
 export async function POST(request: NextRequest) {
+  const requestStart = Date.now();
   try {
     const body = await request.json();
 
     // Support both single and batch requests
     if (body.batch && Array.isArray(body.spreads)) {
-      return handleBatch(body);
+      return handleBatch(body, requestStart);
     }
 
-    return handleSingle(body);
+    return handleSingle(body, requestStart);
   } catch (error) {
     console.error('Page generation error:', error);
     const message = error instanceof Error ? error.message : 'Okänt fel';
@@ -39,7 +46,7 @@ async function handleSingle(body: {
   illustrationShape?: IllustrationShape;
   customInstructions?: string;
   isRegenerate?: boolean;
-}) {
+}, requestStart: number) {
   const { spread, characters, styleGuide, bookFormat, illustrationShape, customInstructions, isRegenerate } = body;
   const options = { shape: illustrationShape, imageSize: BOOK_IMAGE_SIZE };
 
@@ -59,11 +66,14 @@ async function handleSingle(body: {
   }
 
   const result = await generatePageWithQualityCheck(
-    spread, characters, styleGuide || '', bookFormat, options
+    spread, characters, styleGuide || '', bookFormat, options,
+    { deadline: requestStart + DEFAULT_QUALITY_BUDGET_MS }
   );
   return NextResponse.json({
     image: result.image,
     check: result.check,
+    qualityCheck: result.qualityCheck,
+    attempts: result.attempts,
     autoFixed: result.autoFixed,
   });
 }
@@ -75,9 +85,10 @@ async function handleBatch(body: {
   styleGuide: string;
   bookFormat?: BookFormat;
   illustrationShape?: IllustrationShape;
-}) {
+}, requestStart: number) {
   const { spreads, characters, styleGuide, bookFormat, illustrationShape } = body;
   const options = { shape: illustrationShape, imageSize: BOOK_IMAGE_SIZE };
+  const deadline = requestStart + DEFAULT_QUALITY_BUDGET_MS;
 
   if (!spreads || spreads.length === 0 || !characters) {
     return NextResponse.json(
@@ -86,13 +97,13 @@ async function handleBatch(body: {
     );
   }
 
-  // Process up to 3 at a time with staggered starts
-  const CONCURRENCY = 3;
   const results: Array<{
     id: string;
     image?: string;
     error?: string;
     check?: unknown;
+    qualityCheck?: SpreadQualityCheck;
+    attempts?: number;
     autoFixed?: boolean;
   }> = [];
 
@@ -105,14 +116,22 @@ async function handleBatch(body: {
         await new Promise(r => setTimeout(r, idx * 1500));
       }
 
+      // Fler uppslag än CONCURRENCY i samma anrop: starta inte ett nytt uppslag som
+      // inte hinner bli klart - annars slår hela anropet i maxDuration och alla bilder förloras
+      if (deadline - Date.now() < MIN_TIME_TO_START_SPREAD_MS) {
+        return { id: spread.id, error: 'Hann inte genereras i denna omgång - generera igen' };
+      }
+
       try {
         const result = await generatePageWithQualityCheck(
-          spread, characters, styleGuide || '', bookFormat, options
+          spread, characters, styleGuide || '', bookFormat, options, { deadline }
         );
         return {
           id: spread.id,
           image: result.image,
           check: result.check,
+          qualityCheck: result.qualityCheck,
+          attempts: result.attempts,
           autoFixed: result.autoFixed,
         };
       } catch (err) {
@@ -123,13 +142,13 @@ async function handleBatch(body: {
 
     const chunkResults = await Promise.allSettled(promises);
 
-    for (const result of chunkResults) {
+    chunkResults.forEach((result, idx) => {
       if (result.status === 'fulfilled') {
         results.push(result.value);
       } else {
-        results.push({ id: 'unknown', error: String(result.reason) });
+        results.push({ id: chunk[idx].id, error: String(result.reason) });
       }
-    }
+    });
   }
 
   return NextResponse.json({ results });

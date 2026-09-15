@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { BookProject, Spread } from '@/lib/types';
+import { BookProject, Spread, SpreadQualityCheck } from '@/lib/types';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { resolveBookShape } from '@/lib/book-layout';
@@ -16,7 +16,12 @@ interface Props {
 }
 
 export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgress, onBack }: Props) {
-  const [spreads, setSpreads] = useState<Spread[]>(book.spreads);
+  // Uppslag som sparats mitt i en generering (t.ex. vid omladdning) har ingen
+  // pågående förfrågan längre – återställ dem till 'pending' så de inte snurrar för evigt
+  const [spreads, setSpreads] = useState<Spread[]>(() =>
+    book.spreads.map(s => (s.status === 'generating' ? { ...s, status: 'pending' as const } : s))
+  );
+  const autoStartedRef = useRef(false);
 
   // Push every spread update to the parent so generated images are auto-saved
   // even if the user never clicks "Granska boken"
@@ -35,14 +40,16 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
   const generatingCount = spreads.filter(s => s.status === 'generating').length;
   const progress = totalSpreads > 0 ? (completedSpreads / totalSpreads) * 100 : 0;
 
-  const canProceedToReview = completedSpreads > 0 && !isGenerating && pendingCount === 0;
+  // Går att granska även efter "Stoppa" – saknade sidor kan regenereras i granskningen
+  const canProceedToReview = completedSpreads > 0 && !isGenerating;
   const allDone = completedSpreads === totalSpreads;
+  const missingCount = pendingCount + failedCount;
   // Helsidesbilder visas stående i ett tätare rutnät, uppslag liggande
   const portrait = resolveBookShape(book) === 'page';
 
-  // Rough time estimate: ~45s per batch of 3 (generation + quality check + possible auto-fix)
+  // Grov tidsuppskattning: bild + granskning, ibland ett par rättningsförsök - ca 1,5 min per omgång om 3
   const remainingSpreads = pendingCount + generatingCount;
-  const estimatedMinutes = Math.max(1, Math.ceil((Math.ceil(remainingSpreads / BATCH_SIZE) * 45) / 60));
+  const estimatedMinutes = Math.max(1, Math.ceil((Math.ceil(remainingSpreads / BATCH_SIZE) * 90) / 60));
 
   const generateAllPages = async () => {
     setIsGenerating(true);
@@ -87,8 +94,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
             id: string;
             image?: string;
             error?: string;
-            check?: { passed: boolean; summary: string; issues?: { character: string; issue: string; severity: 'minor' | 'major' }[] };
-            autoFixed?: boolean;
+            qualityCheck?: SpreadQualityCheck;
           }>;
         };
 
@@ -103,12 +109,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               generatedImage: result.image,
               status: 'done' as const,
               error: undefined,
-              qualityCheck: result.check ? {
-                passed: result.check.passed,
-                summary: result.check.summary,
-                issues: result.check.issues,
-                autoFixed: !!result.autoFixed,
-              } : undefined,
+              qualityCheck: result.qualityCheck,
             };
           } else {
             return { ...s, status: 'error' as const, error: result.error || 'Okänt fel' };
@@ -131,6 +132,27 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
   const stopGeneration = () => {
     abortRef.current = true;
   };
+
+  // Starta automatiskt en gång för en helt ny bok (alla uppslag väntar)
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    if (spreads.length > 0 && spreads.every(s => s.status === 'pending')) {
+      generateAllPages();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Varna innan användaren lämnar sidan medan bilder genereras
+  useEffect(() => {
+    if (!isGenerating) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isGenerating]);
 
   const retryFailed = async () => {
     setSpreads(prev => prev.map(s =>
@@ -166,7 +188,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         throw new Error(data.error || 'Generering misslyckades');
       }
 
-      const { image, check, autoFixed } = await res.json();
+      const { image, qualityCheck } = await res.json() as { image: string; qualityCheck?: SpreadQualityCheck };
 
       setSpreads(prev => prev.map(s =>
         s.id === spreadId
@@ -175,12 +197,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               generatedImage: image,
               status: 'done' as const,
               error: undefined,
-              qualityCheck: check ? {
-                passed: check.passed,
-                summary: check.summary,
-                issues: check.issues,
-                autoFixed: !!autoFixed,
-              } : undefined,
+              qualityCheck,
             }
           : s
       ));
@@ -290,16 +307,19 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
             <button onClick={() => onPagesGenerated(spreads)} className="btn-action">
               {allDone
                 ? <>Granska boken <Icon name="arrow_forward" size={19} /></>
-                : `Granska boken (${failedCount} saknas)`}
+                : `Granska boken (${missingCount} saknas)`}
             </button>
           )}
         </div>
       </div>
 
-      {canProceedToReview && !allDone && (
+      {canProceedToReview && !allDone && missingCount > 0 && (
         <div className="note-warning">
-          <strong>{failedCount} sidor</strong> kunde inte genereras. Du kan fortsätta till granskning ändå
-          - misslyckade sidor visas som tomma och kan regenereras därifrån.
+          <strong>{missingCount} {missingCount === 1 ? 'sida' : 'sidor'}</strong> saknar bild
+          {failedCount > 0 && pendingCount > 0
+            ? ` (${failedCount} misslyckades, ${pendingCount} ej genererade)`
+            : failedCount > 0 ? ' (kunde inte genereras)' : ' (ej genererade än)'}
+          . Du kan fortsätta till granskning ändå - sidor utan bild visas som tomma och kan regenereras därifrån.
         </div>
       )}
 
@@ -372,18 +392,33 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                 <p className="text-xs text-ink/55 mt-1">{spread.chapter}</p>
               )}
               {spread.status === 'done' && spread.qualityCheck && (
-                <p className={`text-xs mt-1 ${
-                  spread.qualityCheck.passed ? 'text-emerald-600' : 'text-amber-600'
-                }`}>
-                  {spread.qualityCheck.passed
-                    ? `✓ Kvalitetskontrollerad${spread.qualityCheck.autoFixed ? ' (auto-förbättrad)' : ''}`
-                    : '⚠ Granska manuellt - kontrollen hittade avvikelser'}
-                </p>
+                <QualityNote check={spread.qualityCheck} />
               )}
             </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Resultatet av den automatiska granskningen: godkänd, rättad eller behöver ses över
+function QualityNote({ check }: { check: SpreadQualityCheck }) {
+  const unreviewed = check.reviewed === false;
+  const tone = unreviewed ? 'text-ink/45' : check.passed ? 'text-emerald-700' : 'text-amber-700';
+  const icon = unreviewed ? 'help' : check.passed ? 'verified' : 'report';
+  const majors = (check.issues ?? []).filter(i => i.severity === 'major');
+  return (
+    <div className={`text-xs mt-1.5 ${tone}`}>
+      <p className="flex items-start gap-1">
+        <Icon name={icon} filled size={14} className="mt-px shrink-0" />
+        <span>{unreviewed ? 'Kunde inte granskas automatiskt – titta på bilden' : check.summary}</span>
+      </p>
+      {!check.passed && !unreviewed && majors.length > 0 && (
+        <ul className="mt-1 ml-5 list-disc text-ink/55 space-y-0.5">
+          {majors.slice(0, 3).map((i, n) => <li key={n}>{i.issue}</li>)}
+        </ul>
+      )}
     </div>
   );
 }

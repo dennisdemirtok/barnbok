@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { BookFormat } from './types';
+import type { BookConcept, StylePreset } from './styles';
 
 export type TextDensity = 'minimal' | 'lite' | 'medium' | 'mycket';
 
@@ -294,72 +295,116 @@ async function withModelFallback<T>(model: string, run: (model: string) => Promi
 //  Stilprovning: dela upp en textbit i scener
 // ═══════════════════════════════════════════
 
+export interface StyleTestCharacter {
+  name: string;
+  age: string;
+  role: 'main' | 'supporting';
+  appearance: string;
+  normalClothes: string;
+  personality: string;
+}
+
+export interface StyleTestScene {
+  label: string;
+  text: string;
+  imagePrompt: string;
+}
+
 export interface StyleTestPlan {
   title: string;
-  characters: {
-    name: string;
-    age: string;
-    role: 'main' | 'supporting';
-    appearance: string;
-    normalClothes: string;
-    personality: string;
-  }[];
+  characters: StyleTestCharacter[];
   coverPrompt: string;
-  scenes: {
-    label: string;
-    text: string;
-    imagePrompt: string;
-  }[];
+  // Äldre provningar har en gemensam uppdelning; nya har en per stil
+  scenes: StyleTestScene[];
+  scenesByStyle?: Record<string, StyleTestScene[]>;
 }
+
+// En uppdelning av manusets början: stycke 1..lastParagraph i `count` delar
+export interface StyleTestSplitRequest {
+  key: string;
+  lastParagraph: number;
+  count: number;
+}
+
+export interface StyleTestRawPlan {
+  title: string;
+  characters: StyleTestCharacter[];
+  coverPrompt: string;
+  splits: { key: string; scenes: { startParagraph: number; label: string; imagePrompt: string }[] }[];
+}
+
+const CHARACTERS_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['name', 'age', 'role', 'appearance', 'normalClothes', 'personality'],
+    properties: {
+      name: { type: 'string' },
+      age: { type: 'string' },
+      role: { type: 'string', enum: ['main', 'supporting'] },
+      appearance: { type: 'string' },
+      normalClothes: { type: 'string' },
+      personality: { type: 'string' },
+    },
+  },
+};
 
 const STYLE_TEST_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['title', 'characters', 'coverPrompt', 'scenes'],
+  required: ['title', 'characters', 'coverPrompt', 'splits'],
   properties: {
     title: { type: 'string' },
-    characters: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['name', 'age', 'role', 'appearance', 'normalClothes', 'personality'],
-        properties: {
-          name: { type: 'string' },
-          age: { type: 'string' },
-          role: { type: 'string', enum: ['main', 'supporting'] },
-          appearance: { type: 'string' },
-          normalClothes: { type: 'string' },
-          personality: { type: 'string' },
-        },
-      },
-    },
+    characters: CHARACTERS_SCHEMA,
     coverPrompt: { type: 'string' },
-    scenes: {
+    splits: {
       type: 'array',
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['label', 'text', 'imagePrompt'],
+        required: ['key', 'scenes'],
         properties: {
-          label: { type: 'string' },
-          text: { type: 'string' },
-          imagePrompt: { type: 'string' },
+          key: { type: 'string' },
+          scenes: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['startParagraph', 'label', 'imagePrompt'],
+              properties: {
+                startParagraph: { type: 'integer' },
+                label: { type: 'string' },
+                imagePrompt: { type: 'string' },
+              },
+            },
+          },
         },
       },
     },
   },
 };
 
-export async function planStyleTest(rawText: string, numScenes: number, title?: string): Promise<StyleTestPlan> {
+// Stilprovning: olika bokkoncept har olika mycket text per bild, så början av
+// manuset delas upp en gång per koncept. Claude anger bara styckenummer - texten
+// plockas ordagrant på servern.
+export async function planStyleTest(
+  paragraphs: string[],
+  splits: StyleTestSplitRequest[],
+  title?: string
+): Promise<StyleTestRawPlan> {
   const client = getClient();
   const model = await resolveLatestModel(client);
+  const numbered = paragraphs.map((p, i) => `[${i + 1}] ${p}`).join('\n');
+  const splitLines = splits
+    .map(sp => `   - key "${sp.key}": stycke 1-${sp.lastParagraph} i EXAKT ${sp.count} ${sp.count === 1 ? 'del' : 'delar'}`)
+    .join('\n');
 
   const prompt = `Du hjälper en barnboksförfattare att prova olika illustrationsstilar på början av sitt manus, innan hela boken skapas.
 
-MANUS (början av boken):
+MANUS (början, numrerade stycken):
 """
-${rawText}
+${numbered}
 """
 
 ${title ? `Författarens titel: "${title}"` : 'Ingen titel angiven - föreslå en kort, lockande titel på svenska utifrån texten.'}
@@ -367,15 +412,16 @@ ${title ? `Författarens titel: "${title}"` : 'Ingen titel angiven - föreslå e
 UPPGIFT:
 1. KARAKTÄRER: Lista alla namngivna figurer som syns i texten. Om utseendet inte beskrivs, hitta på ett konkret, konsekvent utseende som passar texten (ålder, hår, ögon, kroppsbyggnad, kläder). Använd det som faktiskt står i texten när det finns.
 2. OMSLAG: Skriv en bildprompt på ENGELSKA för bokens framsida som fångar stämningen och visar huvudkaraktärerna. Instruera att titeln ska stå som stor titeltext på svenska.
-3. SCENER: Dela upp HELA manuset i EXAKT ${numScenes} på varandra följande delar i ordning, så att varje del täcker en sammanhängande bit av berättelsen och alla delar tillsammans täcker all text. För varje del:
+3. UPPDELNINGAR: Olika boktyper har olika mycket text per bild. Gör följande uppdelningar av manusets början:
+${splitLines}
+   Varje del täcker en sammanhängande bit i ordning. Ange för varje del:
+   - startParagraph: styckenumret där delen börjar (första delen börjar på 1, stigande ordning)
    - label: kort svensk rubrik för scenen (t.ex. "Drömmen i skogen")
-   - text: delens text ORDAGRANT som den står i manuset (ändra inga ord, behåll radbrytningar och repliker)
-   - imagePrompt: detaljerad bildprompt på ENGELSKA för det mest bildstarka ögonblicket i delen. Beskriv komposition, miljö, ljus och stämning. Skriv in varje närvarande karaktärs fullständiga utseende i prompten (namn + hår, ögon, kläder) så att figurerna blir likadana på alla bilder.
+   - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick. Beskriv komposition, miljö, ljus och stämning. Skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder) så att figurerna blir likadana på alla bilder.
 
 Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget).`;
 
   return withModelFallback(model, async (m) => {
-    // Strömmar - ordagrann text + tänkande kan bli långt och skulle annars slå i timeout
     const stream = client.messages.stream({
       model: m,
       max_tokens: 32000,
@@ -397,7 +443,99 @@ Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. D
     if (!textBlock || textBlock.type !== 'text') {
       throw new Error('Inget svar från Claude');
     }
-    return JSON.parse(textBlock.text) as StyleTestPlan;
+    return JSON.parse(textBlock.text) as StyleTestRawPlan;
+  });
+}
+
+// ═══════════════════════════════════════════
+//  Eget manus: planera en hel bok ur fri text
+// ═══════════════════════════════════════════
+
+export interface ManuscriptPlan {
+  title: string;
+  characters: StyleTestCharacter[];
+  coverPrompt: string;
+  // Varje uppslag börjar vid ett styckenummer (1-baserat) och sträcker sig till nästa
+  spreads: { startParagraph: number; imagePrompt: string }[];
+}
+
+const MANUSCRIPT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'characters', 'coverPrompt', 'spreads'],
+  properties: {
+    title: { type: 'string' },
+    characters: CHARACTERS_SCHEMA,
+    coverPrompt: { type: 'string' },
+    spreads: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['startParagraph', 'imagePrompt'],
+        properties: {
+          startParagraph: { type: 'integer' },
+          imagePrompt: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+export async function planManuscript(
+  paragraphs: string[],
+  options: { bookFormat: 'bildbok-separat-text' | 'kapitelbok'; title?: string; minSpreads: number; maxSpreads: number }
+): Promise<ManuscriptPlan> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+  const numbered = paragraphs.map((p, i) => `[${i + 1}] ${p}`).join('\n');
+  const isChapterBook = options.bookFormat === 'kapitelbok';
+
+  // Claude returnerar bara var uppslagen börjar - texten plockas ordagrant ur
+  // manuset på servern, så inga ord kan ändras eller tappas
+  const prompt = `Du är redaktör på ett barnboksförlag och ska göra en illustrerad ${isChapterBook ? 'kapitelbok' : 'bilderbok'} av ett färdigt manus. Texten får inte ändras.
+
+MANUS - numrerade stycken:
+"""
+${numbered}
+"""
+
+${options.title ? `Författarens titel: "${options.title}"` : 'Ingen titel angiven - föreslå en kort, lockande titel på svenska utifrån texten.'}
+
+UPPGIFT:
+1. KARAKTÄRER: Lista alla namngivna figurer som återkommer. Använd utseendet som står i texten; där det saknas, hitta på ett konkret och konsekvent utseende som passar (ålder, hår, ögon, kroppsbyggnad, kläder).
+2. OMSLAG: Bildprompt på ENGELSKA för framsidan som fångar bokens stämning och visar huvudkaraktärerna. Titeln ska stå som stor titeltext på svenska.
+3. UPPSLAG: Dela upp HELA manuset i ${options.minSpreads}-${options.maxSpreads} på varandra följande delar. Ange för varje del vilket stycke den börjar på (startParagraph). Första delen börjar på stycke 1 och delarna ska komma i stigande ordning.
+${isChapterBook
+    ? '   - Kapitelbok: varje del får EN illustration. Lägg gränserna vid naturliga scenbyten och låt en kapitelrubrik alltid inleda en ny del. Delarna får gärna vara olika långa.'
+    : '   - Bilderbok: varje del blir ett uppslag med en bild. Håll delarna ungefär lika långa och bryt vid naturliga bildmoment.'}
+   - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick. Beskriv motiv, komposition, miljö, ljus och stämning, och skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder).
+
+Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget).`;
+
+  return withModelFallback(model, async (m) => {
+    const stream = client.messages.stream({
+      model: m,
+      max_tokens: 32000,
+      output_config: {
+        effort: 'medium',
+        format: { type: 'json_schema', schema: MANUSCRIPT_SCHEMA },
+      },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const message = await stream.finalMessage();
+
+    if (message.stop_reason === 'refusal') {
+      throw new Error('Claude avböjde att bearbeta manuset');
+    }
+    if (message.stop_reason === 'max_tokens') {
+      throw new Error('Manuset är för långt för att bearbetas i ett steg - dela upp det i flera böcker');
+    }
+    const textBlock = message.content.find(c => c.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+      throw new Error('Inget svar från Claude');
+    }
+    return JSON.parse(textBlock.text) as ManuscriptPlan;
   });
 }
 
@@ -415,4 +553,453 @@ async function generate(client: Anthropic, model: string, prompt: string) {
     ],
   });
   return stream.finalMessage();
+}
+
+// ═══════════════════════════════════════════
+//  Skriv med AI: slumpa handling, skriv början, skriv resten
+// ═══════════════════════════════════════════
+
+// Skrivstil från analyserade referensböcker (hämtas i API-routen)
+export interface WritingStyleRef {
+  textStyleNotes?: string;
+  languageExamples?: string[];
+}
+
+export interface PlotSuggestion {
+  title: string;
+  plot: string;
+  setting: string;
+}
+
+export interface BeginningInput {
+  preset: StylePreset;
+  targetAge: string;
+  title?: string;
+  plot: string;
+  setting?: string;
+  characterNotes?: string;
+  characters?: { name: string; appearance?: string; personality?: string }[];
+  style?: WritingStyleRef;
+}
+
+export interface BookBeginning {
+  title: string;
+  outline: string;
+  rawText: string;
+}
+
+export interface ContinueInput {
+  preset: StylePreset;
+  targetAge: string;
+  title: string;
+  outline: string;
+  rawText: string;
+  style?: WritingStyleRef;
+}
+
+// Början = ungefär fyra illustrerade sidor, aldrig mer än hela boken.
+// Samma formel finns i BookCreator (klienten får inte importera den här filen).
+export function beginningWordTarget(book: BookConcept): number {
+  return Math.min(book.targetWords, book.wordsPerImage * 4);
+}
+
+export function countWords(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+// Idéfrön som slumpas in i prompten så att upprepade klick ger olika förslag
+const PLOT_SEEDS = {
+  themes: [
+    'vänskap som sätts på prov', 'att våga säga ifrån', 'en hemlighet som växer', 'att flytta till ett nytt ställe',
+    'ett nytt syskon', 'att vilja vara bäst', 'något viktigt som försvinner', 'avundsjuka', 'mod fast man är rädd',
+    'att hitta hem igen', 'en orättvisa som måste rättas till', 'att inte passa in', 'ett löfte som är svårt att hålla',
+    'en tävling som går överstyr', 'ett stort missförstånd', 'att ta hand om någon', 'en omöjlig uppgift',
+  ],
+  places: [
+    'en kolonilott', 'hustaken i en storstad', 'en ö i skärgården', 'en fjällstuga i snöstorm', 'skolan efter stängning',
+    'ett museum en natt', 'ett nattåg genom Sverige', 'en campingplats i regn', 'ett gammalt bibliotek', 'en loppmarknad',
+    'en mörk granskog', 'ett höghus med en knarrig hiss', 'ett badhus', 'en bondgård', 'en fyr', 'en tivolikväll',
+    'grannens förvildade trädgård', 'en båt på en insjö',
+  ],
+  sparks: [
+    'ett djur som kan prata men bara med ett barn', 'en gammal karta', 'en nyckel som inte passar någonstans', 'en konstig ny granne',
+    'ett paket med fel adress', 'en borttappad hund', 'ett spöke som är mörkrädd', 'en hemmabyggd robot', 'ett gammalt fotografi',
+    'mellanmål som försvinner spårlöst', 'en penna som ritar saker som blir verkliga', 'en drake stor som en katt',
+    'ett mystiskt ljud i väggen', 'en flaskpost', 'ett ägg som ingen vet vad det kommer från', 'en mormor med ett hemligt förflutet',
+    'ett snöfall mitt i sommaren',
+  ],
+  tones: ['busig och rolig', 'varm och mysig', 'spännande', 'lite läskig men trygg', 'tokig och absurd', 'stillsam och poetisk'],
+};
+
+function pickOne<T>(list: T[]): T {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+const PLOT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'plot', 'setting'],
+  properties: {
+    title: { type: 'string' },
+    plot: { type: 'string' },
+    setting: { type: 'string' },
+  },
+};
+
+export async function suggestRandomPlot(preset: StylePreset, targetAge: string, hint?: string): Promise<PlotSuggestion> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+  const isChapterBook = preset.book.format === 'kapitelbok';
+  const seeds = `Tema: ${pickOne(PLOT_SEEDS.themes)}
+Miljö: ${pickOne(PLOT_SEEDS.places)}
+Gnista: ${pickOne(PLOT_SEEDS.sparks)}
+Tonläge: ${pickOne(PLOT_SEEDS.tones)}
+Slumptal: ${Math.floor(Math.random() * 100000)}`;
+
+  const prompt = `Du är en prisbelönt svensk barnboksförfattare. Hitta på en ny, originell idé till en ${isChapterBook ? 'kapitelbok' : 'bilderbok'} på svenska.
+
+BOKTYP: ${preset.label} – ${preset.concept}
+LÄNGD: ca ${preset.book.targetWords} ord (${preset.book.lengthLabel})
+MÅLÅLDER: ${targetAge}
+${hint ? `
+FÖRFATTARENS IDÉ (bygg vidare på den, den går före allt annat): ${hint}
+` : ''}
+SLUMPADE IDÉFRÖN (${hint ? 'bara krydda - använd det som passar författarens idé' : 'utgå från dessa'}; byt tonläge om det krockar med boktypen):
+${seeds}
+
+Svara med:
+- title: kort, lockande svensk titel
+- plot: 2-4 meningar om vad boken handlar om - huvudperson med namn och ålder, vad hen vill eller måste lösa, vad som står i vägen och en antydan om vändningen (avslöja inte slutet). Handlingen ska räcka till bokens längd${isChapterBook ? ' och bära flera kapitel' : ' och vara enkel nog för en bilderbok'}.
+- setting: en kort mening om miljön
+
+Undvik klyschor och det förutsägbara. Anpassa innehållet till målåldern.`;
+
+  return withModelFallback(model, async (m) => {
+    const message = await client.messages.create({
+      model: m,
+      max_tokens: 1500,
+      output_config: {
+        effort: 'low',
+        format: { type: 'json_schema', schema: PLOT_SCHEMA },
+      },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    if (message.stop_reason === 'refusal') {
+      throw new Error('Claude avböjde att föreslå en handling - prova en annan idé');
+    }
+    const textBlock = message.content.find(c => c.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+      throw new Error('Inget svar från Claude');
+    }
+    return JSON.parse(textBlock.text) as PlotSuggestion;
+  });
+}
+
+// Skrivstilsblock - samma formulering som i generateBookContent
+function writingStyleBlock(style?: WritingStyleRef): string {
+  let block = '';
+  if (style?.textStyleNotes) {
+    block += `
+SKRIVSTIL (baserad på analys av professionella barnböcker i samma genre - följ denna noga):
+${style.textStyleNotes}
+`;
+  }
+  if (style?.languageExamples && style.languageExamples.length > 0) {
+    block += `
+SPRÅKLIGA FÖREBILDER - så här låter en professionell bok i denna stil. Studera meningsrytmen, ordvalet, dialogtonen och hur naturligt det flyter. Skriv DIN text med samma känsla och naturlighet - men HITTA PÅ helt egen text. Kopiera ALDRIG dessa meningar, fraser eller handlingen, använd dem bara för att förstå rösten:
+${style.languageExamples.map(ex => `• "${ex}"`).join('\n')}
+`;
+  }
+  return block;
+}
+
+function proseRules(targetAge: string): string {
+  return `SKRIVREGLER:
+1. Skriv levande, idiomatisk SVENSKA som passar ${targetAge}.
+2. Gör berättelsen engagerande och åldersanpassad med en tydlig dramaturgi: en huvudperson som vill något eller har ett problem, hinder som växer och ett avslut där huvudpersonen själv gör något avgörande.
+3. Visa hellre än berätta: konkreta detaljer man kan se, höra och känna. Känslor syns i handlingar och repliker.
+4. Variera meningsrytmen. Repliker ska låta som riktiga barn och vuxna pratar.
+5. Undvik stolpig, mekanisk eller "AI-aktig" text: inga klyschor ("plötsligt" om och om igen, "ett äventyr de aldrig skulle glömma"), inga uppräkningar av känslor, ingen pekpinne eller sammanfattande moral.
+6. Alla namngivna figurer ska vara konsekventa genom hela boken (namn, ålder, utseende, sätt att prata).`;
+}
+
+function manuscriptFormatRules(isChapterBook: boolean): string {
+  return `MANUSFORMAT (viktigt - texten sätts automatiskt i boken):
+- Ren löptext med ett stycke per rad.
+${isChapterBook
+    ? '- Kapitelrubriker på en egen rad i formen "Kapitel 1 – Titel" (eller "Prolog"), med en tom rad före rubriken.'
+    : '- Inga kapitel eller rubriker - berättelsen flödar sammanhängande. Skriv ALDRIG ordet Kapitel.'}
+- Repliker står i egna stycken som börjar med talstreck och mellanslag, t.ex. "– Kom hit! ropade Otis." Använd aldrig citattecken för repliker.
+- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, * eller **).`;
+}
+
+// Städar bort markdown och fel talstreck så att manuset följer formatet
+function normalizeManuscript(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter(line => !/^\s*```/.test(line))
+    .map(line => line
+      .replace(/^\s*#{1,6}\s*/, '')
+      .replace(/\*\*|__/g, '')
+      .replace(/^\s*[-—―]\s+/, '– ')
+      .trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function outlineUnits(book: BookConcept): string {
+  if (book.format === 'kapitelbok') {
+    const chapters = Math.min(15, Math.max(4, Math.round(book.targetWords / 600)));
+    return `${chapters} kapitel (ca ${Math.round(book.targetWords / chapters / 50) * 50} ord per kapitel)`;
+  }
+  const scenes = Math.max(6, Math.round(book.targetWords / book.wordsPerImage));
+  return `${scenes} scener/bildmoment (ca ${book.wordsPerImage} ord per bild)`;
+}
+
+const BEGINNING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'outline', 'beginning'],
+  properties: {
+    title: { type: 'string' },
+    outline: { type: 'string' },
+    beginning: { type: 'string' },
+  },
+};
+
+export async function writeBookBeginning(input: BeginningInput): Promise<BookBeginning> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+  const { preset, targetAge } = input;
+  const book = preset.book;
+  const isChapterBook = book.format === 'kapitelbok';
+  const beginningWords = beginningWordTarget(book);
+
+  const characterLines = [
+    ...(input.characters ?? [])
+      .filter(c => c.name?.trim())
+      .map(c => `- ${c.name}${c.appearance ? ` – utseende: ${c.appearance}` : ''}${c.personality ? ` – personlighet: ${c.personality}` : ''}`),
+    ...(input.characterNotes?.trim() ? [input.characterNotes.trim()] : []),
+  ];
+
+  const prompt = `Du är en erfaren svensk barnboksförfattare. Du ska skriva en ${isChapterBook ? 'kapitelbok' : 'bilderbok'} på SVENSKA - men i det här steget bara planera hela boken och skriva BÖRJAN, så att författaren kan läsa texten och prova illustrationerna innan resten skrivs.
+
+BOKTYP: ${preset.label} – ${preset.concept}
+MÅLÅLDER: ${targetAge}
+HELA BOKENS LÄNGD: ca ${book.targetWords} ord (${book.lengthLabel}), ungefär ${book.wordsPerImage} ord text per illustration
+${input.title?.trim() ? `TITEL: "${input.title.trim()}"` : 'TITEL: ingen angiven - hitta på en kort, lockande svensk titel'}
+
+HANDLING: ${input.plot}
+${input.setting?.trim() ? `MILJÖ: ${input.setting.trim()}\n` : ''}
+KARAKTÄRER:
+${characterLines.length > 0
+    ? `${characterLines.join('\n')}\nAnvänd dessa figurer som de beskrivs. Lägg till fler figurer bara om berättelsen behöver dem.`
+    : 'Inga angivna - skapa de figurer berättelsen behöver, med svenska namn.'}
+${writingStyleBlock(input.style)}
+UPPGIFT:
+1. title: bokens titel${input.title?.trim() ? ' (använd författarens titel oförändrad)' : ''}.
+2. outline: en kort disposition för HELA boken som ren text (ingen markdown), så att resten kan skrivas senare utan att tappa tråden:
+   - Först raden "Karaktärer:" följd av en rad per namngiven figur: "– Namn, ålder – roll, utseende i några ord, personlighet".
+   - Sedan raden "${isChapterBook ? 'Kapitel:' : 'Handling:'}" följd av ${outlineUnits(book)}, en rad var: ${isChapterBook ? '"Kapitel 1 – Titel: vad som händer i 1-2 meningar"' : '"1. vad som händer i 1-2 meningar"'}.
+   - Planera en hel spänningskurva med ett tydligt, tillfredsställande slut.
+3. beginning: BARA bokens början, ca ${beginningWords} ord (håll dig nära den längden). Börja med en fångande öppning, presentera huvudpersonen och sätt igång handlingen. Sluta vid ett naturligt avbrott efter en scen - skriv INTE vidare i handlingen och avsluta inte berättelsen.
+
+${manuscriptFormatRules(isChapterBook)}
+
+${proseRules(targetAge)}`;
+
+  return withModelFallback(model, async (m) => {
+    // Strömmar - tänkande + prosa kan ta en stund
+    const stream = client.messages.stream({
+      model: m,
+      max_tokens: 16000,
+      thinking: { type: 'adaptive' },
+      output_config: {
+        effort: 'medium',
+        format: { type: 'json_schema', schema: BEGINNING_SCHEMA },
+      },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const message = await stream.finalMessage();
+
+    if (message.stop_reason === 'refusal') {
+      throw new Error('Claude avböjde att skriva boken - prova att beskriva handlingen på ett annat sätt');
+    }
+    if (message.stop_reason === 'max_tokens') {
+      throw new Error('Svaret blev för långt - försök igen');
+    }
+    const textBlock = message.content.find(c => c.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+      throw new Error('Inget svar från Claude');
+    }
+    const result = JSON.parse(textBlock.text) as { title: string; outline: string; beginning: string };
+    return {
+      title: input.title?.trim() || result.title.trim(),
+      outline: result.outline.trim(),
+      rawText: normalizeManuscript(result.beginning),
+    };
+  });
+}
+
+/**
+ * Skriver resten av boken efter författarens (ev. redigerade) början.
+ * Avbryts strax före `deadline` (ms-tidsstämpel) så att routen hinner svara
+ * inom maxDuration - då returneras det som hunnit skrivas med truncated: true.
+ */
+export async function continueBook(input: ContinueInput, deadline: number): Promise<{ rawText: string; truncated: boolean }> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+  const { preset, targetAge } = input;
+  const book = preset.book;
+  const isChapterBook = book.format === 'kapitelbok';
+  const writtenWords = countWords(input.rawText);
+  const remainingWords = Math.max(book.targetWords - writtenWords, book.wordsPerImage * 2);
+
+  // Senaste kapitelrubriken så att numreringen fortsätter rätt
+  const headings = input.rawText.match(/^(Kapitel\s+\d+.*|Prolog.*)$/gim) ?? [];
+  const lastHeading = headings[headings.length - 1]?.trim();
+
+  // Svensk prosa blir ungefär 2-2,5 tokens per ord - marginal för att inte klippa slutet
+  const maxTokens = Math.min(32000, Math.max(4000, Math.round(remainingWords * 3) + 1000));
+
+  const prompt = `Du är en erfaren svensk barnboksförfattare och skriver klart en ${isChapterBook ? 'kapitelbok' : 'bilderbok'} på SVENSKA.
+
+BOKTYP: ${preset.label} – ${preset.concept}
+TITEL: "${input.title}"
+MÅLÅLDER: ${targetAge}
+
+DISPOSITION FÖR HELA BOKEN:
+"""
+${input.outline}
+"""
+
+BOKENS BÖRJAN (redan skriven och godkänd av författaren - den kan ha redigerats och avvika från dispositionen; i så fall gäller texten):
+"""
+${input.rawText}
+"""
+${writingStyleBlock(input.style)}
+UPPGIFT:
+Skriv RESTEN av boken, från exakt där början slutar till bokens slut. Ca ${remainingWords} ord till (hela boken blir då ca ${book.targetWords} ord) - fördela dem jämnt över återstoden av dispositionen${isChapterBook ? ' så att varje kapitel får ungefär lika mycket text' : ''}, och skynda inte igenom slutet.
+- Fortsätt sömlöst i samma röst, tempus och berättarperspektiv. Upprepa inte något ur början och sammanfatta inte det som redan hänt.
+${isChapterBook
+    ? `- ${lastHeading ? `Senaste kapitelrubriken i början är "${lastHeading}". Skriv klart det kapitlet om det inte är avslutat, och fortsätt sedan numreringen därifrån.` : 'Början saknar kapitelrubriker - fortsätt med nästa kapitel enligt dispositionen och numrera från Kapitel 2.'}`
+    : '- Berättelsen fortsätter utan rubriker.'}
+- Knyt ihop alla trådar och avsluta med ett tydligt, tillfredsställande slut.
+- Svara ENBART med fortsättningen av manuset - ingen inledning, inga kommentarer, inget "Slut".
+
+${manuscriptFormatRules(isChapterBook)}
+
+${proseRules(targetAge)}`;
+
+  return withModelFallback(model, async (m) => {
+    let written = '';
+    // Ingen tänkbudget - hela tiden går till själva texten
+    const stream = client.messages.stream({
+      model: m,
+      max_tokens: maxTokens,
+      output_config: { effort: 'medium' },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    stream.on('text', delta => { written += delta; });
+    const timer = setTimeout(() => stream.abort(), Math.max(1000, deadline - Date.now()));
+
+    try {
+      const message = await stream.finalMessage();
+      if (message.stop_reason === 'refusal') {
+        throw new Error('Claude avböjde att skriva klart boken');
+      }
+      const text = message.content
+        .map(c => (c.type === 'text' ? c.text : ''))
+        .join('');
+      return finishContinuation(text || written, message.stop_reason === 'max_tokens');
+    } catch (err) {
+      if (err instanceof Anthropic.APIUserAbortError) {
+        if (written.trim()) return finishContinuation(written, true);
+        throw new Error('Det tog för lång tid att skriva resten av boken - försök igen');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
+
+function finishContinuation(text: string, truncated: boolean): { rawText: string; truncated: boolean } {
+  let clean = text;
+  // Avbruten text: släng det halvfärdiga sista stycket
+  if (truncated) {
+    const lastBreak = clean.lastIndexOf('\n');
+    if (lastBreak > 0) clean = clean.slice(0, lastBreak);
+  }
+  return { rawText: normalizeManuscript(clean), truncated };
+}
+
+// ═══════════════════════════════════════════
+//  Bokhandeln: kort baksidestext
+// ═══════════════════════════════════════════
+
+export interface BookBlurbInput {
+  title: string;
+  // Början av bokens text (redan avkortad av anroparen)
+  text: string;
+  mainCharacters: string[];
+  targetAge?: string;
+  bookFormat?: string;
+}
+
+const BLURB_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['description'],
+  properties: {
+    description: { type: 'string' },
+  },
+};
+
+export async function generateBookBlurb(input: BookBlurbInput): Promise<string> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+
+  const prompt = `Skriv en baksidestext på SVENSKA till barnboken nedan, som den skulle stå på bokens baksida i en bokhandel.
+
+KRAV:
+- 2-3 korta meningar, högst 60 ord totalt.
+- Väck nyfikenhet: presentera huvudpersonen/-personerna och utgångsläget.
+- INGA spoilers - avslöja aldrig hur berättelsen slutar eller hur problemet löses.
+- Varm, levande ton som passar ${input.targetAge ? `barn ${input.targetAge} år och deras vuxna` : 'barn och deras vuxna'}. Undvik klichéer som "en magisk resa" och "ett oförglömligt äventyr".
+- Hitta inte på namn, platser eller händelser som inte finns i texten.
+- Bara själva baksidestexten - ingen rubrik, inga citattecken runt texten.
+
+TITEL: ${input.title}
+${input.mainCharacters.length > 0 ? `HUVUDPERSONER: ${input.mainCharacters.join(', ')}\n` : ''}${input.bookFormat ? `FORMAT: ${input.bookFormat}\n` : ''}
+BÖRJAN AV BOKEN:
+"""
+${input.text}
+"""`;
+
+  return withModelFallback(model, async (m) => {
+    const message = await client.messages.create({
+      model: m,
+      max_tokens: 1024,
+      output_config: {
+        effort: 'low',
+        format: { type: 'json_schema', schema: BLURB_SCHEMA },
+      },
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    if (message.stop_reason === 'refusal') {
+      throw new Error('Claude avböjde att skriva en baksidestext');
+    }
+    const textBlock = message.content.find(c => c.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+      throw new Error('Inget svar från Claude');
+    }
+    const parsed = JSON.parse(textBlock.text) as { description?: string };
+    const description = (parsed.description || '').trim();
+    if (!description) throw new Error('Tom baksidestext');
+    return description;
+  });
 }

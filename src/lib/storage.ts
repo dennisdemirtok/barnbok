@@ -105,6 +105,8 @@ function migrateBookIds(book: BookProject): { book: BookProject; oldId?: string 
 export interface SaveResult {
   cloud: 'synced' | 'failed' | 'disabled' | 'skipped';
   cloudError?: string;
+  // Enskilda delar som inte kom upp (bilder, uppslag, karaktärer) - då är cloud 'failed'
+  cloudProblems?: string[];
   // Boken som faktiskt sparades - id:n kan ha migrerats till UUID
   book: BookProject;
   idsMigrated: boolean;
@@ -112,7 +114,8 @@ export interface SaveResult {
 
 export async function saveBook(
   book: BookProject,
-  options?: { cloud?: boolean }
+  // publish: true/false publicerar/avpublicerar i bokhandeln, utelämnat = oförändrat
+  options?: { cloud?: boolean; publish?: boolean }
 ): Promise<SaveResult> {
   // Migrera ev. gamla korta id:n till UUID innan sparning - Supabase-kolumnerna
   // är uuid och avvisar annars boken ("invalid input syntax for type uuid")
@@ -148,7 +151,14 @@ export async function saveBook(
   if (!isCloudEnabled()) return { cloud: 'disabled', book: bookWithTimestamp, idsMigrated };
 
   try {
-    await saveBookToCloud(bookWithTimestamp);
+    const { problems } = await saveBookToCloud(bookWithTimestamp, { publish: options?.publish });
+    if (problems.length > 0) {
+      // Delvis sparad räknas som misslyckad så att UI:t inte visar grönt
+      const cloudError = problems.length === 1
+        ? problems[0]
+        : `${problems.length} delar kunde inte sparas (bl.a. ${problems[0]})`;
+      return { cloud: 'failed', cloudError, cloudProblems: problems, book: bookWithTimestamp, idsMigrated };
+    }
     return { cloud: 'synced', book: bookWithTimestamp, idsMigrated };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

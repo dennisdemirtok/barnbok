@@ -5,7 +5,8 @@ import { BookProject, Character, Spread, BookFormat } from '@/lib/types';
 import { saveBook } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import BookLibrary from '@/components/BookLibrary';
-import BookImporter from '@/components/BookImporter';
+import BookImporter, { EMPTY_DRAFT, ImportMode, ManuscriptDraft } from '@/components/BookImporter';
+import CharacterStudio from '@/components/CharacterStudio';
 import CharacterApproval from '@/components/CharacterApproval';
 import PageGenerator from '@/components/PageGenerator';
 import BookPreview from '@/components/BookPreview';
@@ -14,8 +15,7 @@ import LoginModal from '@/components/LoginModal';
 import Bookstore from '@/components/Bookstore';
 import Icon from '@/components/Icon';
 
-type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore';
-type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
+type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore' | 'characterStudio';
 
 export default function Home() {
   const [step, setStep] = useState<Step>('library');
@@ -23,9 +23,8 @@ export default function Home() {
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
 
   // Lifted state from BookImporter - persists across step navigation
-  const [importRawText, setImportRawText] = useState('');
+  const [importDraft, setImportDraft] = useState<ManuscriptDraft>(EMPTY_DRAFT);
   const [importMode, setImportMode] = useState<ImportMode>('choose');
-  const [importFormat, setImportFormat] = useState<BookFormat>('bildbok-text-pa-bild');
   const [importParsedBook, setImportParsedBook] = useState<BookProject | null>(null);
   const [isClonedBook, setIsClonedBook] = useState(false);
   const [showRefManager, setShowRefManager] = useState(false);
@@ -74,8 +73,10 @@ export default function Home() {
   }, [book]);
 
   const handleBookParsed = (parsedBook: BookProject) => {
-    setBook(parsedBook);
-    setImportParsedBook(parsedBook); // Keep copy for back navigation
+    // Tillbaka från ett senare steg utan att dela upp texten igen: behåll boken
+    // med dess karaktärsbilder och illustrationer i stället för den gamla kopian
+    setBook(prev => (prev && prev.id === parsedBook.id ? prev : parsedBook));
+    setImportParsedBook(parsedBook);
     setStep('characters');
   };
 
@@ -103,33 +104,30 @@ export default function Home() {
   };
 
   const handleCharactersApproved = (characters: Character[]) => {
-    if (!book) return;
-    const updated = { ...book, characters, status: 'generating' as const };
-    setBook(updated);
+    setBook(prev => prev && { ...prev, characters, status: 'generating' as const });
     setStep('generate');
   };
 
+  // Karaktärsbilder sparas medan de skapas, inte först när man går vidare
+  const handleCharactersChange = (characters: Character[]) => {
+    setBook(prev => prev && { ...prev, characters });
+  };
+
   const handlePagesGenerated = (spreads: Spread[]) => {
-    if (!book) return;
-    const updated = { ...book, spreads, status: 'reviewing' as const };
-    setBook(updated);
+    setBook(prev => prev && { ...prev, spreads, status: 'reviewing' as const });
     setStep('review');
   };
 
   // Called continuously while pages generate, so finished images are auto-saved
   // even if the user leaves before clicking "Granska boken"
   const handleSpreadsProgress = (spreads: Spread[]) => {
-    if (!book) return;
-    setBook({ ...book, spreads });
+    setBook(prev => prev && { ...prev, spreads });
   };
 
   const handleUpdateSpread = (updatedSpread: Spread) => {
-    if (!book) return;
-    setBook({
-      ...book,
-      spreads: book.spreads.map(s =>
-        s.id === updatedSpread.id ? updatedSpread : s
-      ),
+    setBook(prev => prev && {
+      ...prev,
+      spreads: prev.spreads.map(s => (s.id === updatedSpread.id ? updatedSpread : s)),
     });
   };
 
@@ -141,9 +139,8 @@ export default function Home() {
     setBook(null);
     setIsClonedBook(false);
     // Reset all import state for a fresh start
-    setImportRawText('');
+    setImportDraft(EMPTY_DRAFT);
     setImportMode('choose');
-    setImportFormat('bildbok-text-pa-bild');
     setImportParsedBook(null);
     setStep('import');
   };
@@ -168,9 +165,8 @@ export default function Home() {
       })),
     };
 
-    setImportRawText('');
+    setImportDraft(EMPTY_DRAFT);
     setImportMode('choose');
-    setImportFormat(sourceBook.bookFormat || 'bildbok-text-pa-bild');
     setImportParsedBook(null);
     setIsClonedBook(true);
     setBook(clonedBook);
@@ -191,7 +187,7 @@ export default function Home() {
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === step);
-  const showSteps = step !== 'library' && step !== 'bookstore';
+  const showSteps = step !== 'library' && step !== 'bookstore' && step !== 'characterStudio';
 
   return (
     <main className="min-h-screen overflow-x-clip">
@@ -220,6 +216,15 @@ export default function Home() {
               }`}
             >
               <Icon name="collections_bookmark" size={18} /> Mina böcker
+            </button>
+            <button
+              onClick={() => { setBook(null); setStep('characterStudio'); }}
+              title="Karaktärer"
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-full text-sm font-medium transition-colors ${
+                step === 'characterStudio' ? 'bg-ink/[0.06] text-ink' : 'text-ink/65 hover:text-ink hover:bg-ink/[0.04]'
+              }`}
+            >
+              <Icon name="face" size={18} /> <span className="hidden md:inline">Karaktärer</span>
             </button>
             <button
               onClick={() => setStep('bookstore')}
@@ -305,6 +310,10 @@ export default function Home() {
           />
         )}
 
+        {step === 'characterStudio' && (
+          <CharacterStudio onBack={() => setStep('library')} />
+        )}
+
         {step === 'bookstore' && (
           <Bookstore
             onBack={() => setStep('library')}
@@ -315,12 +324,10 @@ export default function Home() {
         {step === 'import' && (
           <BookImporter
             onBookParsed={handleBookParsed}
-            rawText={importRawText}
-            onRawTextChange={setImportRawText}
+            draft={importDraft}
+            onDraftChange={setImportDraft}
             mode={importMode}
             onModeChange={setImportMode}
-            importFormat={importFormat}
-            onImportFormatChange={setImportFormat}
             parsedBook={importParsedBook}
             onParsedBookChange={setImportParsedBook}
           />
@@ -348,7 +355,12 @@ export default function Home() {
                   ].map((fmt) => (
                     <button
                       key={fmt.value}
-                      onClick={() => setBook({ ...book, bookFormat: fmt.value })}
+                      onClick={() => setBook({
+                        ...book,
+                        bookFormat: fmt.value,
+                        // Bildformen gäller bara format med separat text
+                        illustrationShape: fmt.value === 'bildbok-text-pa-bild' ? undefined : book.illustrationShape,
+                      })}
                       className={book.bookFormat === fmt.value ? 'chip-on' : 'chip'}
                     >
                       {fmt.label}
@@ -363,6 +375,7 @@ export default function Home() {
               bookId={book.id}
               bookTitle={book.title}
               onCharactersApproved={handleCharactersApproved}
+              onCharactersChange={handleCharactersChange}
               onBack={() => isClonedBook ? handleBackToLibrary() : setStep('import')}
             />
           </>

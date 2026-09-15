@@ -27,6 +27,17 @@ export interface StylePreset {
   fonts: { body: FontFamily; heading: FontFamily };
   // Tailwind-gradient för stilens färgmarkering i UI:t
   swatch: string;
+  // Bokkonceptet: format, textmängd och längd följer stilen, så att användaren
+  // aldrig behöver ange antal sidor
+  book: BookConcept;
+}
+
+export interface BookConcept {
+  format: 'bildbok-separat-text' | 'kapitelbok';
+  wordsPerImage: number; // ungefär hur mycket text som hör till varje bild
+  targetWords: number; // typisk längd när AI:n skriver boken
+  age: string;
+  lengthLabel: string; // kort beskrivning för UI:t
 }
 
 
@@ -41,6 +52,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     shape: 'spread',
     fonts: { body: 'Nunito', heading: 'Bangers' },
     swatch: 'from-indigo-700 to-fuchsia-500',
+    book: { format: 'kapitelbok', wordsPerImage: 220, targetWords: 6000, age: '8-12 år', lengthLabel: 'Illustrerad kapitelbok · ca 90 sidor' },
     coverLettering: 'Bold, chunky comic-book title logo with a thick dark outline, slight 3D extrusion and dynamic tilt, like a superhero comic masthead.',
     artDirection: `ART STYLE: Cinematic digital graphic-novel painting for a Swedish middle-grade adventure series.
 RENDERING: Crisp dark ink contours of varying weight, smooth painted gradient shading, glowing rim light, strong chiaroscuro. Night-time palette of deep indigo, teal and magenta cut by warm amber and yellow light sources (street lamps, flashlights, windows).
@@ -56,6 +68,7 @@ ${NO_GENERIC}`,
     shape: 'page',
     fonts: { body: 'Alegreya', heading: 'Alegreya' },
     swatch: 'from-sky-800 to-teal-500',
+    book: { format: 'kapitelbok', wordsPerImage: 250, targetWords: 4500, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 70 sidor' },
     coverLettering: 'Soft, rounded hand-lettered title in lowercase with gentle curves, small star or moon flourishes, calm and cosy - never all-caps serif.',
     artDirection: `ART STYLE: Soft, cozy 2D digital illustration for a Swedish early-reader chapter book.
 RENDERING: Thin COLORED outlines (never black), flat colors with gentle airbrushed shading, subtle grain texture. The illustration is a soft-edged VIGNETTE that fades gently into a pure white page - not a full-bleed rectangle.
@@ -72,6 +85,7 @@ ${NO_GENERIC}`,
     shape: 'page',
     fonts: { body: 'Literata', heading: 'PatrickHand' },
     swatch: 'from-orange-500 to-red-600',
+    book: { format: 'kapitelbok', wordsPerImage: 350, targetWords: 9000, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 110 sidor' },
     coverLettering: 'Wobbly, hand-drawn ink lettering with uneven bouncy letters of different sizes, like a humorous detective comic title - never elegant or serif.',
     artDirection: `ART STYLE: Humorous Scandinavian cartoon illustration for a funny crime-caper children's book.
 RENDERING: Loose, scratchy, energetic black ink line with visible pen texture; slightly messy hatching; bright but warm watercolor-like color washes that do not stay inside the lines; white paper showing through.
@@ -87,6 +101,7 @@ ${NO_GENERIC}`,
     shape: 'spread',
     fonts: { body: 'LibreCaslon', heading: 'LibreCaslon' },
     swatch: 'from-lime-600 to-amber-600',
+    book: { format: 'bildbok-separat-text', wordsPerImage: 70, targetWords: 900, age: '3-6 år', lengthLabel: 'Bilderbok · ca 32 sidor' },
     coverLettering: 'Classic hand-painted brush lettering in warm dark brown, slightly irregular like it was painted with the same watercolour brush, simple and old-fashioned.',
     artDirection: `ART STYLE: Classic Scandinavian pen-and-ink and watercolor picture-book illustration.
 RENDERING: Fine, lively black ink line with delicate cross-hatching for shadows; transparent watercolor washes with visible paper texture and soft blooms; the scene sits as a vignette with soft irregular edges fading into warm white paper.
@@ -102,6 +117,7 @@ ${NO_GENERIC}`,
     shape: 'spread',
     fonts: { body: 'Nunito', heading: 'Fredoka' },
     swatch: 'from-blue-500 to-violet-500',
+    book: { format: 'bildbok-separat-text', wordsPerImage: 60, targetWords: 800, age: '3-6 år', lengthLabel: 'Bilderbok · ca 32 sidor' },
     coverLettering: 'Glossy, dimensional animated-film title logo with soft bevel, warm glow and a playful swash, like a family movie poster.',
     artDirection: `ART STYLE: Modern 3D animated feature-film look (high-end CG render) as a picture-book illustration.
 RENDERING: Soft global illumination, subsurface scattering on skin, shallow depth of field, cinematic color grading, polished materials.
@@ -115,6 +131,7 @@ COMPOSITION: Cinematic framing with foreground, midground and background depth.`
     shape: 'page',
     fonts: { body: 'Figtree', heading: 'Figtree' },
     swatch: 'from-stone-400 to-stone-600',
+    book: { format: 'bildbok-separat-text', wordsPerImage: 40, targetWords: 450, age: '2-5 år', lengthLabel: 'Bilderbok · ca 24 sidor' },
     coverLettering: 'Clean, modern geometric sans-serif title set in one flat colour, generous letter spacing, no ornaments or effects.',
     artDirection: `ART STYLE: Minimalist flat graphic illustration, like a modern design-led picture book.
 RENDERING: Flat vector shapes with NO outlines, a strictly limited palette of 3-4 colors plus off-white, subtle risograph grain texture.

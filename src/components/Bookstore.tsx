@@ -1,58 +1,110 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { BookProject } from '@/lib/types';
-import { listPublicBooks, loadPublicBook, PublicBookSummary } from '@/lib/supabase-db';
-import BookReader from './BookReader';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getLikeCounts, getMyLikedBookIds, listPublicBooks, loadPublicBookDetails, PublicBookDetails, PublicBookSummary, setBookLiked,
+} from '@/lib/supabase-db';
+import { useAuth } from '@/lib/auth';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
+import AuthorPage from './bookstore/AuthorPage';
+import BookCard from './bookstore/BookCard';
+import BookDetail from './bookstore/BookDetail';
+import { FORMAT_LABEL, LikesState } from './bookstore/shared';
 
 interface Props {
   onBack: () => void;
-  // Bok-id från en delningslänk (/?bok=<id>) - öppnas direkt i läsaren
+  // Bok-id från en delningslänk (/?bok=<id>) - öppnas direkt på bokens sida
   initialBookId?: string;
 }
 
-const FORMAT_LABEL: Record<string, string> = {
-  'bildbok-text-pa-bild': 'Serieformat',
-  'bildbok-separat-text': 'Bilderbok',
-  'kapitelbok': 'Kapitelbok',
-  'larobok': 'Lärobok',
-};
+type SortKey = 'nyast' | 'gillade' | 'titel';
 
-type SortKey = 'nyast' | 'titel';
+type View =
+  | { kind: 'list' }
+  | { kind: 'book'; details: PublicBookDetails }
+  | { kind: 'author'; userId: string; name: string };
 
 export default function Bookstore({ onBack, initialBookId }: Props) {
+  const { user } = useAuth();
   const [books, setBooks] = useState<PublicBookSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [format, setFormat] = useState<string>('alla');
   const [sort, setSort] = useState<SortKey>('nyast');
-  const [reading, setReading] = useState<BookProject | null>(null);
+  // Navigeringsstack: lista -> bok -> skapare -> bok ...
+  const [stack, setStack] = useState<View[]>([{ kind: 'list' }]);
   const [openingId, setOpeningId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [openError, setOpenError] = useState('');
+
+  // Hjärtan (döljs helt om migreringen inte körts)
+  const [likesSupported, setLikesSupported] = useState(false);
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [likeError, setLikeError] = useState('');
+  const likePending = useRef(new Set<string>());
+
+  const view = stack[stack.length - 1];
 
   useEffect(() => {
     listPublicBooks()
       .then(setBooks)
       .catch(() => {})
       .finally(() => setLoading(false));
+    getLikeCounts()
+      .then(counts => {
+        if (!counts) return;
+        setLikesSupported(true);
+        setLikeCounts(counts);
+      })
+      .catch(() => {});
   }, []);
+
+  // Mina hjärtan - hämtas om vid in-/utloggning (kontot ersätter enhets-id:t)
+  const bookIdsKey = books.map(b => b.id).join(',');
+  useEffect(() => {
+    if (!likesSupported || books.length === 0) return;
+    let cancelled = false;
+    getMyLikedBookIds(books.map(b => b.id))
+      .then(ids => { if (!cancelled) setLikedIds(ids); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [likesSupported, bookIdsKey, user?.id]);
 
   useEffect(() => {
     if (initialBookId) openBook(initialBookId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialBookId]);
 
+  // Delningslänken speglar den bok som visas (rör inte URL:en vid första render,
+  // då en ?bok=-länk fortfarande håller på att öppnas)
+  const urlSynced = useRef(false);
+  useEffect(() => {
+    if (!urlSynced.current) {
+      urlSynced.current = true;
+      if (view.kind === 'list') return;
+    }
+    const path = window.location.pathname;
+    if (view.kind === 'book') {
+      window.history.replaceState(null, '', `${path}?bok=${view.details.book.id}`);
+    } else if (window.location.search.includes('bok=')) {
+      window.history.replaceState(null, '', path);
+    }
+  }, [view]);
+
   const openBook = async (id: string) => {
     setOpeningId(id);
     setOpenError('');
     try {
-      const book = await loadPublicBook(id);
-      if (!book) throw new Error('Boken kunde inte hittas. Den kan ha tagits bort eller avpublicerats.');
-      setReading(book);
-      window.history.replaceState(null, '', `${window.location.pathname}?bok=${id}`);
+      const details = await loadPublicBookDetails(id);
+      if (!details) throw new Error('Boken kunde inte hittas. Den kan ha tagits bort eller avpublicerats.');
+      setStack(prev => {
+        // Samma bok igen (t.ex. dubbelklick eller dubbelkörd effekt) ersätter i stället för att staplas
+        const top = prev[prev.length - 1];
+        const base = top.kind === 'book' && top.details.book.id === id ? prev.slice(0, -1) : prev;
+        return [...base, { kind: 'book', details }];
+      });
       window.scrollTo({ top: 0 });
     } catch (err) {
       setOpenError(err instanceof Error ? err.message : 'Kunde inte öppna boken');
@@ -61,72 +113,135 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
     }
   };
 
-  const closeReader = () => {
-    setReading(null);
-    window.history.replaceState(null, '', window.location.pathname);
+  const openAuthor = (userId: string, name: string) => {
+    setOpenError('');
+    setStack(prev => [...prev, { kind: 'author', userId, name }]);
+    window.scrollTo({ top: 0 });
   };
 
-  const shareBook = async (id: string, title: string) => {
-    const url = `${window.location.origin}/?bok=${id}`;
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ title, url });
-        return;
-      } catch {
-        // Avbruten delning - kopiera i stället
-      }
-    }
+  const goBack = () => {
+    setOpenError('');
+    setStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev));
+    window.scrollTo({ top: 0 });
+  };
+
+  const toggleLike = useCallback(async (bookId: string) => {
+    if (likePending.current.has(bookId)) return;
+    likePending.current.add(bookId);
+    const next = !likedIds.has(bookId);
+    const applyLiked = (liked: boolean) => setLikedIds(prev => {
+      const s = new Set(prev);
+      if (liked) s.add(bookId); else s.delete(bookId);
+      return s;
+    });
+
+    // Optimistiskt: visa direkt, stäm av mot servern efteråt
+    applyLiked(next);
+    setLikeCounts(prev => ({ ...prev, [bookId]: Math.max(0, (prev[bookId] ?? 0) + (next ? 1 : -1)) }));
+    setLikeError('');
     try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      const total = await setBookLiked(bookId, next);
+      setLikeCounts(prev => ({ ...prev, [bookId]: total }));
     } catch {
-      window.prompt('Kopiera länken:', url);
+      applyLiked(!next);
+      setLikeCounts(prev => ({ ...prev, [bookId]: Math.max(0, (prev[bookId] ?? 0) + (next ? -1 : 1)) }));
+      setLikeError('Hjärtat kunde inte sparas. Försök igen.');
+      setTimeout(() => setLikeError(''), 3500);
+    } finally {
+      likePending.current.delete(bookId);
     }
+  }, [likedIds]);
+
+  const likes: LikesState = useMemo(() => ({
+    supported: likesSupported,
+    counts: likeCounts,
+    liked: likedIds,
+    toggle: toggleLike,
+  }), [likesSupported, likeCounts, likedIds, toggleLike]);
+
+  const handleDescription = (bookId: string, description: string) => {
+    setBooks(prev => prev.map(b => (b.id === bookId ? { ...b, description } : b)));
   };
 
-  // ── Läsare ──
-  if (reading) {
+  const likeToast = likeError && (
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-sm note-error shadow-lift text-center" role="status">
+      {likeError}
+    </div>
+  );
+
+  const previous = stack[stack.length - 2];
+  const backLabel = previous?.kind === 'book' ? previous.details.book.title : 'Bokhandeln';
+
+  // ── Bokens sida ──
+  if (view.kind === 'book') {
+    const { details } = view;
+    const authorId = details.summary.userId;
+    const moreByAuthor = authorId ? books.filter(b => b.userId === authorId && b.id !== details.book.id) : [];
     return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div className="min-w-0">
-            <button onClick={closeReader} className="inline-flex items-center gap-1 -ml-1 px-1 text-sm font-medium text-ink/55 hover:text-ink transition-colors">
-              <Icon name="arrow_back" size={18} /> Bokhandeln
-            </button>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-heading font-bold tracking-tight text-ink truncate">{reading.title}</h2>
-            {reading.author && <p className="mt-1 text-ink/55">av {reading.author}</p>}
-          </div>
-          <button onClick={() => shareBook(reading.id, reading.title)} className="btn-primary shrink-0">
-            <Icon name={copied ? 'check' : 'ios_share'} size={19} />
-            {copied ? 'Länken är kopierad' : 'Dela boken'}
-          </button>
-        </div>
-        <div className="card-glass hover:!shadow-soft px-2 py-4 sm:p-8 -mx-2 sm:mx-0">
-          <BookReader book={reading} />
-        </div>
-      </div>
+      <>
+        {openError && <div className="note-error mb-4">{openError}</div>}
+        <BookDetail
+          key={details.book.id}
+          details={details}
+          likes={likes}
+          moreByAuthor={moreByAuthor}
+          openingId={openingId}
+          onBack={goBack}
+          onOpenAuthor={openAuthor}
+          onOpenBook={openBook}
+          onDescription={handleDescription}
+        />
+        {likeToast}
+      </>
     );
   }
 
+  // ── Skaparens sida ──
+  if (view.kind === 'author') {
+    return (
+      <>
+        <AuthorPage
+          key={view.userId}
+          authorUserId={view.userId}
+          authorName={view.name}
+          likes={likes}
+          openingId={openingId}
+          openError={openError}
+          backLabel={backLabel}
+          onBack={goBack}
+          onOpenBook={openBook}
+        />
+        {likeToast}
+      </>
+    );
+  }
+
+  // ── Listan ──
   const formats = Array.from(new Set(books.map(b => b.bookFormat).filter(Boolean))) as string[];
+  const q = query.trim().toLowerCase();
+  const activeSort: SortKey = sort === 'gillade' && !likesSupported ? 'nyast' : sort;
+  const byNewest = (a: PublicBookSummary, b: PublicBookSummary) =>
+    new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
   const filtered = books
     .filter(b =>
       (format === 'alla' || b.bookFormat === format) &&
-      (!query ||
-        b.title.toLowerCase().includes(query.toLowerCase()) ||
-        (b.authorName || '').toLowerCase().includes(query.toLowerCase()))
+      (!q ||
+        b.title.toLowerCase().includes(q) ||
+        (b.authorName || '').toLowerCase().includes(q) ||
+        (b.description || '').toLowerCase().includes(q))
     )
-    .sort((a, b) => sort === 'titel'
-      ? a.title.localeCompare(b.title, 'sv')
-      : new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
+    .sort((a, b) => {
+      if (activeSort === 'titel') return a.title.localeCompare(b.title, 'sv');
+      if (activeSort === 'gillade') return (likeCounts[b.id] ?? 0) - (likeCounts[a.id] ?? 0) || byNewest(a, b);
+      return byNewest(a, b);
+    });
 
   return (
     <div className="space-y-8">
       <StepHeader
         eyebrow="Bokhandeln"
         title="Böcker från skaparna"
-        description="Läs gratis, bläddra som i en riktig bok och dela med en länk."
+        description="Läs gratis, ge hjärtan till dina favoriter, ladda ner och dela med en länk."
         onBack={onBack}
         backLabel="Mina böcker"
         actions={!loading && <span className="text-sm text-ink/45">{books.length} {books.length === 1 ? 'bok' : 'böcker'}</span>}
@@ -140,7 +255,7 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Sök titel eller skapare"
+            placeholder="Sök titel, skapare eller handling"
             className="field !pl-11"
           />
         </div>
@@ -151,12 +266,13 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
             </button>
           ))}
           <select
-            value={sort}
+            value={activeSort}
             onChange={e => setSort(e.target.value as SortKey)}
             className="chip shrink-0 !pr-3 cursor-pointer"
             aria-label="Sortera"
           >
             <option value="nyast">Nyast</option>
+            {likesSupported && <option value="gillade">Mest gillade</option>}
             <option value="titel">Titel A–Ö</option>
           </select>
         </div>
@@ -181,49 +297,18 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-5 gap-y-8">
           {filtered.map(b => (
-            <div key={b.id} className="group">
-              <button
-                onClick={() => openBook(b.id)}
-                disabled={!!openingId}
-                className="relative block w-full aspect-[3/4] rounded-2xl overflow-hidden bg-white border border-line shadow-soft
-                           group-hover:shadow-lift group-hover:-translate-y-1 transition-all duration-200"
-                title={`Läs ${b.title}`}
-              >
-                {b.coverUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={b.coverUrl} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
-                ) : (
-                  <div className="absolute inset-0 flex flex-col justify-between p-4 bg-gradient-to-b from-paper to-white text-left">
-                    <Icon name="auto_stories" size={26} className="text-ink/25" />
-                    <span className="font-heading text-lg font-semibold text-ink/80 leading-tight line-clamp-4 break-words hyphens-auto">{b.title}</span>
-                  </div>
-                )}
-                <span className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-black/15 to-transparent" />
-                {openingId === b.id && (
-                  <span className="absolute inset-0 bg-white/70 flex items-center justify-center text-ink">
-                    <span className="spinner !w-7 !h-7" />
-                  </span>
-                )}
-              </button>
-              <div className="mt-3 flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="font-heading font-semibold text-ink leading-snug truncate" title={b.title}>{b.title}</h3>
-                  <p className="text-xs text-ink/50 mt-0.5 truncate">
-                    {b.authorName ? `${b.authorName} · ` : ''}{FORMAT_LABEL[b.bookFormat || ''] || 'Bok'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => shareBook(b.id, b.title)}
-                  title="Dela boken"
-                  className="btn-icon !w-8 !h-8 shrink-0 -mr-1.5"
-                >
-                  <Icon name="ios_share" size={17} />
-                </button>
-              </div>
-            </div>
+            <BookCard
+              key={b.id}
+              book={b}
+              likes={likes}
+              opening={openingId === b.id}
+              disabled={!!openingId}
+              onOpen={() => openBook(b.id)}
+            />
           ))}
         </div>
       )}
+      {likeToast}
     </div>
   );
 }

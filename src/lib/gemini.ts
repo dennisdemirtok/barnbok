@@ -167,10 +167,15 @@ export interface PageImageOptions {
   shape?: IllustrationShape;
   // 1K räcker för provningar, 2K för tryckkvalitet i den färdiga boken
   imageSize?: '1K' | '2K';
+  // Rättelser från den automatiska granskningen (engelska, en per rad) - läggs sist i prompten
+  corrections?: string[];
+  // Tidsstyrning för granskningsloopen - standard är 3 omförsök utan timeout
+  maxRetries?: number;
+  timeoutMs?: number;
 }
 
 // Bokformat med text i bilden (serietidning / lärobok) - allt annat sätts av layoutmotorn
-function textInImage(bookFormat?: BookFormat): boolean {
+export function textInImage(bookFormat?: BookFormat): boolean {
   return bookFormat === 'bildbok-text-pa-bild' || bookFormat === 'larobok' || !bookFormat;
 }
 
@@ -371,6 +376,15 @@ ${isPortrait
 
   contents.push({ text: mainPrompt });
 
+  // Rättelser från granskningen läggs sist så att de väger tyngst
+  const corrections = (options.corrections || []).map(c => c.trim()).filter(Boolean);
+  if (corrections.length > 0) {
+    contents.push({
+      text: `CORRECTIONS FROM REVIEW (a reviewer rejected a previous attempt at this exact illustration - every fix below is MANDATORY and overrides anything above; keep everything else as described):
+${corrections.map(c => `- ${c}`).join('\n')}`,
+    });
+  }
+
   // Use retry logic for resilience
   return withRetry(async () => {
     const response = await ai.models.generateContent({
@@ -382,6 +396,7 @@ ${isPortrait
           aspectRatio: isPortrait ? '3:4' : '3:2',
           imageSize: options.imageSize || '1K',
         },
+        ...(options.timeoutMs ? { httpOptions: { timeout: options.timeoutMs } } : {}),
       },
     });
 
@@ -396,7 +411,7 @@ ${isPortrait
     }
 
     throw new Error('Ingen bild genererades');
-  });
+  }, options.maxRetries ?? 3);
 }
 
 export async function regeneratePageImage(

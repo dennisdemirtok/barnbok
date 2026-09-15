@@ -33,6 +33,7 @@ export interface SavedCharacter {
   power?: string;
   role: 'main' | 'supporting' | 'villain';
   referenceImage?: string; // base64
+  stylePresetId?: string; // stilen referensbilden gjordes i
   savedAt: string;
   fromBookId?: string;
   fromBookTitle?: string;
@@ -70,9 +71,24 @@ export interface Spread {
 export interface SpreadQualityCheck {
   passed: boolean;
   summary: string;
-  autoFixed: boolean; // true if the image was automatically regenerated once
-  issues?: { character: string; issue: string; severity: 'minor' | 'major' }[];
+  autoFixed: boolean; // true if the delivered image came from an automatic correction attempt
+  issues?: { character: string; issue: string; severity: 'minor' | 'major'; category?: QualityIssueCategory }[];
+  attempts?: number; // number of image generations used (1-3)
+  score?: number; // reviewer score 0-100 for the delivered image
+  reviewed?: boolean; // false if the reviewer could not run - the image is then unchecked
 }
+
+export type QualityIssueCategory =
+  | 'missing_character'
+  | 'duplicate_character'
+  | 'extra_figure'
+  | 'wrong_appearance'
+  | 'missing_element'
+  | 'unwanted_text'
+  | 'anatomy'
+  | 'cropped_character'
+  | 'layout'
+  | 'other';
 
 export interface TextBlock {
   position: string; // e.g. "sida 6 - textruta överst"
@@ -84,6 +100,8 @@ export interface SavedText {
   title: string;
   rawText: string;
   bookFormat?: BookFormat;
+  author?: string;
+  stylePresetId?: string;
   characterCount: number;
   spreadCount: number;
   savedAt: string;

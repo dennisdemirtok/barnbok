@@ -9,8 +9,11 @@ import Icon from './Icon';
 import StepHeader from './StepHeader';
 
 interface Props {
-  onContinue: (book: BookProject) => void;
+  // Vald stil tas vidare till manussteget, där hela boken skapas
+  onChooseStyle: (choice: { stylePresetId: string; title: string; rawText: string }) => void;
   onBack: () => void;
+  // Förifyllt från AI:ns början av boken - ersätter en tidigare provning
+  initial?: { rawText: string; title: string; styles: string[]; note?: string };
 }
 
 type CellStatus = 'pending' | 'generating' | 'done' | 'error';
@@ -24,7 +27,6 @@ interface Cell {
 interface TestState {
   title: string;
   rawText: string;
-  numScenes: number;
   selectedStyles: string[];
   plan: StyleTestPlan | null;
   styleGuides: Record<string, string>;
@@ -44,7 +46,6 @@ const SECONDS_PER_IMAGE = 35;
 const EMPTY_STATE: TestState = {
   title: '',
   rawText: '',
-  numScenes: 3,
   selectedStyles: DEFAULT_STYLES,
   plan: null,
   styleGuides: {},
@@ -53,7 +54,15 @@ const EMPTY_STATE: TestState = {
 
 const cellKey = (pageId: string, styleId: string) => `${pageId}|${styleId}`;
 
-function buildPages(plan: StyleTestPlan, title: string): PageRow[] {
+// Ungefär hur många testsidor en stil får - servern räknar exakt på styckena
+const MAX_TEST_PAGES = 4;
+function estimateTestPages(styleId: string, words: number): number {
+  const perImage = getStylePreset(styleId)?.book.wordsPerImage ?? 150;
+  return Math.max(1, Math.min(MAX_TEST_PAGES, Math.round(Math.min(words, perImage * MAX_TEST_PAGES) / perImage)));
+}
+
+// Varje stil har sin egen uppdelning av texten (olika mycket text per bild)
+function buildPages(plan: StyleTestPlan, title: string, styleId: string): PageRow[] {
   const cover: PageRow = {
     id: 'cover',
     label: 'Omslag',
@@ -66,7 +75,7 @@ function buildPages(plan: StyleTestPlan, title: string): PageRow[] {
       status: 'pending',
     },
   };
-  const scenes = plan.scenes.map((scene, i): PageRow => ({
+  const scenes = (plan.scenesByStyle?.[styleId] ?? plan.scenes).map((scene, i): PageRow => ({
     id: `scene-${i}`,
     label: scene.label,
     spread: {
@@ -86,13 +95,14 @@ function buildPages(plan: StyleTestPlan, title: string): PageRow[] {
   return [cover, ...scenes];
 }
 
-export default function StyleTester({ onContinue, onBack }: Props) {
+export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
   const [state, setState] = useState<TestState>(EMPTY_STATE);
   const [loaded, setLoaded] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [showScenes, setShowScenes] = useState(false);
+  const [scenesStyle, setScenesStyle] = useState<string | null>(null);
   const [lightboxKey, setLightboxKey] = useState<string | null>(null);
   const [confirmStyle, setConfirmStyle] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -103,17 +113,22 @@ export default function StyleTester({ onContinue, onBack }: Props) {
   const abortRef = useRef(false);
 
   const effectiveTitle = state.plan ? (state.title.trim() || state.plan.title) : state.title;
-  const pages = useMemo(
-    () => (state.plan ? buildPages(state.plan, effectiveTitle) : []),
-    [state.plan, effectiveTitle]
-  );
+  const pagesByStyle = useMemo(() => {
+    const map: Record<string, PageRow[]> = {};
+    if (state.plan) for (const st of STYLE_PRESETS) map[st.id] = buildPages(state.plan, effectiveTitle, st.id);
+    return map;
+  }, [state.plan, effectiveTitle]);
+  const pagesFor = (styleId: string) => pagesByStyle[styleId] ?? [];
   const activeStyles = STYLE_PRESETS.filter(s => state.selectedStyles.includes(s.id));
 
   // ── Ladda senaste provningen ──
   useEffect(() => {
     loadStyleTest<TestState>()
       .then(saved => {
-        if (saved) {
+        // En ny text från AI:n ersätter provningen - men samma text återupptas
+        if (initial && saved?.rawText !== initial.rawText) {
+          setState({ ...EMPTY_STATE, rawText: initial.rawText, title: initial.title, selectedStyles: initial.styles });
+        } else if (saved) {
           // Bilder som höll på att genereras vid omladdning ska göras om
           const cells: Record<string, Cell> = {};
           for (const [k, c] of Object.entries(saved.cells || {})) {
@@ -143,7 +158,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
     const s = stateRef.current;
     if (!s.plan) return;
     const [pageId, styleId] = key.split('|');
-    const page = buildPages(s.plan, s.title.trim() || s.plan.title).find(p => p.id === pageId);
+    const page = buildPages(s.plan, s.title.trim() || s.plan.title, styleId).find(p => p.id === pageId);
     const fallbackPreset = getStylePreset(styleId);
     const styleGuide = s.styleGuides[styleId] || (fallbackPreset ? composeStyleGuide(fallbackPreset) : undefined);
     if (!page || !styleGuide) return;
@@ -188,10 +203,14 @@ export default function StyleTester({ onContinue, onBack }: Props) {
   // Kö: omslag i alla stilar först, sedan sida för sida - så jämförelsen syns tidigt
   const missingKeys = (s: TestState = stateRef.current) => {
     if (!s.plan) return [];
-    const rows = buildPages(s.plan, s.title.trim() || s.plan.title);
+    const title = s.title.trim() || s.plan.title;
+    const rowsByStyle = s.selectedStyles.map(styleId => ({ styleId, rows: buildPages(s.plan!, title, styleId) }));
     const keys: string[] = [];
-    for (const row of rows) {
-      for (const styleId of s.selectedStyles) {
+    const longest = Math.max(0, ...rowsByStyle.map(r => r.rows.length));
+    for (let i = 0; i < longest; i++) {
+      for (const { styleId, rows } of rowsByStyle) {
+        const row = rows[i];
+        if (!row) continue;
         const key = cellKey(row.id, styleId);
         const cell = s.cells[key];
         if (!cell || cell.status === 'pending' || cell.status === 'error') keys.push(key);
@@ -208,7 +227,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       const res = await fetch('/api/style-test/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawText: state.rawText, numScenes: state.numScenes, title: state.title }),
+        body: JSON.stringify({ rawText: state.rawText, title: state.title }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Kunde inte analysera texten');
@@ -250,39 +269,12 @@ export default function StyleTester({ onContinue, onBack }: Props) {
     const s = stateRef.current;
     if (!s.plan) return;
     abortRef.current = true;
-    const title = s.title.trim() || s.plan.title;
-    const rows = buildPages(s.plan, title);
-
-    const preset = getStylePreset(styleId);
-    const book: BookProject = {
-      id: crypto.randomUUID(),
-      title,
-      subtitle: '',
-      bookFormat: 'bildbok-separat-text',
-      stylePresetId: styleId,
-      illustrationShape: preset?.shape,
-      characters: s.plan.characters.map(c => ({
-        id: crypto.randomUUID(),
-        name: c.name,
-        age: c.age,
-        role: c.role,
-        appearance: c.appearance,
-        normalClothes: c.normalClothes,
-        personality: c.personality,
-        approved: false,
-      })),
-      // Bilderna görs om i steg 3 med godkända karaktärsreferenser för konsekventa figurer
-      spreads: rows.map(r => ({ ...r.spread, id: crypto.randomUUID() })),
-      styleGuide: s.styleGuides[styleId] || (preset ? composeStyleGuide(preset) : ''),
-      status: 'characters',
-      createdAt: new Date().toISOString(),
-    };
-    onContinue(book);
+    onChooseStyle({ stylePresetId: styleId, title: s.title.trim() || s.plan.title, rawText: s.rawText });
   };
 
   // ── Lightbox-navigering över klara bilder ──
   const doneKeys = activeStyles.flatMap(style =>
-    pages.map(p => cellKey(p.id, style.id)).filter(k => state.cells[k]?.status === 'done')
+    pagesFor(style.id).map(p => cellKey(p.id, style.id)).filter(k => state.cells[k]?.status === 'done')
   );
   const stepLightbox = useCallback((dir: 1 | -1) => {
     setLightboxKey(current => {
@@ -304,13 +296,13 @@ export default function StyleTester({ onContinue, onBack }: Props) {
   }, [lightboxKey, stepLightbox]);
 
   // ── Statistik ──
-  const totalCells = pages.length * activeStyles.length;
+  const totalCells = activeStyles.reduce((n, style) => n + pagesFor(style.id).length, 0);
   const doneCount = doneKeys.length;
   const errorCount = activeStyles.reduce((n, style) =>
-    n + pages.filter(p => state.cells[cellKey(p.id, style.id)]?.status === 'error').length, 0);
+    n + pagesFor(style.id).filter(p => state.cells[cellKey(p.id, style.id)]?.status === 'error').length, 0);
   const missingCount = state.plan ? missingKeys(state).length : 0;
   const wordCount = state.rawText.trim() ? state.rawText.trim().split(/\s+/).length : 0;
-  const plannedImages = (state.numScenes + 1) * state.selectedStyles.length;
+  const plannedImages = state.selectedStyles.reduce((n, id) => n + 1 + estimateTestPages(id, wordCount), 0);
   const estimatedMinutes = Math.max(1, Math.round((plannedImages / CONCURRENCY) * SECONDS_PER_IMAGE / 60));
 
   const header = (
@@ -340,6 +332,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
     return (
       <div className="space-y-6">
         {header}
+        {initial?.note && <div className="note-success">{initial.note}</div>}
 
         <div className="grid lg:grid-cols-5 gap-6 items-start">
           {/* Text */}
@@ -378,23 +371,6 @@ export default function StyleTester({ onContinue, onBack }: Props) {
           <div className="lg:col-span-2 space-y-6">
             <div className="card-glass p-5 sm:p-6 space-y-5 hover:!shadow-soft">
               <div>
-                <label className="block text-sm font-semibold text-ink/80 mb-2">
-                  Antal testsidor <span className="text-ink/40 font-normal">+ omslag</span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {[2, 3, 4, 5].map(n => (
-                    <button
-                      key={n}
-                      onClick={() => setState(prev => ({ ...prev, numScenes: n }))}
-                      className={state.numScenes === n ? 'chip-on' : 'chip'}
-                    >
-                      {n} sidor
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-semibold text-ink/80">Stilar att jämföra</label>
                   <button
@@ -430,7 +406,10 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                             {style.label}
                           </span>
                           <span className="block text-[11px] leading-snug text-ink/55 mt-0.5">
-                            {style.concept} · {style.shape === 'spread' ? 'uppslagsbilder' : 'helsidesbilder'}
+                            {style.concept}
+                          </span>
+                          <span className="block text-[11px] leading-snug text-ink/40 mt-0.5">
+                            {style.book.lengthLabel}{wordCount > 0 && ` · ${estimateTestPages(style.id, wordCount)} testsidor`}
                           </span>
                         </span>
                       </button>
@@ -451,7 +430,10 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                     {plannedImages} testbilder
                   </p>
                   <p className="text-ink/55">
-                    {state.numScenes + 1} sidor × {state.selectedStyles.length} stilar · ca {estimatedMinutes} min
+                    Omslag + testsidor i {state.selectedStyles.length} {state.selectedStyles.length === 1 ? 'stil' : 'stilar'} · ca {estimatedMinutes} min
+                  </p>
+                  <p className="text-xs text-ink/40 mt-0.5">
+                    Antalet testsidor följer hur mycket text varje boktyp har per sida.
                   </p>
                 </div>
               </div>
@@ -582,14 +564,28 @@ export default function StyleTester({ onContinue, onBack }: Props) {
 
       {/* Scentexter */}
       {showScenes && (
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-up">
-          {plan.scenes.map((scene, i) => (
+        <div className="space-y-3 animate-fade-up">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-ink/55 mr-1">Uppdelning för:</span>
+            {activeStyles.map(style => (
+              <button
+                key={style.id}
+                onClick={() => setScenesStyle(style.id)}
+                className={`${(scenesStyle ?? activeStyles[0]?.id) === style.id ? 'chip-on' : 'chip'} !py-1.5 !text-xs`}
+              >
+                {style.label} · {pagesFor(style.id).length - 1} sidor
+              </button>
+            ))}
+          </div>
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {(plan.scenesByStyle?.[scenesStyle ?? activeStyles[0]?.id ?? ''] ?? plan.scenes).map((scene, i) => (
             <div key={i} className="card-glass p-4 hover:!shadow-soft">
               <p className="text-xs font-semibold text-brand/60 uppercase tracking-wide">Sida {i + 1}</p>
               <h4 className="font-heading font-semibold text-ink mb-2">{scene.label}</h4>
               <p className="text-sm text-ink/65 whitespace-pre-line max-h-48 overflow-y-auto pr-1">{scene.text}</p>
             </div>
           ))}
+          </div>
         </div>
       )}
 
@@ -602,6 +598,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       {/* Matris: en rad per stil */}
       <div className="space-y-5">
         {activeStyles.map(style => {
+          const pages = pagesFor(style.id);
           const rowDone = pages.filter(p => state.cells[cellKey(p.id, style.id)]?.status === 'done').length;
           return (
             <div key={style.id} className="card-glass p-4 sm:p-5 hover:!shadow-soft animate-fade-up">
@@ -708,10 +705,12 @@ export default function StyleTester({ onContinue, onBack }: Props) {
               Gå vidare med {getStylePreset(confirmStyle)?.label}?
             </h3>
             <p className="text-sm text-ink/55 mb-2">
-              Boken skapas med {plan.characters.length} karaktärer och {pages.length} sidor (omslag + {plan.scenes.length} sidor) från din text.
+              Nästa steg är att göra hela boken: stilen är förvald och din text följer med. Har du bara provat början
+              klistrar du in resten av manuset där.
             </p>
             <p className="text-sm text-ink/55 mb-6">
-              Nästa steg är karaktärerna. Sidbilderna skapas sedan om med godkända karaktärsreferenser, så att figurerna ser likadana ut på varje sida. Din stilprovning finns kvar om du vill komma tillbaka.
+              Bilderna skapas sedan med godkända karaktärer, så att figurerna ser likadana ut på varje sida.
+              Stilprovningen finns kvar om du vill komma tillbaka.
             </p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmStyle(null)} className="btn-ghost flex-1">Avbryt</button>
@@ -729,7 +728,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 text-white" onClick={e => e.stopPropagation()}>
             <div className="min-w-0">
               <p className="font-heading font-semibold truncate">
-                {pages.find(p => p.id === lbPageId)?.label} · {getStylePreset(lbStyleId)?.label}
+                {pagesFor(lbStyleId).find(p => p.id === lbPageId)?.label} · {getStylePreset(lbStyleId)?.label}
               </p>
               <p className="text-xs text-white/60">Pilar ← → för att bläddra · Esc för att stänga</p>
             </div>

@@ -12,7 +12,10 @@ Upptäckta under designgranskningen 2026-08-12. Sorterade efter uppskattat värd
 - [ ] Filter på ålder och sortering på popularitet (kräver läsräknare).
 - [x] **Ladda ner PDF från bokhandeln**.
 - [ ] **Dela med QR-kod** (visa QR för bokens länk).
-- [ ] **Läsräknare + gilla-knapp** per bok, och topplista i bokhandeln.
+- [x] **Gilla-knapp (hjärtan)**, beskrivning, huvudpersoner och författarsida i bokhandeln (kräver `scripts/bookstore-social.sql`).
+- [ ] Läsräknare och topplista.
+- [ ] Egen URL för författarsidor (idag bara inne i bokhandeln).
+- [ ] **Beställ tryckt bok**: integration med tryckpartner (t.ex. Gelato/Lulu) + betalning. Idag: intresseanmälan + tryckfärdig PDF.
 
 ## Skapa-flödet
 - [ ] **Molnautospar med statusindikator** ("Sparad i molnet ✓" i headern). Idag autosparas bara
@@ -24,6 +27,8 @@ Upptäckta under designgranskningen 2026-08-12. Sorterade efter uppskattat värd
 - [x] **Aktivera bokformaten** separat text och kapitelbok (sätts nu som riktig bok).
 - [ ] Lärobok: egen sättning (idag samma som serieformat).
 - [ ] **Onboarding**: kort guidad tur första gången man skapar en bok.
+- [ ] Karaktärsbiblioteket sparas bara i webbläsaren - synka till molnet för inloggade.
+- [ ] Referensbilder för karaktärer sparas inte i molnet (visas som initialer i bokhandeln).
 
 ## Konto & säkerhet
 - [ ] **Glömt lösenord**-flöde (Supabase `resetPasswordForEmail`).

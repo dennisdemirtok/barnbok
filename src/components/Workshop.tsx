@@ -55,10 +55,23 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
     setDraft({ ...draft, textBlocks: blocks });
   };
 
-  const saveText = () => {
+  const saveText = (message = 'Ändringar sparade ✓') => {
     onUpdateSpread(draft);
-    setFlash('Ändringar sparade ✓');
+    setFlash(message);
     setTimeout(() => setFlash(''), 2500);
+  };
+
+  // Osparade textändringar i arbetskopian jämfört med sparat uppslag
+  const hasUnsavedText =
+    draft.id === selected.id &&
+    (draft.textBlocks.length !== selected.textBlocks.length ||
+      draft.textBlocks.some((b, i) => b.text !== selected.textBlocks[i]?.text));
+
+  const selectSpread = (id: string) => {
+    if (regenerating || id === selectedId) return;
+    // Spara automatiskt i stället för att kasta osparade ändringar
+    if (hasUnsavedText) saveText(`Ändringar på ${spreadLabel(selected)} sparades automatiskt ✓`);
+    setSelectedId(id);
   };
 
   const regenerate = async () => {
@@ -82,9 +95,10 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
         const data = await res.json();
         throw new Error(data.error || 'Regenerering misslyckades');
       }
-      const { image } = await res.json();
-      const updated = { ...draft, generatedImage: image, status: 'done' as const };
-      setDraft(updated);
+      const { image, qualityCheck } = await res.json();
+      const updated = { ...draft, generatedImage: image, status: 'done' as const, qualityCheck };
+      // Skriv bara in bilden i arbetskopian om den fortfarande gäller samma uppslag
+      setDraft(prev => (prev && prev.id === draft.id ? { ...prev, generatedImage: image, status: 'done' as const, qualityCheck } : prev));
       onUpdateSpread(updated); // spara direkt
       setFlash('Ny bild genererad och sparad ✓');
       setTimeout(() => setFlash(''), 2500);
@@ -106,8 +120,10 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
         {book.spreads.map((s) => (
           <button
             key={s.id}
-            onClick={() => setSelectedId(s.id)}
-            className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+            onClick={() => selectSpread(s.id)}
+            disabled={regenerating && s.id !== selectedId}
+            title={regenerating && s.id !== selectedId ? 'Vänta tills bilden är klar' : undefined}
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
               s.id === selectedId
                 ? 'bg-ink text-white shadow-soft'
                 : 'glass text-ink/65 hover:text-brand'
@@ -165,7 +181,7 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
             <button onClick={regenerate} disabled={regenerating} className="btn-action inline-flex items-center gap-1.5">
               {regenerating ? 'Genererar...' : <><Icon name="auto_fix_high" filled size={18} /> Regenerera bild</>}
             </button>
-            <button onClick={saveText} className="btn-primary">Spara ändringar</button>
+            <button onClick={() => saveText()} className="btn-primary">Spara ändringar</button>
           </div>
 
           {flash && <p className="text-sm text-emerald-600 font-medium">{flash}</p>}
