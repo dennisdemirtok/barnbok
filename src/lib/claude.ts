@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { PROSE_QUALITY_RULES, variationBlock, sanitizeProse } from './writing';
 import { BookFormat } from './types';
 import type { BookConcept, StylePreset } from './styles';
+import type { VoiceProfile } from './author-types';
 
 export type TextDensity = 'minimal' | 'lite' | 'medium' | 'mycket';
 
@@ -581,6 +582,7 @@ export interface BeginningInput {
   characterNotes?: string;
   characters?: { name: string; appearance?: string; personality?: string }[];
   style?: WritingStyleRef;
+  voice?: AuthorVoiceRef; // författarens eget språk - går före seriens språkexempel
 }
 
 export interface BookBeginning {
@@ -596,6 +598,7 @@ export interface ContinueInput {
   outline: string;
   rawText: string;
   style?: WritingStyleRef;
+  voice?: AuthorVoiceRef; // författarens eget språk - går före seriens språkexempel
 }
 
 // Början = ungefär fyra illustrerade sidor, aldrig mer än hela boken.
@@ -699,8 +702,50 @@ ${variationBlock({ names: true, opening: false })}`;
   });
 }
 
+// ═══════════════════════════════════════════
+//  Författarspråk: hur en viss författare skriver ("Slutför din bok")
+// ═══════════════════════════════════════════
+
+export interface AuthorVoiceRef {
+  profile: VoiceProfile;
+  samples: string[];
+}
+
+// Replikmarkeringar som står först i raden och kan bytas mot varandra.
+// Citattecken räknas inte - där måste repliken också avslutas.
+export function lineDialogueMarker(marker?: string): string | undefined {
+  const m = marker?.trim();
+  if (m === '*') return '* ';
+  if (m === '–' || m === '—' || m === '―') return '– ';
+  if (m === '-') return '- ';
+  return undefined;
+}
+
+// Promptblock med författarens röst: profil + ordagranna utdrag
+export function authorVoiceBlock(voice: AuthorVoiceRef): string {
+  const p = voice.profile;
+  const line = (label: string, value?: string) => (value?.trim() ? `- ${label}: ${value.trim()}\n` : '');
+  const list = (items?: string[]) => (items ?? []).filter(i => i?.trim()).map(i => `  • ${i.trim()}`).join('\n');
+  const samples = voice.samples.filter(s => s?.trim());
+  const marker = p.dialogueMarker ? JSON.stringify(p.dialogueMarker) : '';
+
+  return `
+FÖRFATTARSPRÅK - så skriver just den här författaren. Det här går före ALLA andra stilregler och stilexempel: där författarens röst skiljer sig från de allmänna reglerna (tempus, replikformat, stor eller liten bokstav i anföringen, meningslängd, ordval, talspråk) följer du författaren. Det enda undantaget är långa tankstreck (—), som aldrig får användas.
+${line('Helhet', p.summary)}${line('Tempus', p.tense)}${line('Perspektiv', p.perspective)}${line('Meningsrytm', p.sentenceRhythm)}${line('Repliker', p.dialogue)}${marker ? `- Replikmarkering först i raden: ${marker} (exakt så, inklusive mellanslag)\n` : ''}${line('Ordförråd', p.vocabulary)}${line('Känslor', p.emotions)}${line('Detaljer', p.details)}${line('Humor', p.humor)}${line('Tempo', p.pacing)}${p.signatureMoves?.length ? `- Typiska grepp:\n${list(p.signatureMoves)}\n` : ''}${p.avoid?.length ? `- Gör aldrig:\n${list(p.avoid)}\n` : ''}${samples.length > 0 ? `
+UTDRAG UR FÖRFATTARENS EGEN TEXT (ordagranna). Läs dem högt i huvudet: hör rytmen, se hur repliker skrivs och taggas, vilka ord och detaljer författaren väljer och hur känslor visas. Skriv så att en läsare tror att samma person skrivit din text. Kopiera aldrig meningar, fraser eller händelser ur utdragen.
+${samples.map((s, i) => `<utdrag nr="${i + 1}">\n${s.trim()}\n</utdrag>`).join('\n')}
+` : ''}`;
+}
+
 // Skrivstilsblock - samma formulering som i generateBookContent
-function writingStyleBlock(style?: WritingStyleRef): string {
+function writingStyleBlock(style?: WritingStyleRef, voice?: AuthorVoiceRef): string {
+  if (voice) {
+    // Författarens eget språk ersätter seriens språkexempel; seriens stilnoter blir bakgrund
+    return `${style?.textStyleNotes ? `
+SERIENS SKRIVSTIL (bara bakgrund - författarspråket nedan går före):
+${style.textStyleNotes}
+` : ''}${authorVoiceBlock(voice)}`;
+  }
   let block = '';
   if (style?.textStyleNotes) {
     block += `
@@ -726,18 +771,27 @@ function proseRules(targetAge: string): string {
 ${PROSE_QUALITY_RULES}`;
 }
 
-function manuscriptFormatRules(isChapterBook: boolean): string {
+function manuscriptFormatRules(isChapterBook: boolean, voice?: AuthorVoiceRef): string {
+  const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
+  const dialogueRule = marker
+    ? `- Repliker står i egna stycken som börjar med författarens replikmarkering "${marker}" precis som i författarens text, t.ex. "${marker}Kom hit!". Anföringsverb, versaler och skiljetecken i repliken skrivs som författaren gör.`
+    : voice
+      ? '- Repliker skrivs exakt som i författarens text (samma markering, placering och skiljetecken).'
+      : '- Repliker står i egna stycken som börjar med talstreck och mellanslag, t.ex. "– Kom hit! ropade Otis." Använd aldrig citattecken för repliker.';
   return `MANUSFORMAT (viktigt - texten sätts automatiskt i boken):
 - Ren löptext med ett stycke per rad.
 ${isChapterBook
     ? '- Kapitelrubriker på en egen rad i formen "Kapitel 1 – Titel" (eller "Prolog"), med en tom rad före rubriken.'
     : '- Inga kapitel eller rubriker - berättelsen flödar sammanhängande. Skriv ALDRIG ordet Kapitel.'}
-- Repliker står i egna stycken som börjar med talstreck och mellanslag, t.ex. "– Kom hit! ropade Otis." Använd aldrig citattecken för repliker.
-- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, * eller **).`;
+${dialogueRule}
+- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, ${marker === '* ' ? '' : '* eller '}**).`;
 }
 
 // Städar bort markdown och fel talstreck så att manuset följer formatet
-function normalizeManuscript(text: string): string {
+function normalizeManuscript(text: string, voice?: AuthorVoiceRef): string {
+  // Med författarspråk byts andra replikstreck mot författarens egen markering
+  const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
+  const dashMarker = marker ? /^\s*[-—―–]\s+/ : /^\s*[-—―]\s+/;
   return text
     .replace(/\r\n?/g, '\n')
     .split('\n')
@@ -745,7 +799,7 @@ function normalizeManuscript(text: string): string {
     .map(line => line
       .replace(/^\s*#{1,6}\s*/, '')
       .replace(/\*\*|__/g, '')
-      .replace(/^\s*[-—―]\s+/, '– ')
+      .replace(dashMarker, marker ?? '– ')
       .trimEnd())
     .map(sanitizeProse)
     .join('\n')
@@ -801,7 +855,7 @@ KARAKTÄRER:
 ${characterLines.length > 0
     ? `${characterLines.join('\n')}\nAnvänd dessa figurer som de beskrivs. Lägg till fler figurer bara om berättelsen behöver dem.`
     : 'Inga angivna - skapa de figurer berättelsen behöver, med svenska namn.'}
-${writingStyleBlock(input.style)}
+${writingStyleBlock(input.style, input.voice)}
 UPPGIFT:
 1. title: bokens titel${input.title?.trim() ? ' (använd författarens titel oförändrad)' : ''}.
 2. outline: en kort disposition för HELA boken som ren text (ingen markdown), så att resten kan skrivas senare utan att tappa tråden:
@@ -810,7 +864,7 @@ UPPGIFT:
    - Planera en hel spänningskurva med ett tydligt, tillfredsställande slut.
 3. beginning: BARA bokens början, ca ${beginningWords} ord (håll dig nära den längden). Börja med en fångande öppning, presentera huvudpersonen och sätt igång handlingen. Sluta vid ett naturligt avbrott efter en scen - skriv INTE vidare i handlingen och avsluta inte berättelsen.
 
-${manuscriptFormatRules(isChapterBook)}
+${manuscriptFormatRules(isChapterBook, input.voice)}
 
 ${proseRules(targetAge)}
 
@@ -844,7 +898,7 @@ ${variationBlock({ names: characterLines.length === 0, opening: true })}`;
     return {
       title: input.title?.trim() || result.title.trim(),
       outline: result.outline.trim(),
-      rawText: normalizeManuscript(result.beginning),
+      rawText: normalizeManuscript(result.beginning, input.voice),
     };
   });
 }
@@ -885,7 +939,7 @@ BOKENS BÖRJAN (redan skriven och godkänd av författaren - den kan ha redigera
 """
 ${input.rawText}
 """
-${writingStyleBlock(input.style)}
+${writingStyleBlock(input.style, input.voice)}
 UPPGIFT:
 Skriv RESTEN av boken, från exakt där början slutar till bokens slut. Ca ${remainingWords} ord till (hela boken blir då ca ${book.targetWords} ord) - fördela dem jämnt över återstoden av dispositionen${isChapterBook ? ' så att varje kapitel får ungefär lika mycket text' : ''}, och skynda inte igenom slutet.
 - Fortsätt sömlöst i samma röst, tempus och berättarperspektiv. Upprepa inte något ur början och sammanfatta inte det som redan hänt.
@@ -895,7 +949,7 @@ ${isChapterBook
 - Knyt ihop alla trådar och avsluta med ett tydligt, tillfredsställande slut.
 - Svara ENBART med fortsättningen av manuset - ingen inledning, inga kommentarer, inget "Slut".
 
-${manuscriptFormatRules(isChapterBook)}
+${manuscriptFormatRules(isChapterBook, input.voice)}
 
 ${proseRules(targetAge)}`;
 
@@ -919,10 +973,10 @@ ${proseRules(targetAge)}`;
       const text = message.content
         .map(c => (c.type === 'text' ? c.text : ''))
         .join('');
-      return finishContinuation(text || written, message.stop_reason === 'max_tokens');
+      return finishContinuation(text || written, message.stop_reason === 'max_tokens', input.voice);
     } catch (err) {
       if (err instanceof Anthropic.APIUserAbortError) {
-        if (written.trim()) return finishContinuation(written, true);
+        if (written.trim()) return finishContinuation(written, true, input.voice);
         throw new Error('Det tog för lång tid att skriva resten av boken - försök igen');
       }
       throw err;
@@ -932,14 +986,14 @@ ${proseRules(targetAge)}`;
   });
 }
 
-function finishContinuation(text: string, truncated: boolean): { rawText: string; truncated: boolean } {
+function finishContinuation(text: string, truncated: boolean, voice?: AuthorVoiceRef): { rawText: string; truncated: boolean } {
   let clean = text;
   // Avbruten text: släng det halvfärdiga sista stycket
   if (truncated) {
     const lastBreak = clean.lastIndexOf('\n');
     if (lastBreak > 0) clean = clean.slice(0, lastBreak);
   }
-  return { rawText: normalizeManuscript(clean), truncated };
+  return { rawText: normalizeManuscript(clean, voice), truncated };
 }
 
 // ═══════════════════════════════════════════

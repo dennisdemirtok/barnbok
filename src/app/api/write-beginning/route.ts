@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { writeBookBeginning, countWords, WritingStyleRef } from '@/lib/claude';
 import { fetchStyleProfile, fetchLanguageExamples } from '@/lib/style-profiles';
 import { getStylePreset } from '@/lib/styles';
+import { normalizeVoice } from '@/lib/author-ai';
 
 export const maxDuration = 300;
 
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
       setting?: string;
       characterNotes?: string;
       characters?: { name: string; appearance?: string; personality?: string }[];
+      voice?: unknown; // författarspråk { profile, samples } - går före seriens språkexempel
     };
 
     const preset = getStylePreset(body.stylePresetId);
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
       characterNotes: body.characterNotes?.trim().slice(0, 4000) || undefined,
       characters: Array.isArray(body.characters) ? body.characters.slice(0, 20) : undefined,
       style,
+      voice: normalizeVoice(body.voice),
     });
 
     console.log(`[write-beginning] "${result.title}": ${countWords(result.rawText)} ord`);

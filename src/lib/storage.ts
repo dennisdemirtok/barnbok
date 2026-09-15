@@ -1,12 +1,15 @@
 import { BookProject, SavedCharacter, SavedText } from './types';
+import type { AuthorVoice, FinishProject } from './author-types';
 import { saveBookToCloud, deleteBookFromCloud } from './supabase-db';
 
 const DB_NAME = 'book-creator-db';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const BOOKS_STORE = 'books';
 const CHARACTERS_STORE = 'characters';
 const TEXTS_STORE = 'texts';
 const STYLE_TESTS_STORE = 'styletests';
+const FINISH_STORE = 'finishProjects';
+const VOICES_STORE = 'authorVoices';
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -26,6 +29,12 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STYLE_TESTS_STORE)) {
         db.createObjectStore(STYLE_TESTS_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(FINISH_STORE)) {
+        db.createObjectStore(FINISH_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(VOICES_STORE)) {
+        db.createObjectStore(VOICES_STORE, { keyPath: 'id' });
       }
     };
   });
@@ -359,4 +368,62 @@ export async function deleteSavedText(id: string): Promise<void> {
       reject(tx.error);
     };
   });
+}
+
+// ===== Slutför din bok: projekt och sparade författarspråk =====
+
+async function putItem<T>(store: string, item: T): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(item);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function listItems<T>(store: string): Promise<T[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const request = tx.objectStore(store).getAll();
+    request.onsuccess = () => { db.close(); resolve(request.result as T[]); };
+    request.onerror = () => { db.close(); reject(request.error); };
+  });
+}
+
+async function deleteItem(store: string, id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(id);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+export async function saveFinishProject(project: FinishProject): Promise<void> {
+  return putItem(FINISH_STORE, { ...project, updatedAt: new Date().toISOString() });
+}
+
+export async function listFinishProjects(): Promise<FinishProject[]> {
+  const items = await listItems<FinishProject>(FINISH_STORE);
+  return items.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+}
+
+export async function deleteFinishProject(id: string): Promise<void> {
+  return deleteItem(FINISH_STORE, id);
+}
+
+export async function saveAuthorVoice(voice: AuthorVoice): Promise<void> {
+  return putItem(VOICES_STORE, { ...voice, updatedAt: new Date().toISOString() });
+}
+
+export async function listAuthorVoices(): Promise<AuthorVoice[]> {
+  const items = await listItems<AuthorVoice>(VOICES_STORE);
+  return items.sort((a, b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt));
+}
+
+export async function deleteAuthorVoice(id: string): Promise<void> {
+  return deleteItem(VOICES_STORE, id);
 }

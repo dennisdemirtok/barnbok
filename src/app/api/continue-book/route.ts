@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { continueBook, countWords, WritingStyleRef } from '@/lib/claude';
 import { fetchStyleProfile, fetchLanguageExamples } from '@/lib/style-profiles';
 import { getStylePreset } from '@/lib/styles';
+import { normalizeVoice } from '@/lib/author-ai';
 
 export const maxDuration = 300;
 
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
       title?: string;
       outline?: string;
       rawText?: string;
+      voice?: unknown; // författarspråk { profile, samples } - går före seriens språkexempel
     };
 
     const preset = getStylePreset(body.stylePresetId);
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
       outline: body.outline?.trim() || '(ingen disposition - fortsätt berättelsen logiskt till ett bra slut)',
       rawText,
       style,
+      voice: normalizeVoice(body.voice),
     }, startedAt + WRITE_BUDGET_MS);
 
     console.log(`[continue-book] ${countWords(result.rawText)} ord till${result.truncated ? ' (avbruten)' : ''}`);
