@@ -1055,7 +1055,7 @@ export async function suggestCharacter(partial: Partial<CharacterFields>, option
 
   const prompt = `Du hjälper en barnboksförfattare att hitta på en karaktär till en svensk barnbok. Skriv på svenska.
 
-${given ? `REDAN IFYLLT (behåll exakt som det står och bygg vidare så att allt passar ihop):\n${given}` : 'Inget är ifyllt - hitta på en helt ny, minnesvärd karaktär.'}
+${given ? `REDAN IFYLLT AV FÖRFATTAREN:\n${given}\nBehåll namn, ålder och roll exakt. Korta eller vaga beskrivningar (t.ex. "en busig katt") ska du utveckla till konkreta beskrivningar med samma innebörd. Allt ska passa ihop med det ifyllda.` : 'Inget är ifyllt - hitta på en helt ny, minnesvärd karaktär.'}
 ${options.hint ? `\nFÖRFATTARENS IDÉ: ${options.hint}\n` : ''}
 SLUMPADE IDÉFRÖN (använd bara om det passar det som redan är ifyllt):
 - Typ: ${pickOne(CHARACTER_SEEDS.kinds)}
@@ -1070,7 +1070,7 @@ Fyll i alla fält:
 - appearance: 1-2 konkreta meningar om hår, ögon, hy, kroppsbyggnad och ett särdrag (för djur: art, päls/fjäll, färger) - tillräckligt tydligt för att en illustratör ska rita samma figur varje gång
 - normalClothes: vardagskläder med färger
 - personality: 3-5 ord eller en kort mening
-- heroName, heroCostume, power: ${options.hero ? 'fyll i en hjälteidentitet som passar' : 'lämna tomma strängar om inte det ifyllda tyder på en hjälte'}
+- heroName, heroCostume, power: ${options.hero ? 'fyll i en hjälteidentitet som passar' : 'lämna tomma strängar (om inte författaren själv fyllt i dem)'}
 
 Undvik klyschor, håll det barnvänligt och konsekvent.`;
 
@@ -1092,9 +1092,18 @@ Undvik klyschor, håll det barnvänligt och konsekvent.`;
       throw new Error('Inget svar från Claude');
     }
     const suggestion = JSON.parse(textBlock.text) as CharacterFields;
-    // Det författaren skrev vinner alltid
+    // Namn, ålder, roll och längre beskrivningar som författaren skrivit vinner alltid;
+    // korta beskrivningar får AI:ns utvecklade version
+    const out = suggestion as unknown as Record<string, string>;
     for (const [k, v] of Object.entries(partial)) {
-      if (typeof v === 'string' && v.trim()) (suggestion as unknown as Record<string, string>)[k] = v;
+      if (typeof v !== 'string' || !v.trim()) continue;
+      const exact = k === 'name' || k === 'age' || k === 'role' || v.trim().length >= 60;
+      if (exact || !out[k]?.trim()) out[k] = v;
+    }
+    if (!options.hero) {
+      for (const k of ['heroName', 'heroCostume', 'power'] as const) {
+        if (!partial[k]?.trim()) out[k] = '';
+      }
     }
     return suggestion;
   });
