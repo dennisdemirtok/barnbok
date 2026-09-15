@@ -13,7 +13,7 @@ Som en riktig svensk barnboksförfattare har skrivit den: levande, konkret, lite
 FÖRBJUDET (typiska AI-tecken)
 - Långa tankstreck (—) och tankstreck mitt i meningar. Skriv om med punkt eller komma. Talstreck först i en replik är okej.
 - Kaskader som "Först ... Sedan ... Och sedan ..." och uppräkningar i tre led ("den grunda, den lugna, den tysta").
-- Mer än en "som om"-liknelse per sida, och staplade metaforer.
+- "som om" högst en gång i hela texten, och inga staplade liknelser eller metaforer. Beskriv hellre rakt vad som händer.
 - Enordsstycken för dramatik ("Knarr." "Tystnad.") mer än någon enstaka gång i hela texten.
 - Att avsluta varje scen eller kapitel med en olycksbådande enradare.
 - Pekpinnar, sammanfattande moral och fraser som "ett äventyr de aldrig skulle glömma", "hjärtat bultade", "plötsligt" om och om igen.
