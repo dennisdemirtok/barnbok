@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { AuthorVoice, FinishProject, FinishSettings, TimelineChapter, TimelineRequest, TimelineResponse, VoiceRequest, VoiceResponse } from '@/lib/author-types';
 import { saveAuthorVoice, saveFinishProject } from '@/lib/storage';
 import { postJson } from '@/lib/fetch-json';
+import { BUILTIN_VOICES } from '@/lib/builtin-voices';
 import Icon from '../Icon';
 import { countMissingMarkers, pasteManuscript, restoreDialogueMarkers } from '@/lib/dialogue';
 import StepHeader from '../StepHeader';
@@ -73,7 +74,7 @@ export default function NewFinishProject({ voices, onCancel, onCreated, onVoices
   const minChapters = Math.max(1, parts.length);
   const chapterCount = Math.max(totalChapters, minChapters);
   const toWrite = chapterCount - parts.filter(p => p.text.trim()).length;
-  const savedVoice = voices.find(v => v.id === voiceChoice);
+  const savedVoice = [...voices, ...BUILTIN_VOICES].find(v => v.id === voiceChoice);
 
   const loadSample = async () => {
     setLoadingSample(true);
@@ -339,6 +340,17 @@ export default function NewFinishProject({ voices, onCancel, onCreated, onVoices
                   icon="record_voice_over"
                   title={v.name}
                   text={v.profile?.summary || (v.sourceTitle ? `Från ${v.sourceTitle}` : 'Sparat språk')}
+                />
+              ))}
+              <p className="pt-2 text-xs font-semibold text-ink/50">Boktypernas språk</p>
+              {BUILTIN_VOICES.map(v => (
+                <VoiceOption
+                  key={v.id}
+                  on={voiceChoice === v.id}
+                  onClick={() => setVoiceChoice(v.id)}
+                  icon="auto_stories"
+                  title={v.name}
+                  text={`${v.profile.summary.slice(0, 110)}…`}
                 />
               ))}
             </div>

@@ -7,6 +7,7 @@ import StepHeader from './StepHeader';
 import StylePicker from './StylePicker';
 import CharacterLibraryPicker from './CharacterLibraryPicker';
 import { listSavedCharacters, listAuthorVoices } from '@/lib/storage';
+import { BUILTIN_VOICES } from '@/lib/builtin-voices';
 import type { AuthorVoice } from '@/lib/author-types';
 
 interface Props {
@@ -68,7 +69,9 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
       .then(setVoices)
       .catch(err => console.error('Kunde inte ladda författarspråk:', err));
   }, []);
-  const voice = voices.find(v => v.id === voiceId);
+  // Egna sparade språk först, sedan boktypernas färdiga språk
+  const allVoices = [...voices, ...BUILTIN_VOICES];
+  const voice = allVoices.find(v => v.id === voiceId);
 
   const preset = getStylePreset(stylePresetId) ?? STYLE_PRESETS[0];
   const targetAge = chosenAge ?? preset.book.age;
@@ -252,10 +255,10 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
       </section>
 
       {/* Författarspråk - bara om det finns sparade */}
-      {voices.length > 0 && (
+      {allVoices.length > 0 && (
         <section>
           <h3 className="text-sm font-semibold text-ink/80 mb-1">Skriv i mitt författarspråk <span className="font-normal text-ink/40">(valfritt)</span></h3>
-          <p className="text-xs text-ink/55 mb-3">Välj ett språk du har sparat så låter texten som du i stället för boktypens stil.</p>
+          <p className="text-xs text-ink/55 mb-3">Välj ett språk du har sparat, eller en annan boktyps språk, så låter texten så i stället för boktypens stil.</p>
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Författarspråk">
             <button
               type="button"
@@ -267,7 +270,7 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
             >
               Boktypens stil
             </button>
-            {voices.map(v => (
+            {allVoices.map(v => (
               <button
                 key={v.id}
                 type="button"
