@@ -17,7 +17,8 @@ FÖRBJUDET (typiska AI-tecken)
 - Enordsstycken för dramatik ("Knarr." "Tystnad.") mer än någon enstaka gång i hela texten.
 - Att avsluta varje scen eller kapitel med en olycksbådande enradare.
 - Pekpinnar, sammanfattande moral och fraser som "ett äventyr de aldrig skulle glömma", "hjärtat bultade", "plötsligt" om och om igen.
-- Ordet "magisk" och liknande tomma förstärkningsord.`;
+- Ordet "magisk" och liknande tomma förstärkningsord.
+- Figurer, namn, platser och varumärken från befintliga böcker, serier och filmer, även de som en boktyp är inspirerad av. Boktypen är bara en stil - hitta på egna figurer och namn.`;
 
 // Vanliga standardval som gör att olika böcker blir likadana
 const OVERUSED_DEFAULTS = [

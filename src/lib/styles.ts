@@ -6,7 +6,7 @@
 // läggs till som kompletterande referens men ersätter aldrig art direction,
 // eftersom profilerna ofta beskriver liknande saker ("clean outlines, large eyes").
 
-import type { IllustrationShape } from './types';
+import type { Composition, IllustrationShape } from './types';
 import type { FontFamily } from './book-fonts';
 
 export type { IllustrationShape };
@@ -38,6 +38,12 @@ export interface BookConcept {
   targetWords: number; // typisk längd när AI:n skriver boken
   age: string;
   lengthLabel: string; // kort beskrivning för UI:t
+  // Rörlig bildblandning: vikter per bildtyp. Utan mix används stilens bildform på alla bilder.
+  compositionMix?: Partial<Record<Composition, number>>;
+  // Hur repliker skrivs i boktypen (svensk standard är talstreck)
+  dialogue?: 'dash' | 'quotes';
+  // Språket i boktypen, beskrivet med egna ord utifrån analys av förlagor (aldrig citat)
+  textStyle?: string;
 }
 
 
@@ -83,14 +89,21 @@ ${NO_GENERIC}`,
     concept: 'Busig, humoristisk deckarbok med karikatyrer',
     series: 'Familjen Knyckertz',
     shape: 'page',
-    fonts: { body: 'Literata', heading: 'PatrickHand' },
+    // Skrivmaskinsrubriker och klassisk brödtext, som i förlagan
+    fonts: { body: 'Literata', heading: 'CourierPrime' },
     swatch: 'from-orange-500 to-red-600',
-    book: { format: 'kapitelbok', wordsPerImage: 350, targetWords: 9000, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 110 sidor' },
-    coverLettering: 'Wobbly, hand-drawn ink lettering with uneven bouncy letters of different sizes, like a humorous detective comic title - never elegant or serif.',
-    artDirection: `ART STYLE: Humorous Scandinavian cartoon illustration for a funny crime-caper children's book.
-RENDERING: Loose, scratchy, energetic black ink line with visible pen texture; slightly messy hatching; bright but warm watercolor-like color washes that do not stay inside the lines; white paper showing through.
-CHARACTER DESIGN LANGUAGE: Strong CARICATURE - big bulbous or long pointed noses, small dot or bead eyes, oversized grins or grimaces, gangly long limbs or round stout bodies, big hands and feet, wild messy hair, exaggerated comic expressions and slapstick body language. Characters look quirky, never pretty or anime-like.
-COMPOSITION: Busy, lively scenes packed with funny little background details and clutter; slightly tilted, playful perspective.
+    book: {
+      format: 'kapitelbok', wordsPerImage: 180, targetWords: 9000, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 110 sidor',
+      // Rörligt formspråk: mest utklippta figurer, blandat med helsidor, band, serierutor och vinjetter
+      compositionMix: { spot: 0.34, full: 0.18, band: 0.16, panels: 0.12, round: 0.1, spread: 0.1 },
+      dialogue: 'quotes',
+      textStyle: `Presens och tredje person nära barnet. Korta kapitel med numrerade, lekfulla rubriker, gärna som en fråga eller ett påstående som väcker nyfikenhet. Dialogen bär berättelsen: många korta repliker i citattecken med enkla anföringar som "säger", "undrar", "viskar", ofta i snabba växlingar. Torr, lågmäld humor där de vuxna tar absurda saker på största allvar och barnet är den som ser igenom dem. Figurer och platser får ordvitsnamn. Återkommande skämt och små ritualer (en gest, en fras) som kommer tillbaka flera gånger. Ibland listor, skyltar, tidningsrubriker eller lappar som bryter texten. Ljudord i versaler när det händer något. Meningarna är enkla och rytmiska, med konkreta vardagsdetaljer och ingen moralkaka.`,
+    },
+    coverLettering: 'Ransom-note collage lettering: each letter cut from a different paper or magazine, mixed sizes and colors, slightly crooked, like a playful crook\'s note.',
+    artDirection: `ART STYLE: Humorous Scandinavian cartoon illustration for a funny crime-caper chapter book, drawn by hand.
+RENDERING: Loose, slightly scratchy dark ink line with visible pen texture and light hatching. Flat, muted watercolor or gouache washes (dusty blues, lilac evening tones, ochre, grey) with small punches of warm orange-red. Lots of white paper; color often sits in soft flat patches rather than filling everything. Night scenes use deep violet with warm lamp light.
+CHARACTER DESIGN LANGUAGE: Gentle caricature. Lanky, thin arms and legs, big feet in simple shoes, long or bulbous noses, small eyes, expressive eyebrows, slightly hunched deadpan poses. Figures are drawn fairly small and full-body with clear silhouettes and comic body language. Quirky and dry, never cute, glossy or anime-like.
+COMPOSITION: Graphic and airy. Figures often stand on plain white paper with only a soft flat color puddle under their feet. Bold graphic devices: silhouettes against the sky, a flashlight cone of light, tilted rooms seen from above, a winding road across the page, spiky bursts. Playful, slightly skewed perspective with just the props the joke needs.
 ${NO_GENERIC}`,
   },
   {

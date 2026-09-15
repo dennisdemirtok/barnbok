@@ -213,6 +213,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
   }
 
   // 5. Build BookProject
+  const meta = parseBookMeta(bookRow.theme);
   const characters: Character[] = (charRows || []).map(c => ({
     id: c.id,
     name: c.name,
@@ -234,6 +235,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
       spreadNumber: s.spread_number,
       pages: s.pages,
       chapter: s.chapter || undefined,
+      composition: meta.compositions?.[String(s.spread_number)],
       textBlocks: tbs,
       imagePrompt: s.image_prompt || '',
       generatedImage: undefined, // Loaded on demand via image_url
@@ -242,7 +244,6 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     } as Spread & { imageUrl?: string };
   });
 
-  const meta = parseBookMeta(bookRow.theme);
   return {
     id: bookRow.id,
     title: bookRow.title,
@@ -923,18 +924,23 @@ export async function getStyleProfile(bookSeries: string): Promise<any | null> {
 // ═══════════════════════════════════════════
 
 function buildTheme(book: BookProject): string {
-  return JSON.stringify({ v: 1, stylePresetId: book.stylePresetId, illustrationShape: book.illustrationShape, author: book.author?.trim() || undefined });
+  // Bildtyper per uppslag sparas här så att ingen tabelländring behövs
+  const compositions = Object.fromEntries(book.spreads.filter(sp => sp.composition).map(sp => [sp.spreadNumber, sp.composition]));
+  return JSON.stringify({
+    v: 1, stylePresetId: book.stylePresetId, illustrationShape: book.illustrationShape, author: book.author?.trim() || undefined,
+    ...(Object.keys(compositions).length > 0 ? { compositions } : {}),
+  });
 }
 
 function spreadLabel(spread: Spread): string {
   return spread.pages === 'omslag' ? 'omslag' : spread.pages === 'slutsida' ? 'slutsida' : `sida ${spread.pages}`;
 }
 
-function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author'> {
+function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author'> & { compositions?: Record<string, Spread['composition']> } {
   if (typeof theme !== 'string' || !theme.startsWith('{')) return {};
   try {
     const meta = JSON.parse(theme);
-    return { stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author };
+    return { stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author, compositions: meta.compositions };
   } catch {
     return {};
   }

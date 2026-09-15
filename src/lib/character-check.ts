@@ -304,6 +304,14 @@ Major unwanted_text: English text, empty speech bubbles or empty text boxes, inv
   let layoutRules: string;
   if (isCover) {
     layoutRules = 'Portrait cover. The title area in the upper part must be uncluttered and the title must not cover a character\'s face (covered face -> major layout). Image must be portrait (landscape -> major layout).';
+  } else if (spread.composition === 'spot') {
+    layoutRules = 'Square SPOT illustration: the figures should stand on plain white paper with no scenery (a small soft color patch under the feet is fine). A full background or room -> major layout. Missing environment from the brief is NOT an issue for spots.';
+  } else if (spread.composition === 'round') {
+    layoutRules = 'Square image that will be cropped to a circle: the main motif must be centered, with nothing important in the corners (key detail in a corner -> major layout).';
+  } else if (spread.composition === 'band') {
+    layoutRules = 'Wide 16:9 band across a text page: the scene should read left to right; heads or key details cut off at the top or bottom edge -> major layout.';
+  } else if (spread.composition === 'panels') {
+    layoutRules = 'One image with 3-4 comic panels in a grid: fewer than 3 or more than 4 panels -> major layout. The same characters must look identical in all panels; each named character may appear once PER PANEL (appearing in several panels is expected, not a duplicate). Speech bubbles or sound words -> major unwanted_text.';
   } else if (shape === 'spread') {
     const side = textSideForSpread(spread.spreadNumber).toUpperCase();
     layoutRules = `Landscape double-page spread. The vertical center line is the book's fold (gutter): a character's face or a key story detail sitting on or right next to the center line -> major layout.${!isComic && bookFormat !== 'larobok'

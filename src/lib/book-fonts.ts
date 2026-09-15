@@ -11,7 +11,8 @@ export type FontFamily =
   | 'Figtree'
   | 'Fredoka'
   | 'Bangers'
-  | 'PatrickHand';
+  | 'PatrickHand'
+  | 'CourierPrime';
 export type FontStyle = 'normal' | 'bold' | 'italic';
 
 export interface FontSpec {
@@ -59,6 +60,10 @@ export const BOOK_FONTS: Record<FontFamily, FamilyDef> = {
   Bangers: {
     name: 'Bangers', fallback: 'Impact, sans-serif', boldWeight: 400, scale: 1.3, baseline: 0.851,
     files: { normal: 'bangers-400.ttf' },
+  },
+  CourierPrime: {
+    name: 'Courier Prime', fallback: '"Courier New", monospace', boldWeight: 700, scale: 1.05, baseline: 0.72,
+    files: { normal: 'courierprime-400.ttf', bold: 'courierprime-700.ttf', italic: 'courierprime-400-italic.ttf' },
   },
   PatrickHand: {
     name: 'Patrick Hand', fallback: 'system-ui, sans-serif', boldWeight: 400, scale: 1.25, baseline: 0.865,

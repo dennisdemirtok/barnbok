@@ -55,7 +55,11 @@ async function drawElement(doc: jsPDF, el: PageEl, images: ImageCache) {
       if (!img) return;
       // Beskär till bildrutan (uppslagsbilder ritas bredare än sidan)
       doc.saveGraphicsState();
-      doc.rect(el.box.x, el.box.y, el.box.w, el.box.h, null);
+      if (el.clip === 'circle') {
+        doc.circle(el.box.x + el.box.w / 2, el.box.y + el.box.h / 2, Math.min(el.box.w, el.box.h) / 2, null);
+      } else {
+        doc.rect(el.box.x, el.box.y, el.box.w, el.box.h, null);
+      }
       doc.clip();
       doc.discardPath();
       doc.addImage(img.data, 'JPEG', el.draw.x, el.draw.y, el.draw.w, el.draw.h, img.alias, 'NONE');

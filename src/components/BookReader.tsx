@@ -24,7 +24,7 @@ export function BookPageView({ page, width }: { page: LayoutPage | null; width: 
             <div
               key={i}
               className="absolute overflow-hidden"
-              style={{ left: el.box.x * k, top: el.box.y * k, width: el.box.w * k, height: el.box.h * k }}
+              style={{ left: el.box.x * k, top: el.box.y * k, width: el.box.w * k, height: el.box.h * k, borderRadius: el.clip === 'circle' ? '50%' : undefined }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -92,7 +92,7 @@ export function useBookLayout(book: BookProject | null) {
     if (!book) return '';
     return JSON.stringify([
       book.title, book.author, book.stylePresetId, book.illustrationShape, book.bookFormat,
-      book.spreads.map(s => [s.id, s.pages, s.chapter, s.textBlocks.map(b => b.text), s.generatedImage?.length, (s as { imageUrl?: string }).imageUrl]),
+      book.spreads.map(s => [s.id, s.pages, s.chapter, s.composition, s.textBlocks.map(b => b.text), s.generatedImage?.length, (s as { imageUrl?: string }).imageUrl]),
     ]);
   }, [book]);
 

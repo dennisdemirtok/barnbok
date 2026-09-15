@@ -10,6 +10,7 @@ import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
 import { pasteManuscript } from '@/lib/dialogue';
+import { aspectFor, balanceCompositions, COMPOSITION_LABEL, resolveComposition } from '@/lib/compositions';
 
 interface Props {
   // Vald stil tas vidare till manussteget, där hela boken skapas
@@ -78,7 +79,11 @@ function buildPages(plan: StyleTestPlan, title: string, styleId: string): PageRo
       status: 'pending',
     },
   };
-  const scenes = (plan.scenesByStyle?.[styleId] ?? plan.scenes).map((scene, i): PageRow => ({
+  const sceneList = plan.scenesByStyle?.[styleId] ?? plan.scenes;
+  // Rörliga boktyper blandar bildtyper redan på testsidorna
+  const mix = getStylePreset(styleId)?.book.compositionMix;
+  const compositions = mix ? balanceCompositions(sceneList.map(() => undefined), mix, `${styleId}:${title}`) : [];
+  const scenes = sceneList.map((scene, i): PageRow => ({
     id: `scene-${i}`,
     label: scene.label,
     spread: {
@@ -92,6 +97,7 @@ function buildPages(plan: StyleTestPlan, title: string, styleId: string): PageRo
         .filter(Boolean)
         .map((text, j) => ({ position: `stycke ${j + 1}`, text })),
       imagePrompt: scene.imagePrompt,
+      composition: compositions[i],
       status: 'pending',
     },
   }));
@@ -626,9 +632,10 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
                   className="grid gap-3"
                   // Omslaget är alltid stående; sidorna följer stilens bildform
                   style={{
-                    gridTemplateColumns: `minmax(130px, 190px) repeat(${pages.length - 1}, ${
-                      style.shape === 'spread' ? 'minmax(200px, 290px)' : 'minmax(130px, 190px)'
-                    })`,
+                    gridTemplateColumns: pages.map(pg => {
+                      const comp = pg.id === 'cover' ? 'full' : resolveComposition(pg.spread.composition, style.shape);
+                      return comp === 'spread' || comp === 'band' ? 'minmax(200px, 290px)' : 'minmax(130px, 190px)';
+                    }).join(' '),
                   }}
                 >
                   {pages.map(page => {
@@ -636,7 +643,10 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
                     const cell = state.cells[key];
                     return (
                       <div key={key} className="min-w-0">
-                        <div className={`${page.id !== 'cover' && style.shape === 'spread' ? 'aspect-[3/2]' : 'aspect-[3/4]'} relative rounded-2xl overflow-hidden bg-paper ring-1 ring-line group`}>
+                        <div
+                          className={`relative overflow-hidden bg-paper ring-1 ring-line group ${page.spread.composition === 'round' ? 'rounded-full' : 'rounded-2xl'}`}
+                          style={{ aspectRatio: aspectFor(page.id === 'cover' ? 'full' : resolveComposition(page.spread.composition, style.shape)).replace(':', ' / ') }}
+                        >
                           {cell?.status === 'done' && cell.image ? (
                             <>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -684,6 +694,7 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
                         </div>
                         <p className="mt-1.5 text-xs font-semibold text-ink/65 truncate" title={page.label}>
                           {page.id === 'cover' ? 'Omslag' : page.label}
+                          {page.spread.composition && <span className="ml-1 font-normal text-ink/40">· {COMPOSITION_LABEL[page.spread.composition]}</span>}
                         </p>
                       </div>
                     );

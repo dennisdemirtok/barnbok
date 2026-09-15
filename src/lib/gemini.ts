@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { aspectFor, resolveComposition } from './compositions';
 import { Character, Spread, BookFormat, IllustrationShape } from './types';
 import { textSideForSpread } from './styles';
 
@@ -186,7 +187,7 @@ export function resolveIllustrationShape(bookFormat?: BookFormat, shape?: Illust
 
 // Layoutinstruktioner. VIKTIGT: inga stilord här (linjer, ögon, färger, teknik) -
 // stilen kommer enbart från STYLE GUIDE, annars blir alla stilar likadana.
-function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: IllustrationShape, spreadNumber: number): string {
+function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: IllustrationShape, spreadNumber: number, composition?: Spread['composition']): string {
   if (bookFormat === 'bildbok-text-pa-bild') {
     return `LAYOUT: Comic/graphic-novel spread with panels.
 - A professional comic spread with several panels of varied size
@@ -202,6 +203,41 @@ function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: Illust
 - Clear pedagogical illustrations; labels and arrows are allowed where they help explain
 - Organized layout that supports learning
 - No page numbers or metadata`;
+  }
+
+  // Rörliga böcker: varje bild har sin egen bildtyp
+  if (composition === 'spot') {
+    return `LAYOUT: SPOT ILLUSTRATION (square) that will sit inside a text page of a chapter book.
+- Only the character(s) of the moment and the one or two props they hold or use - NO room, landscape or background scenery
+- Plain white paper background all around, with generous empty white margins on every side so the figures can float on the page
+- At most a small, soft, flat patch of color on the ground under their feet (like a puddle of watercolor), nothing else
+- Full body, clear readable silhouettes and funny body language; figures fill roughly the central 60-70% of the square
+- Absolutely NO text, letters, numbers or speech bubbles`;
+  }
+  if (composition === 'round') {
+    return `LAYOUT: ROUND VIGNETTE (square image that will be cropped to a circle).
+- One clear, centered motif: a face close-up, an object, a clue or a small moment
+- Keep everything important inside the central circle (about 80% of the width); the corners will be cut away
+- Simple background that can fade to the edge
+- Absolutely NO text, letters, numbers or speech bubbles`;
+  }
+  if (composition === 'band') {
+    return `LAYOUT: WIDE HORIZONTAL BAND (16:9) that will run edge to edge across the top or bottom of a text page.
+- A scene that reads left to right: a journey, a street, a road, a room seen from the side, a row of characters
+- Keep characters and key details away from the extreme top and bottom edges
+- Absolutely NO text, letters, numbers or signage words`;
+  }
+  if (composition === 'panels') {
+    return `LAYOUT: COMIC PANELS - one image containing 3 or 4 panels in a simple grid with thin white gutters, like a page from a funny comic.
+- The panels show the moment step by step, in reading order (left to right, top to bottom), as described below
+- The same characters look identical in every panel
+- NO speech bubbles, captions, sound words, letters or numbers in any panel - keep one panel calm enough for a caption to be printed next to it
+- Vary the framing between panels (wide, close-up, reaction)`;
+  }
+  if (composition === 'full') {
+    return `LAYOUT: FULL-PAGE ILLUSTRATION (portrait, 16×21 cm), printed edge to edge.
+- A complete scene with environment and atmosphere for an important moment
+- Absolutely NO text, letters, numbers or signage words anywhere in the image`;
   }
 
   if (shape === 'spread') {
@@ -295,8 +331,9 @@ export async function generatePageImage(
 - Show the main character(s) in an appealing scene, leaving the title area uncluttered
 - Professional bookshop-quality cover
 - No labels, page numbers or metadata`
-    : getLayoutInstructions(bookFormat, shape, spread.spreadNumber);
+    : getLayoutInstructions(bookFormat, shape, spread.spreadNumber, spread.composition);
   const includeTextOnImage = !isCover && textInImage(bookFormat);
+  const composition = isCover ? 'full' : resolveComposition(spread.composition, shape);
 
   // Build text section based on format - CLEAN position labels
   let textSection = '';
@@ -335,19 +372,22 @@ IMPORTANT: Do NOT include any text, letters, words, page numbers, or labels on t
     characterPresenceSection = `\nCHARACTERS THAT MUST BE VISIBLE IN THIS SCENE:
 ${charList}
 
-CRITICAL: There are exactly ${charsInScene.length} character(s) in this scene. Each character must appear EXACTLY ONCE.
-IMPORTANT: Do NOT draw any character more than once. Each person appears only ONE time in the illustration.
+CRITICAL: There are exactly ${charsInScene.length} character(s) in this scene. Each character must appear EXACTLY ONCE${composition === 'panels' ? ' PER PANEL' : ''}.
+${composition === 'panels' ? 'IMPORTANT: Within each panel, draw every character at most once.' : 'IMPORTANT: Do NOT draw any character more than once. Each person appears only ONE time in the illustration.'}
 ${mainCharsInScene.length > 1 ? `There are ${mainCharsInScene.length} main characters in this scene - make sure ALL of them are clearly visible and recognizable, but each drawn only ONCE.` : ''}
 ${supportingCharsInScene.length > 0 ? `Supporting characters: ${supportingCharsInScene.map(c => c.name).join(', ')} - include them as described in the scene, each appearing once.` : ''}`;
   }
 
-  // Omslag och helsidor är stående, uppslag liggande
-  const isPortrait = isCover || shape === 'page';
+  // Omslag och helsidor är stående, uppslag liggande; rörliga böcker har egna bildtyper
+  const aspectRatio = aspectFor(composition);
+  const isPortrait = composition === 'full';
   const imageSize = isCover
     ? 'the front cover of a children\'s book (portrait, 16cm x 21cm)'
-    : isPortrait
+    : composition === 'spread'
+    ? 'a children\'s book spread (double page, 32cm x 21cm)'
+    : composition === 'full'
     ? 'a single book page (portrait, 16cm x 21cm)'
-    : 'a children\'s book spread (double page, 32cm x 21cm)';
+    : `a ${composition === 'band' ? 'wide band' : composition === 'panels' ? 'comic panel' : composition === 'round' ? 'round vignette' : 'spot'} illustration for a chapter book page (${aspectRatio})`;
 
   // Add the main prompt
   const mainPrompt = `Generate an illustration for ${imageSize}.
@@ -366,12 +406,14 @@ ${characterPresenceSection}
 CHARACTER CONSISTENCY:
 - Keep ALL characters looking EXACTLY like their reference images above
 - Draw everyone in the character design language of the STYLE GUIDE
-${isPortrait
+${composition === 'spread'
+  ? '- The image must be a wide landscape double-page spread'
+  : composition === 'full'
   ? '- The image must be a portrait illustration, NOT a wide landscape spread'
-  : '- The image must be a wide landscape double-page spread'}
+  : `- Follow the ${aspectRatio} format and the layout instructions above`}
 - Make sure character proportions, hair, clothing, and features match their reference sheets
 - Every character must look the SAME across all pages - same hair color, same clothing, same features
-- NEVER duplicate a character - each person appears EXACTLY ONCE in the image
+- NEVER duplicate a character - each person appears EXACTLY ONCE ${composition === 'panels' ? 'in each panel' : 'in the image'}
 - NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image`;
 
   contents.push({ text: mainPrompt });
@@ -393,7 +435,7 @@ ${corrections.map(c => `- ${c}`).join('\n')}`,
       config: {
         responseModalities: ['TEXT', 'IMAGE'],
         imageConfig: {
-          aspectRatio: isPortrait ? '3:4' : '3:2',
+          aspectRatio,
           imageSize: options.imageSize || '1K',
         },
         ...(options.timeoutMs ? { httpOptions: { timeout: options.timeoutMs } } : {}),

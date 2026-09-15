@@ -3,6 +3,16 @@ export type BookFormat = 'bildbok-text-pa-bild' | 'bildbok-separat-text' | 'kapi
 // spread = liggande uppslagsbild (32×21 cm), page = stående helsida (16×21 cm)
 export type IllustrationShape = 'spread' | 'page';
 
+// Hur en enskild bild används i boken. Rörliga boktyper (t.ex. busiga kapitelböcker)
+// blandar dem genom hela boken i stället för samma bildform varje gång.
+//   full   - helsida med utfallande bild
+//   spread - uppslag över två sidor
+//   band   - brett band överst eller nederst på en textsida
+//   spot   - en eller två utklippta figurer på vitt papper, mitt i texten
+//   round  - rund vinjett
+//   panels - 3-4 serierutor
+export type Composition = 'full' | 'spread' | 'band' | 'spot' | 'round' | 'panels';
+
 export interface BookProject {
   id: string;
   title: string;
@@ -61,6 +71,7 @@ export interface Spread {
   chapter?: string;
   textBlocks: TextBlock[];
   imagePrompt: string;
+  composition?: Composition;
   generatedImage?: string; // base64
   status: 'pending' | 'generating' | 'done' | 'error';
   error?: string;

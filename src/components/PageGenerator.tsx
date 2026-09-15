@@ -5,6 +5,7 @@ import { BookProject, Spread, SpreadQualityCheck } from '@/lib/types';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { resolveBookShape } from '@/lib/book-layout';
+import { COMPOSITION_LABEL } from '@/lib/compositions';
 
 const BATCH_SIZE = 3; // Generate 3 images in parallel
 
@@ -372,10 +373,11 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 
             <div className="p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-sm text-ink/80 truncate">
+                <span className="font-medium text-sm text-ink/80 truncate" title={spread.composition ? COMPOSITION_LABEL[spread.composition] : undefined}>
                   {spread.pages === 'omslag' ? 'Omslag' :
                    spread.pages === 'slutsida' ? 'Slutsida' :
                    `Sida ${spread.pages}`}
+                  {spread.composition && <span className="ml-1 text-ink/40 font-normal">· {COMPOSITION_LABEL[spread.composition]}</span>}
                 </span>
                 <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full font-medium ${
                   spread.status === 'done' ? 'bg-emerald-100 text-emerald-700' :

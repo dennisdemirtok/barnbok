@@ -4,6 +4,8 @@ import { drawStorySeeds, seedsBlock } from './story-seeds';
 import { recentStories, rememberStory, memoryBlock, avoidTextOf } from './story-memory';
 import { extractNames } from './text-eval';
 import { restoreDialogueMarkers, DEFAULT_MARKER } from './dialogue';
+import { COMPOSITIONS, compositionGuide } from './compositions';
+import type { Composition } from './types';
 import { BookFormat } from './types';
 import type { BookConcept, StylePreset } from './styles';
 import type { VoiceProfile } from './author-types';
@@ -462,7 +464,7 @@ export interface ManuscriptPlan {
   characters: StyleTestCharacter[];
   coverPrompt: string;
   // Varje uppslag börjar vid ett styckenummer (1-baserat) och sträcker sig till nästa
-  spreads: { startParagraph: number; imagePrompt: string }[];
+  spreads: { startParagraph: number; imagePrompt: string; composition?: Composition }[];
 }
 
 const MANUSCRIPT_SCHEMA = {
@@ -490,12 +492,39 @@ const MANUSCRIPT_SCHEMA = {
 
 export async function planManuscript(
   paragraphs: string[],
-  options: { bookFormat: 'bildbok-separat-text' | 'kapitelbok'; title?: string; minSpreads: number; maxSpreads: number }
+  options: {
+    bookFormat: 'bildbok-separat-text' | 'kapitelbok';
+    title?: string;
+    minSpreads: number;
+    maxSpreads: number;
+    // Rörlig bildblandning: AI:n väljer bildtyp per del utifrån innehållet
+    compositionMix?: Partial<Record<Composition, number>>;
+  }
 ): Promise<ManuscriptPlan> {
   const client = getClient();
   const model = await resolveLatestModel(client);
   const numbered = paragraphs.map((p, i) => `[${i + 1}] ${p}`).join('\n');
   const isChapterBook = options.bookFormat === 'kapitelbok';
+  const mix = options.compositionMix;
+  const schema = mix ? {
+    ...MANUSCRIPT_SCHEMA,
+    properties: {
+      ...MANUSCRIPT_SCHEMA.properties,
+      spreads: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['startParagraph', 'composition', 'imagePrompt'],
+          properties: {
+            startParagraph: { type: 'integer' },
+            composition: { type: 'string', enum: COMPOSITIONS.filter(c => (mix[c] ?? 0) > 0) },
+            imagePrompt: { type: 'string' },
+          },
+        },
+      },
+    },
+  } : MANUSCRIPT_SCHEMA;
 
   // Claude returnerar bara var uppslagen börjar - texten plockas ordagrant ur
   // manuset på servern, så inga ord kan ändras eller tappas
@@ -515,7 +544,9 @@ UPPGIFT:
 ${isChapterBook
     ? '   - Kapitelbok: varje del får EN illustration. Lägg gränserna vid naturliga scenbyten och låt en kapitelrubrik alltid inleda en ny del. Delarna får gärna vara olika långa.'
     : '   - Bilderbok: varje del blir ett uppslag med en bild. Håll delarna ungefär lika långa och bryt vid naturliga bildmoment.'}
-   - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick. Beskriv motiv, komposition, miljö, ljus och stämning, och skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder).
+${mix ? `   - composition: vilken sorts bild delen får. Boken ska vara rörlig och blanda bildtyperna genom hela boken, aldrig samma form i lång rad. Välj efter innehållet:
+${compositionGuide(mix)}
+` : ''}   - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick${mix ? ', skriven för den valda bildtypen (spot: bara figurerna och det de håller i, ingen miljö; panels: beskriv 3-4 rutor i ordning; round: ett centrerat motiv)' : ''}. Beskriv motiv, komposition, miljö, ljus och stämning, och skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder).
 
 Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget).`;
 
@@ -525,7 +556,7 @@ Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. D
       max_tokens: 32000,
       output_config: {
         effort: 'medium',
-        format: { type: 'json_schema', schema: MANUSCRIPT_SCHEMA },
+        format: { type: 'json_schema', schema },
       },
       messages: [{ role: 'user', content: prompt }],
     });
@@ -764,9 +795,11 @@ function proseRules(targetAge: string): string {
 ${PROSE_QUALITY_RULES}`;
 }
 
-function manuscriptFormatRules(isChapterBook: boolean, voice?: AuthorVoiceRef): string {
+function manuscriptFormatRules(isChapterBook: boolean, voice?: AuthorVoiceRef, dialogueStyle?: 'dash' | 'quotes'): string {
   const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
-  const dialogueRule = marker
+  const dialogueRule = !voice && dialogueStyle === 'quotes'
+    ? '- Repliker står i egna stycken inom svenska citattecken med anföringen efter, t.ex. ”Kom hit!” säger Ture. Flera korta repliker får gärna följa tätt på varandra.'
+    : marker
     ? `- Repliker står i egna stycken som börjar med författarens replikmarkering "${marker}" precis som i författarens text, t.ex. "${marker}Kom hit!". Anföringsverb, versaler och skiljetecken i repliken skrivs som författaren gör.`
     : voice
       ? '- Repliker skrivs exakt som i författarens text (samma markering, placering och skiljetecken).'
@@ -850,7 +883,10 @@ KARAKTÄRER:
 ${characterLines.length > 0
     ? `${characterLines.join('\n')}\nAnvänd dessa figurer som de beskrivs. Lägg till fler figurer bara om berättelsen behöver dem.`
     : 'Inga angivna - skapa de figurer berättelsen behöver, med svenska namn.'}
-${writingStyleBlock(input.style, input.voice)}
+${writingStyleBlock(input.style, input.voice)}${!input.voice && book.textStyle ? `
+BOKTYPENS SPRÅK (beskrivet med egna ord - fånga känslan, härma aldrig en förlaga):
+${book.textStyle}
+` : ''}
 UPPGIFT:
 1. title: bokens titel${input.title?.trim() ? ' (använd författarens titel oförändrad)' : ''}.
 2. outline: en kort disposition för HELA boken som ren text (ingen markdown), så att resten kan skrivas senare utan att tappa tråden:
@@ -859,7 +895,7 @@ UPPGIFT:
    - Planera en hel spänningskurva med ett tydligt, tillfredsställande slut.
 3. beginning: BARA bokens början, ca ${beginningWords} ord (håll dig nära den längden). Börja med en fångande öppning, presentera huvudpersonen och sätt igång handlingen. Sluta vid ett naturligt avbrott efter en scen - skriv INTE vidare i handlingen och avsluta inte berättelsen.
 
-${manuscriptFormatRules(isChapterBook, input.voice)}
+${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue)}
 
 ${proseRules(targetAge)}
 
@@ -947,7 +983,10 @@ BOKENS BÖRJAN (redan skriven och godkänd av författaren - den kan ha redigera
 """
 ${input.rawText}
 """
-${writingStyleBlock(input.style, input.voice)}
+${writingStyleBlock(input.style, input.voice)}${!input.voice && book.textStyle ? `
+BOKTYPENS SPRÅK (beskrivet med egna ord - fånga känslan, härma aldrig en förlaga):
+${book.textStyle}
+` : ''}
 UPPGIFT:
 Skriv RESTEN av boken, från exakt där början slutar till bokens slut. Ca ${remainingWords} ord till (hela boken blir då ca ${book.targetWords} ord) - fördela dem jämnt över återstoden av dispositionen${isChapterBook ? ' så att varje kapitel får ungefär lika mycket text' : ''}, och skynda inte igenom slutet.
 - Fortsätt sömlöst i samma röst, tempus och berättarperspektiv. Upprepa inte något ur början och sammanfatta inte det som redan hänt.
@@ -957,7 +996,7 @@ ${isChapterBook
 - Knyt ihop alla trådar och avsluta med ett tydligt, tillfredsställande slut.
 - Svara ENBART med fortsättningen av manuset - ingen inledning, inga kommentarer, inget "Slut".
 
-${manuscriptFormatRules(isChapterBook, input.voice)}
+${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue)}
 
 ${proseRules(targetAge)}`;
 

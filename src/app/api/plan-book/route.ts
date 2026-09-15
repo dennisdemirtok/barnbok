@@ -3,6 +3,7 @@ import { planManuscript } from '@/lib/claude';
 import { fetchStyleProfile } from '@/lib/style-profiles';
 import { getStylePreset, composeStyleGuide } from '@/lib/styles';
 import { BookProject, Character, Spread } from '@/lib/types';
+import { balanceCompositions } from '@/lib/compositions';
 
 export const maxDuration = 300;
 
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     const maxSpreads = clamp(Math.round(words / (perImage * 0.7)), minSpreads + 1, 48);
 
     const [plan, profile] = await Promise.all([
-      planManuscript(paragraphs, { bookFormat: format, title: title?.trim() || undefined, minSpreads, maxSpreads }),
+      planManuscript(paragraphs, { bookFormat: format, title: title?.trim() || undefined, minSpreads, maxSpreads, compositionMix: preset.book.compositionMix }),
       preset.series ? fetchStyleProfile(preset.series) : Promise.resolve(null),
     ]);
 
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
     )).sort((a, b) => a - b);
     if (starts[0] !== 1) starts.unshift(1);
     const promptFor = new Map(plan.spreads.map(s => [Math.round(s.startParagraph), s.imagePrompt]));
+    const compositionWish = new Map(plan.spreads.map(s => [Math.round(s.startParagraph), s.composition]));
 
     const bookTitle = title?.trim() || plan.title || 'Namnlös bok';
     const characters: Character[] = plan.characters.map((c, i) => ({
@@ -83,6 +85,9 @@ export async function POST(request: Request) {
       imagePrompt: `${plan.coverPrompt}\n\nThe exact Swedish title text on the cover is: "${bookTitle}"`,
       status: 'pending',
     };
+    // AI:ns val av bildtyp, justerat så att blandningen håller genom hela boken
+    const mix = preset.book.compositionMix;
+    const compositions = mix ? balanceCompositions(starts.map(st => compositionWish.get(st)), mix, bookTitle) : undefined;
     const spreads: Spread[] = starts.map((start, i) => {
       const end = i + 1 < starts.length ? starts[i + 1] - 1 : paragraphs.length;
       return {
@@ -91,6 +96,7 @@ export async function POST(request: Request) {
         pages: `${6 + i * 2}-${7 + i * 2}`,
         textBlocks: paragraphs.slice(start - 1, end).map((text, j) => ({ position: `stycke ${j + 1}`, text })),
         imagePrompt: promptFor.get(start) || plan.spreads[i]?.imagePrompt || plan.coverPrompt,
+        composition: compositions?.[i],
         status: 'pending',
       };
     });
