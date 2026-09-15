@@ -12,6 +12,7 @@ interface Props {
   onNewBook: () => void;
   onStyleTest: () => void;
   onReuseBook: (book: BookProject) => void;
+  onFinishBook: () => void;
 }
 
 const STATUS: Record<BookProject['status'], { text: string; className: string }> = {
@@ -29,7 +30,16 @@ const STEPS = [
   { title: 'Färdig bok', text: 'Satt som en riktig bok – läs, ladda ner som tryckfärdig PDF eller dela.', icon: 'auto_stories' },
 ];
 
-export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReuseBook }: Props) {
+// Liten tidslinje som illustration i "Slutför din bok"-kortet
+const FINISH_PREVIEW: { label: string; kind: 'author' | 'ai' | 'planned' }[] = [
+  { label: 'Prolog', kind: 'author' },
+  { label: 'Kapitel 1 – Innan försvinnandet', kind: 'author' },
+  { label: 'Kapitel 2 – Spåren vid bäcken', kind: 'ai' },
+  { label: 'Kapitel 3 – Mormors hemlighet', kind: 'planned' },
+  { label: 'Kapitel 4', kind: 'planned' },
+];
+
+export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReuseBook, onFinishBook }: Props) {
   const [books, setBooks] = useState<BookProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -95,6 +105,62 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
           <div className="relative rounded-[2rem] overflow-hidden border border-line shadow-lift bg-white rotate-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/hero-book.png" alt="En uppslagen, illustrerad barnbok" className="w-full h-auto" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Slutför din bok ── */}
+      <section
+        aria-labelledby="finish-book-heading"
+        className="relative overflow-hidden rounded-[2rem] border border-brand/15 bg-gradient-to-br from-brand/[0.09] via-white to-white shadow-soft"
+      >
+        <div aria-hidden className="absolute -right-24 -top-24 w-72 h-72 rounded-full bg-brand/10 blur-3xl" />
+        <div className="relative grid lg:grid-cols-[1.05fr_0.95fr] gap-8 lg:gap-12 items-center p-6 sm:p-10 lg:p-12">
+          <div>
+            <p className="eyebrow"><Icon name="history_edu" size={16} /> Nytt · Slutför din bok</p>
+            <h2 id="finish-book-heading" className="mt-3 text-3xl sm:text-4xl font-heading font-bold tracking-tight text-ink leading-tight">
+              Har du början? Vi hjälper dig skriva klart.
+            </h2>
+            <p className="mt-3 text-lg text-ink/65 leading-relaxed max-w-xl">
+              Skriv inledningen och första kapitlet själv – AI:n lär sig ditt språk och hjälper dig skriva klart boken.
+            </p>
+            <ul className="mt-5 space-y-2 text-sm text-ink/70">
+              <li className="flex items-start gap-2"><Icon name="record_voice_over" size={18} className="text-brand mt-px" /> Skriver i din ton, din rytm och dina repliker</li>
+              <li className="flex items-start gap-2"><Icon name="timeline" size={18} className="text-brand mt-px" /> Du bestämmer riktningen på en tidslinje</li>
+              <li className="flex items-start gap-2"><Icon name="ink_highlighter" size={18} className="text-brand mt-px" /> Markera det som skaver och skriv om just det</li>
+            </ul>
+            <button onClick={onFinishBook} className="btn-action mt-7 !px-6 !py-3.5 text-base w-full sm:w-auto">
+              Slutför din bok <Icon name="arrow_forward" size={20} />
+            </button>
+          </div>
+
+          <div aria-hidden className="relative rounded-3xl bg-white border border-line shadow-lift p-4 sm:p-5 lg:rotate-1">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/40">Tidslinje</span>
+              <span className="text-xs text-ink/45 tabular-nums">3 av 10 kapitel</span>
+            </div>
+            <ol className="relative space-y-2">
+              <span className="absolute left-[15px] top-4 bottom-4 w-px bg-line" />
+              {FINISH_PREVIEW.map((c, i) => (
+                <li key={c.label} className="relative flex items-center gap-3 rounded-2xl border border-line bg-white px-2.5 py-2">
+                  <span
+                    className={`w-[22px] h-[22px] shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      c.kind === 'author' ? 'bg-ink text-white' : c.kind === 'ai' ? 'bg-brand text-white' : 'bg-white border-2 border-dashed border-ink/20 text-ink/45'
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className={`flex-1 min-w-0 truncate text-sm ${c.kind === 'planned' ? 'text-ink/50' : 'font-semibold text-ink'}`}>{c.label}</span>
+                  <span
+                    className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      c.kind === 'author' ? 'bg-ink text-white' : c.kind === 'ai' ? 'bg-brand/10 text-brand' : 'border border-dashed border-ink/25 text-ink/45'
+                    }`}
+                  >
+                    {c.kind === 'author' ? 'Din text' : c.kind === 'ai' ? 'AI-skriven' : 'Planerad'}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
         </div>
       </section>

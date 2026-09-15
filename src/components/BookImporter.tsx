@@ -11,6 +11,7 @@ import StylePicker from './StylePicker';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
+import type { AuthorVoice } from '@/lib/author-types';
 
 export type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
 
@@ -28,6 +29,8 @@ export interface ManuscriptDraft {
   restWritten?: boolean;
   // Bokverktygets gamla strukturerade format (SIDA/BILDPROMPT) kan ange eget format
   legacyFormat?: BookFormat;
+  // Författarspråk som AI:n skriver i (från AI-skrivaren)
+  voice?: AuthorVoice;
   notice?: string;
 }
 
@@ -239,6 +242,7 @@ export default function BookImporter({
           title: draft.title,
           outline: draft.outline,
           rawText: draft.rawText,
+          voice: draft.voice ? { profile: draft.voice.profile, samples: draft.voice.samples } : undefined,
         }),
       });
       const data = await res.json();
@@ -399,6 +403,7 @@ export default function BookImporter({
             targetAge: result.targetAge,
             imageWishes: result.imageWishes ?? '',
             outline: result.outline,
+            voice: result.voice,
             notice: 'Början av boken är skriven. Läs och ändra fritt, prova bilderna – och låt sedan AI:n skriva resten.',
           });
           onModeChange('import');

@@ -6,7 +6,8 @@ import Icon from './Icon';
 import StepHeader from './StepHeader';
 import StylePicker from './StylePicker';
 import CharacterLibraryPicker from './CharacterLibraryPicker';
-import { listSavedCharacters } from '@/lib/storage';
+import { listSavedCharacters, listAuthorVoices } from '@/lib/storage';
+import type { AuthorVoice } from '@/lib/author-types';
 
 interface Props {
   onBeginningWritten: (result: {
@@ -16,6 +17,7 @@ interface Props {
     rawText: string;
     outline: string;
     imageWishes?: string;
+    voice?: AuthorVoice;
   }) => void;
   onBack: () => void;
 }
@@ -49,6 +51,8 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
   const [libraryIds, setLibraryIds] = useState<string[]>([]); // sparade karaktärer som ska med
   const [chosenAge, setChosenAge] = useState<string | null>(null); // null = följ boktypen
   const [imageWishes, setImageWishes] = useState('');
+  const [voices, setVoices] = useState<AuthorVoice[]>([]);
+  const [voiceId, setVoiceId] = useState<string | null>(null); // null = boktypens stil
 
   // Senaste slumpade förslaget - används inte som ledtråd för nästa slumpning
   const [lastRandom, setLastRandom] = useState<{ plot: string; title: string } | null>(null);
@@ -57,6 +61,14 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
   const [writing, setWriting] = useState(false);
   const [stage, setStage] = useState(0);
   const [error, setError] = useState('');
+
+  // Sparade författarspråk från "Slutför din bok"
+  useEffect(() => {
+    listAuthorVoices()
+      .then(setVoices)
+      .catch(err => console.error('Kunde inte ladda författarspråk:', err));
+  }, []);
+  const voice = voices.find(v => v.id === voiceId);
 
   const preset = getStylePreset(stylePresetId) ?? STYLE_PRESETS[0];
   const targetAge = chosenAge ?? preset.book.age;
@@ -114,6 +126,7 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
           setting: setting.trim() || undefined,
           characterNotes: characterNotes.trim() || undefined,
           characters: characters.length > 0 ? characters : undefined,
+          voice: voice ? { profile: voice.profile, samples: voice.samples } : undefined,
         }),
       });
       // Tidsgräns på servern kan ge ett svar som inte är JSON
@@ -127,6 +140,7 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
         rawText: data.rawText,
         outline: data.outline,
         imageWishes: imageWishes.trim() || undefined,
+        voice,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Något gick fel');
@@ -237,6 +251,42 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
         </div>
       </section>
 
+      {/* Författarspråk - bara om det finns sparade */}
+      {voices.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-ink/80 mb-1">Skriv i mitt författarspråk <span className="font-normal text-ink/40">(valfritt)</span></h3>
+          <p className="text-xs text-ink/55 mb-3">Välj ett språk du har sparat så låter texten som du i stället för boktypens stil.</p>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Författarspråk">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!voice}
+              onClick={() => setVoiceId(null)}
+              className={!voice ? 'chip-on' : 'chip'}
+              disabled={writing}
+            >
+              Boktypens stil
+            </button>
+            {voices.map(v => (
+              <button
+                key={v.id}
+                type="button"
+                role="radio"
+                aria-checked={voice?.id === v.id}
+                onClick={() => setVoiceId(v.id)}
+                className={voice?.id === v.id ? 'chip-on' : 'chip'}
+                disabled={writing}
+              >
+                <Icon name="record_voice_over" size={17} /> <span className="max-w-[14rem] truncate">{v.name}</span>
+              </button>
+            ))}
+          </div>
+          {voice?.profile?.summary && (
+            <p className="mt-2 rounded-2xl bg-paper border border-line p-3 text-xs text-ink/65 leading-relaxed">{voice.profile.summary}</p>
+          )}
+        </section>
+      )}
+
       {/* Bildönskemål */}
       <section>
         <label htmlFor="imageWishes" className="block text-sm font-semibold text-ink/80 mb-2">
@@ -257,6 +307,7 @@ export default function BookCreator({ onBeginningWritten, onBack }: Props) {
         <p className="rounded-2xl bg-paper border border-line p-3 text-sm text-ink/65">
           <span className="font-medium text-ink">{preset.label}</span>
           {' · '}{preset.book.lengthLabel}
+          {voice && <>{' · '}i ditt språk ({voice.name})</>}
           {' · '}AI skriver först början (ca {beginningWords(preset.book).toLocaleString('sv-SE')} ord) så att du kan prova bilderna
         </p>
 

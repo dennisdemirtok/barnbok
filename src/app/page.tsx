@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import BookLibrary from '@/components/BookLibrary';
 import BookImporter, { EMPTY_DRAFT, ImportMode, ManuscriptDraft } from '@/components/BookImporter';
 import CharacterStudio from '@/components/CharacterStudio';
+import FinishBook from '@/components/finish/FinishBook';
 import CharacterApproval from '@/components/CharacterApproval';
 import PageGenerator from '@/components/PageGenerator';
 import BookPreview from '@/components/BookPreview';
@@ -16,7 +17,7 @@ import Bookstore from '@/components/Bookstore';
 import Icon from '@/components/Icon';
 import { SiteHeader, SiteFooter, MobileTabBar, NavTarget } from '@/components/AppNav';
 
-type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore' | 'characterStudio';
+type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore' | 'characterStudio' | 'finish';
 
 export default function Home() {
   const [step, setStep] = useState<Step>('library');
@@ -214,14 +215,14 @@ export default function Home() {
   const handleNavigate = (target: NavTarget) => {
     if (target === 'create') {
       // Redan i skapa-flödet: stanna kvar i stället för att börja om
-      if (navActive !== 'create') handleNewBook();
+      if (navActive !== 'create' || step === 'finish') handleNewBook();
       return;
     }
     if (target === 'library') return handleBackToLibrary();
     if (target === 'characterStudio') setBook(null);
     setStep(target);
   };
-  const showSteps = step !== 'library' && step !== 'bookstore' && step !== 'characterStudio';
+  const showSteps = step !== 'library' && step !== 'bookstore' && step !== 'characterStudio' && step !== 'finish';
 
   return (
     <main className="min-h-screen overflow-x-clip">
@@ -277,6 +278,21 @@ export default function Home() {
             onNewBook={handleNewBook}
             onStyleTest={() => { handleNewBook(); setImportMode('styleTest'); }}
             onReuseBook={handleReuseBook}
+            onFinishBook={() => { setBook(null); setStep('finish'); }}
+          />
+        )}
+
+        {step === 'finish' && (
+          <FinishBook
+            onBack={() => setStep('library')}
+            onCreateBook={({ rawText, title, author, targetAge }) => {
+              // Den färdiga texten går vidare till manussteget där stil och bilder väljs
+              setBook(null);
+              setImportParsedBook(null);
+              setImportDraft({ ...EMPTY_DRAFT, rawText, title, author, targetAge, notice: 'Texten från Slutför din bok är inläst. Välj stil och skapa boken.' });
+              setImportMode('import');
+              setStep('import');
+            }}
           />
         )}
 
