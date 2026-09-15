@@ -56,7 +56,7 @@ export default function LoginModal({ onClose }: Props) {
             <Icon name="close" size={22} />
           </button>
         </div>
-        <h2 className="text-2xl font-heading font-semibold text-ink mb-1">
+        <h2 className="text-2xl font-heading font-bold text-ink mb-1">
           {mode === 'login' ? 'Välkommen tillbaka!' : 'Skapa konto'}
         </h2>
         <p className="text-sm text-ink/55 mb-5">

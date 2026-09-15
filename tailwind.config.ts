@@ -11,8 +11,9 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        heading: ['var(--font-heading)', 'Georgia', 'serif'],
-        sans: ['var(--font-body)', 'Be Vietnam Pro', 'sans-serif'],
+        // Samma familj överallt; `font-heading` finns kvar som semantisk markering
+        heading: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
       },
       colors: {
         // Redaktionell palett: bläck på varmt papper med en djup violett accent

@@ -196,7 +196,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
               <Icon name="menu_book" filled size={26} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-xl font-heading font-semibold text-ink truncate">{book.title}</h3>
+              <h3 className="text-xl font-heading font-bold text-ink truncate">{book.title}</h3>
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink/55">
                 <span>{book.spreads.length} uppslag</span>
                 <span>{book.characters.length} karaktärer</span>

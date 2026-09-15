@@ -155,7 +155,7 @@ export default function BookImporter({
               }`}>
                 <Icon name={opt.icon} size={24} />
               </span>
-              <h3 className="mt-5 text-xl font-heading font-semibold text-ink">{opt.title}</h3>
+              <h3 className="mt-5 text-xl font-heading font-bold text-ink">{opt.title}</h3>
               <p className="mt-2 text-sm text-ink/60 leading-relaxed flex-1">{opt.text}</p>
               <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-ink group-hover:gap-2.5 transition-all">
                 {opt.cta} <Icon name="arrow_forward" size={18} />
@@ -175,7 +175,7 @@ export default function BookImporter({
             </span>
             <div className="flex-1">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/50">Osäker på stilen?</p>
-              <h3 className="mt-1 text-xl sm:text-2xl font-heading font-semibold">Prova stilar på början av din text</h3>
+              <h3 className="mt-1 text-xl sm:text-2xl font-heading font-bold">Prova stilar på början av din text</h3>
               <p className="mt-1.5 text-white/65 text-sm leading-relaxed max-w-2xl">
                 Klistra in en start och ett första kapitel. Du får omslag och testsidor i flera stilar – Luna,
                 Familjen Knyckertz, Handbok för Superhjältar m.fl. – och väljer sedan vilken väg boken ska ta.
@@ -275,7 +275,7 @@ Det hade gatt tre manader sedan...
 
 BILDPROMPT - SIDA 6-7:
 Double page spread, Swedish children's book...`}
-            className="field h-96 font-mono text-sm resize-y"
+            className="field h-96 text-sm leading-relaxed resize-y"
           />
 
           <div className="flex items-center gap-4">
@@ -327,21 +327,21 @@ Double page spread, Swedish children's book...`}
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="glass rounded-2xl p-3 text-center">
-              <p className="text-2xl font-heading font-semibold text-brand">{parsedBook.spreads.length}</p>
+              <p className="text-2xl font-heading font-bold text-brand">{parsedBook.spreads.length}</p>
               <p className="text-xs text-ink/55">Uppslag</p>
             </div>
             <div className="glass rounded-2xl p-3 text-center">
-              <p className="text-2xl font-heading font-semibold text-brand">{parsedBook.characters.length}</p>
+              <p className="text-2xl font-heading font-bold text-brand">{parsedBook.characters.length}</p>
               <p className="text-xs text-ink/55">Karaktärer</p>
             </div>
             <div className="glass rounded-2xl p-3 text-center">
-              <p className="text-2xl font-heading font-semibold text-brand">
+              <p className="text-2xl font-heading font-bold text-brand">
                 {parsedBook.spreads.filter(s => s.pages === 'omslag').length > 0 ? 'Ja' : 'Nej'}
               </p>
               <p className="text-xs text-ink/55">Omslag</p>
             </div>
             <div className="glass rounded-2xl p-3 text-center">
-              <p className="text-2xl font-heading font-semibold text-amber-600">
+              <p className="text-2xl font-heading font-bold text-amber-600">
                 {parsedBook.spreads.reduce((sum, s) => sum + s.textBlocks.length, 0)}
               </p>
               <p className="text-xs text-ink/55">Textblock</p>

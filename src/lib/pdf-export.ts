@@ -3,13 +3,13 @@
 import type { jsPDF } from 'jspdf';
 import { BookProject } from './types';
 import {
-  buildBookLayout, collectImageSources, loadImageSizes, BookLayout, PageEl,
+  buildBookLayout, collectImageSources, loadImageSizes, bookFontFamilies, BookLayout, PageEl,
 } from './book-layout';
 import { createBookPdf, createMeasurer } from './book-fonts';
 
 export async function layoutBook(book: BookProject): Promise<BookLayout> {
   const [measurer, sizes] = await Promise.all([
-    createMeasurer(),
+    createMeasurer(bookFontFamilies(book)),
     loadImageSizes(collectImageSources(book)),
   ]);
   return buildBookLayout(book, measurer, sizes);

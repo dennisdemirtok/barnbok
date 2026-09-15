@@ -68,7 +68,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
       <section className="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 lg:gap-16 items-center pt-2 sm:pt-6">
         <div>
           <p className="eyebrow">Barnböcker med AI</p>
-          <h1 className="mt-4 text-[2.6rem] leading-[1.05] sm:text-6xl font-heading font-semibold text-ink tracking-tight">
+          <h1 className="mt-4 text-[2.6rem] leading-[1.05] sm:text-6xl font-heading font-extrabold text-ink tracking-[-0.035em]">
             Från idé till färdig bok – i din egen stil.
           </h1>
           <p className="mt-5 text-lg text-ink/65 leading-relaxed max-w-xl">
@@ -104,7 +104,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="eyebrow">Ditt bibliotek</p>
-            <h2 className="mt-2 text-3xl font-heading font-semibold text-ink">Mina böcker</h2>
+            <h2 className="mt-2 text-3xl font-heading font-bold tracking-tight text-ink">Mina böcker</h2>
           </div>
           {books.length > 0 && (
             <button onClick={onNewBook} className="btn-ghost shrink-0">
@@ -122,7 +122,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
             <span className="w-14 h-14 mx-auto rounded-2xl bg-ink/[0.05] text-ink/60 flex items-center justify-center">
               <Icon name="auto_stories" size={28} />
             </span>
-            <h3 className="mt-4 text-xl font-heading font-semibold text-ink">Här hamnar dina böcker</h3>
+            <h3 className="mt-4 text-xl font-heading font-bold text-ink">Här hamnar dina böcker</h3>
             <p className="mt-1 text-ink/55 max-w-sm mx-auto">Allt du skapar sparas automatiskt i webbläsaren, och i molnet när du sparar boken.</p>
             <button onClick={onNewBook} className="btn-primary mt-6">
               <Icon name="add" size={19} /> Skapa din första bok
@@ -201,7 +201,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
       <Reveal as="section" className="space-y-8">
         <div className="max-w-2xl">
           <p className="eyebrow">Så går det till</p>
-          <h2 className="mt-2 text-3xl font-heading font-semibold text-ink">Fyra steg till en färdig bok</h2>
+          <h2 className="mt-2 text-3xl font-heading font-bold tracking-tight text-ink">Fyra steg till en färdig bok</h2>
         </div>
         <ol className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {STEPS.map((s, i) => (
@@ -210,7 +210,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
                 <span className="w-11 h-11 rounded-xl bg-paper border border-line text-ink flex items-center justify-center">
                   <Icon name={s.icon} size={22} />
                 </span>
-                <span className="font-heading text-3xl font-semibold text-ink/15">{i + 1}</span>
+                <span className="font-heading text-3xl font-bold tracking-tight text-ink/15">{i + 1}</span>
               </div>
               <h3 className="mt-5 font-heading text-lg font-semibold text-ink">{s.title}</h3>
               <p className="mt-1.5 text-sm text-ink/60 leading-relaxed">{s.text}</p>
@@ -222,7 +222,7 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
       {/* ── Avslutning ── */}
       <Reveal as="section" className="rounded-[2rem] bg-ink text-white px-6 py-12 sm:px-14 sm:py-16 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
         <div className="max-w-xl">
-          <h2 className="text-3xl sm:text-4xl font-heading font-semibold leading-tight">Har du redan en berättelse?</h2>
+          <h2 className="text-3xl sm:text-4xl font-heading font-bold tracking-tight leading-tight">Har du redan en berättelse?</h2>
           <p className="mt-3 text-white/65 text-lg">Klistra in början och se den i sex olika stilar innan du bestämmer dig.</p>
         </div>
         <button onClick={onStyleTest} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-white text-ink font-semibold hover:bg-paper transition-colors shrink-0">

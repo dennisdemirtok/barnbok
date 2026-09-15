@@ -704,7 +704,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
         <div className="fixed inset-0 !m-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setConfirmStyle(null)}>
           <div className="glass-strong rounded-4xl w-full max-w-md p-7 animate-pop" onClick={e => e.stopPropagation()}>
             <span className={`block w-12 h-12 rounded-2xl bg-gradient-to-br ${getStylePreset(confirmStyle)?.swatch} shadow-soft mb-4`} />
-            <h3 className="text-2xl font-heading font-semibold text-ink mb-2">
+            <h3 className="text-2xl font-heading font-bold text-ink mb-2">
               Gå vidare med {getStylePreset(confirmStyle)?.label}?
             </h3>
             <p className="text-sm text-ink/55 mb-2">

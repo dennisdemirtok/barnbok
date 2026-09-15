@@ -2,8 +2,8 @@
 // Resultatet är en renderingsoberoende sidmodell som både PDF-exporten och
 // läsaren i webbläsaren ritar - så det man ser är det man får.
 import { BookProject, Spread, IllustrationShape } from './types';
-import { getStylePreset, textSideForSpread, BookFont } from './styles';
-import type { FontSpec, Measurer } from './book-fonts';
+import { getStylePreset, textSideForSpread } from './styles';
+import { BOOK_FONTS, type FontFamily, type FontSpec, type Measurer } from './book-fonts';
 
 export const PAGE_W = 160;
 export const PAGE_H = 210;
@@ -188,18 +188,26 @@ interface Typography {
   body: FontSpec;
   heading: FontSpec;
   italic: FontSpec;
+  bs(pt: number): number; // brödtextstorlek justerad för typsnittets x-höjd
+  hs(pt: number): number; // rubrikstorlek, dito
+}
+
+export function bookFontFamilies(book: BookProject): FontFamily[] {
+  const preset = getStylePreset(book.stylePresetId);
+  const body = preset?.fonts.body ?? 'Literata';
+  const heading = preset?.fonts.heading ?? body;
+  return body === heading ? [body] : [body, heading];
 }
 
 function fontsFor(book: BookProject): Typography {
-  const preset = getStylePreset(book.stylePresetId);
-  const toSpec = (f: BookFont, style: FontSpec['style']): FontSpec =>
-    ({ family: f === 'nunito' ? 'Nunito' : 'Literata', style });
-  const body = preset?.fonts.body ?? 'literata';
-  const heading = preset?.fonts.heading ?? 'literata';
+  const [body, heading = body] = bookFontFamilies(book);
+  const round = (n: number) => Math.round(n * 4) / 4;
   return {
-    body: toSpec(body, 'normal'),
-    heading: toSpec(heading, 'bold'),
-    italic: toSpec(body, 'italic'),
+    body: { family: body, style: 'normal' },
+    heading: { family: heading, style: 'bold' },
+    italic: { family: body, style: 'italic' },
+    bs: pt => round(pt * BOOK_FONTS[body].scale),
+    hs: pt => round(pt * BOOK_FONTS[heading].scale),
   };
 }
 
@@ -259,7 +267,7 @@ function buildFrontMatter(pb: PageBuilder, book: BookProject, cover: Spread | un
     pb.add({ els: [imageEl(coverSrc, full, size ? size.w / size.h : 3 / 4)] });
   } else {
     const p = pb.add({ els: [], background: '#2f2a4a' });
-    centeredLines(p, book.title, t.heading, 30, 80, 120, '#ffffff', m, 1.15);
+    centeredLines(p, book.title, t.heading, t.hs(30), 80, 120, '#ffffff', m, 1.15);
   }
 
   // Insida pärm
@@ -267,10 +275,10 @@ function buildFrontMatter(pb: PageBuilder, book: BookProject, cover: Spread | un
 
   // Titelsida
   const title = pb.add({ els: [] });
-  let y = centeredLines(title, book.title, t.heading, 26, 72, 118, INK, m, 1.2);
+  let y = centeredLines(title, book.title, t.heading, t.hs(26), 72, 118, INK, m, 1.2);
   ornament(title, y + 4);
-  if (book.subtitle) y = centeredLines(title, book.subtitle, t.italic, 12, y + 14, 110, MUTED, m);
-  if (book.author) centeredLines(title, book.author, t.body, 12, y + 16, 110, INK, m);
+  if (book.subtitle) y = centeredLines(title, book.subtitle, t.italic, t.bs(12), y + 14, 110, MUTED, m);
+  if (book.author) centeredLines(title, book.author, t.body, t.bs(12), y + 16, 110, INK, m);
 
   // Redaktionssida
   const imprint = pb.add({ els: [] });
@@ -280,7 +288,7 @@ function buildFrontMatter(pb: PageBuilder, book: BookProject, cover: Spread | un
     `${book.title}`,
     `© ${year} ${book.author || 'Författaren'}`,
     preset ? `Illustrationer i stilen ${preset.label}` : 'Illustrationer skapade med AI',
-    `Typsnitt: ${t.body.family}`,
+    `Typsnitt: ${Array.from(new Set([BOOK_FONTS[t.body.family].name, BOOK_FONTS[t.heading.family].name])).join(' och ')}`,
     'Skapad med Bokverktyget',
   ];
   lines.forEach((line, i) => {
@@ -293,7 +301,7 @@ function buildFrontMatter(pb: PageBuilder, book: BookProject, cover: Spread | un
 
 function buildHalfTitle(pb: PageBuilder, book: BookProject, t: Typography, m: Measurer) {
   const p = pb.add({ els: [] });
-  const y = centeredLines(p, book.title, t.heading, 14, 92, 110, INK, m);
+  const y = centeredLines(p, book.title, t.heading, t.hs(14), 92, 110, INK, m);
   ornament(p, y + 3);
 }
 
@@ -301,7 +309,7 @@ function buildBackCover(pb: PageBuilder, book: BookProject, t: Typography, m: Me
   // Tryckta böcker har ett sidantal delbart med 4
   while ((pb.count + 1) % 4 !== 0) pb.add({ els: [] });
   const back = pb.add({ els: [], background: '#2f2a4a' });
-  const y = centeredLines(back, book.title, t.heading, 16, 88, 110, '#ffffff', m);
+  const y = centeredLines(back, book.title, t.heading, t.hs(16), 88, 110, '#ffffff', m);
   back.els.push({ kind: 'rect', box: { x: (PAGE_W - 14) / 2, y: y + 4, w: 14, h: 0.5 }, color: '#ffffff', opacity: 0.5, radius: 0.25 });
   back.els.push({
     kind: 'text', x: 0, y: PAGE_H - 18, width: PAGE_W, text: 'Skapad med Bokverktyget',
@@ -321,6 +329,7 @@ interface ColumnStyle {
   justify: boolean;
   font: FontSpec;
   heading: FontSpec;
+  headingScale: number; // rubrikens storlek relativt brödtexten
 }
 
 interface PlacedLine { el: TextEl; height: number; paraStart: boolean; paraIndex: number; keepWithNext?: boolean }
@@ -335,7 +344,7 @@ function setColumn(blocks: Block[], width: number, style: ColumnStyle, m: Measur
 
   for (const block of blocks) {
     if (block.type === 'heading') {
-      const hs = style.size * 1.15;
+      const hs = Math.round(style.size * 1.15 * style.headingScale * 4) / 4;
       if (block.label) {
         out.push({
           el: { kind: 'text', x: 0, y: 0, width, text: block.label.toUpperCase(), font: style.font, size: style.size * 0.7, color: MUTED, align: 'left', tracking: 0.6 },
@@ -429,7 +438,8 @@ function textArea(recto: boolean): Box {
 }
 
 function pictureStyle(t: Typography, size: number): ColumnStyle {
-  return { size, leading: 1.5, indent: 0, paraGap: size * PT * 0.55, justify: false, font: t.body, heading: t.heading };
+  const s = t.bs(size);
+  return { size: s, leading: 1.5, indent: 0, paraGap: s * PT * 0.55, justify: false, font: t.body, heading: t.heading, headingScale: t.hs(10) / t.bs(10) };
 }
 
 // Flödar text över så många sidor som behövs; returnerar sidorna
@@ -563,7 +573,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
   const textW = PAGE_W - CB_MARGIN.inner - CB_MARGIN.outer;
   const bottom = PAGE_H - CB_MARGIN.bottom;
   const style: ColumnStyle = {
-    size: 11.5, leading: 1.55, indent: 5, paraGap: 0, justify: true, font: t.body, heading: t.heading,
+    size: t.bs(11.5), leading: 1.55, indent: 5, paraGap: 0, justify: true, font: t.body, heading: t.heading, headingScale: t.hs(10) / t.bs(10),
   };
   const lh = style.size * PT * style.leading;
 
@@ -626,7 +636,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
           });
           hy += 10;
         }
-        hy = centeredLines(page!, heading.title, t.heading, 19, hy, textW, INK, m, 1.2);
+        hy = centeredLines(page!, heading.title, t.heading, t.hs(19), hy, textW, INK, m, 1.2);
         ornament(page!, hy + 1);
         y = hy + 14;
         pageHasText = true;

@@ -178,7 +178,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
               <textarea
                 value={editedSpread.imagePrompt}
                 onChange={(e) => updateImagePrompt(e.target.value)}
-                className="field h-48 text-sm font-mono resize-y"
+                className="field h-48 text-sm leading-relaxed resize-y"
               />
             </div>
           </div>

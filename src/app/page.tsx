@@ -194,7 +194,7 @@ export default function Home() {
   const showSteps = step !== 'library' && step !== 'bookstore';
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen overflow-x-clip">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-md border-b border-line">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">

@@ -230,7 +230,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               </p>
             </div>
           </div>
-          <span className="text-2xl font-heading font-semibold text-brand">{Math.round(progress)}%</span>
+          <span className="text-2xl font-heading font-bold text-brand">{Math.round(progress)}%</span>
         </div>
 
         <div className="bg-ink/10 rounded-full h-3 overflow-hidden">

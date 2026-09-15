@@ -7,6 +7,7 @@
 // eftersom profilerna ofta beskriver liknande saker ("clean outlines, large eyes").
 
 import type { IllustrationShape } from './types';
+import type { FontFamily } from './book-fonts';
 
 export type { IllustrationShape };
 
@@ -22,13 +23,12 @@ export interface StylePreset {
   coverLettering: string;
   // spread = liggande uppslagsbild (32×21 cm), page = stående helsida (16×21 cm)
   shape: IllustrationShape;
-  // Typografi i den satta boken
-  fonts: { body: BookFont; heading: BookFont };
+  // Typografi i den satta boken: brödtext + rubriker (kapitel, titelsida)
+  fonts: { body: FontFamily; heading: FontFamily };
   // Tailwind-gradient för stilens färgmarkering i UI:t
   swatch: string;
 }
 
-export type BookFont = 'literata' | 'nunito';
 
 const NO_GENERIC = 'Do NOT fall back to a generic modern digital storybook look with big glossy eyes - every face, body and line must follow THIS style\'s own character design language.';
 
@@ -39,7 +39,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     concept: 'Filmisk äventyrsbok med dramatiska helsidesuppslag',
     series: 'Handbok for Superhjaltar',
     shape: 'spread',
-    fonts: { body: 'nunito', heading: 'nunito' },
+    fonts: { body: 'Nunito', heading: 'Bangers' },
     swatch: 'from-indigo-700 to-fuchsia-500',
     coverLettering: 'Bold, chunky comic-book title logo with a thick dark outline, slight 3D extrusion and dynamic tilt, like a superhero comic masthead.',
     artDirection: `ART STYLE: Cinematic digital graphic-novel painting for a Swedish middle-grade adventure series.
@@ -54,7 +54,7 @@ ${NO_GENERIC}`,
     concept: 'Varm kapitelbok med mjuka vinjettbilder',
     series: 'Luna',
     shape: 'page',
-    fonts: { body: 'literata', heading: 'literata' },
+    fonts: { body: 'Alegreya', heading: 'Alegreya' },
     swatch: 'from-sky-800 to-teal-500',
     coverLettering: 'Soft, rounded hand-lettered title in lowercase with gentle curves, small star or moon flourishes, calm and cosy - never all-caps serif.',
     artDirection: `ART STYLE: Soft, cozy 2D digital illustration for a Swedish early-reader chapter book.
@@ -70,7 +70,7 @@ ${NO_GENERIC}`,
     concept: 'Busig, humoristisk deckarbok med karikatyrer',
     series: 'Familjen Knyckertz',
     shape: 'page',
-    fonts: { body: 'literata', heading: 'nunito' },
+    fonts: { body: 'Literata', heading: 'PatrickHand' },
     swatch: 'from-orange-500 to-red-600',
     coverLettering: 'Wobbly, hand-drawn ink lettering with uneven bouncy letters of different sizes, like a humorous detective comic title - never elegant or serif.',
     artDirection: `ART STYLE: Humorous Scandinavian cartoon illustration for a funny crime-caper children's book.
@@ -85,7 +85,7 @@ ${NO_GENERIC}`,
     concept: 'Klassisk bilderbok i tusch och akvarell',
     series: 'Mamma Mu',
     shape: 'spread',
-    fonts: { body: 'literata', heading: 'literata' },
+    fonts: { body: 'LibreCaslon', heading: 'LibreCaslon' },
     swatch: 'from-lime-600 to-amber-600',
     coverLettering: 'Classic hand-painted brush lettering in warm dark brown, slightly irregular like it was painted with the same watercolour brush, simple and old-fashioned.',
     artDirection: `ART STYLE: Classic Scandinavian pen-and-ink and watercolor picture-book illustration.
@@ -100,7 +100,7 @@ ${NO_GENERIC}`,
     label: 'Tecknad film (3D)',
     concept: 'Filmisk bilderbok som en animerad långfilm',
     shape: 'spread',
-    fonts: { body: 'nunito', heading: 'nunito' },
+    fonts: { body: 'Nunito', heading: 'Fredoka' },
     swatch: 'from-blue-500 to-violet-500',
     coverLettering: 'Glossy, dimensional animated-film title logo with soft bevel, warm glow and a playful swash, like a family movie poster.',
     artDirection: `ART STYLE: Modern 3D animated feature-film look (high-end CG render) as a picture-book illustration.
@@ -113,7 +113,7 @@ COMPOSITION: Cinematic framing with foreground, midground and background depth.`
     label: 'Minimalistisk',
     concept: 'Grafisk, modern bilderbok med stora ytor',
     shape: 'page',
-    fonts: { body: 'nunito', heading: 'nunito' },
+    fonts: { body: 'Figtree', heading: 'Figtree' },
     swatch: 'from-stone-400 to-stone-600',
     coverLettering: 'Clean, modern geometric sans-serif title set in one flat colour, generous letter spacing, no ornaments or effects.',
     artDirection: `ART STYLE: Minimalist flat graphic illustration, like a modern design-led picture book.

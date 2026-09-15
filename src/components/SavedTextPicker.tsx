@@ -113,7 +113,7 @@ export default function SavedTextPicker({ onTextSelected, onBack }: Props) {
       ) : (
         <div className="rounded-3xl border border-dashed border-ink/20 bg-white/60 px-6 py-14 text-center">
           <Icon name="description" size={32} className="text-ink/30" />
-          <h3 className="mt-3 text-xl font-heading font-semibold text-ink">Inga sparade texter</h3>
+          <h3 className="mt-3 text-xl font-heading font-bold text-ink">Inga sparade texter</h3>
           <p className="mt-1 text-ink/55 max-w-sm mx-auto">
             När du skapar eller importerar en bok kan du spara texten för att återanvända den.
           </p>

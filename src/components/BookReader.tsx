@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookProject } from '@/lib/types';
 import { BookLayout, LayoutPage, PAGE_H, PAGE_W, PT } from '@/lib/book-layout';
-import { fontCss } from '@/lib/book-fonts';
+import { BOOK_FONTS, bookFontFaceCss, fontCss } from '@/lib/book-fonts';
 import { exportBookToPDF, layoutBook } from '@/lib/pdf-export';
 import Icon from './Icon';
 
@@ -62,7 +62,7 @@ export function BookPageView({ page, width }: { page: LayoutPage | null; width: 
             className="absolute whitespace-pre"
             style={{
               left: el.x * k,
-              top: (el.y - el.size * PT * 0.8) * k,
+              top: (el.y - el.size * PT * BOOK_FONTS[el.font.family].baseline) * k,
               width: el.width * k,
               fontSize: sizePx,
               lineHeight: 1,
@@ -190,8 +190,14 @@ export default function BookReader({ book, showDownload = true }: ReaderProps) {
     ? ''
     : current.filter((p): p is number => p !== null).map(p => pages[p]?.label).join(' – ');
 
+  // Bokens typsnitt laddas bara när en bok faktiskt visas
+  const fontFaces = useMemo(() => layout
+    ? bookFontFaceCss(layout.pages.flatMap(p => p.els.flatMap(el => (el.kind === 'text' ? [el.font.family] : []))))
+    : '', [layout]);
+
   return (
     <div className="space-y-4">
+      {fontFaces && <style>{fontFaces}</style>}
       <div ref={containerRef} className="w-full">
         {error ? (
           <div className="note-error">{error}</div>
@@ -233,8 +239,8 @@ export default function BookReader({ book, showDownload = true }: ReaderProps) {
             <Icon name="chevron_left" size={26} />
           </button>
           <div className="min-w-[9rem] text-center">
-            <p className="text-sm font-heading font-bold text-gray-700">{pageInfo}</p>
-            <p className="text-xs text-gray-400">
+            <p className="text-sm font-semibold text-ink">{pageInfo}</p>
+            <p className="text-xs text-ink/45">
               {layout.pages.length} sidor · {layout.mode === 'chapter' ? 'kapitelbok' : layout.mode === 'picture' ? 'bilderbok' : 'serieformat'}
             </p>
           </div>

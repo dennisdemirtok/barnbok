@@ -154,7 +154,7 @@ export default function ReferenceManager({ onClose }: Props) {
         {/* Header */}
         <div className="px-5 py-4 border-b border-line flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-heading font-semibold text-ink">Referensdatabas</h2>
+            <h2 className="text-xl font-heading font-bold text-ink">Referensdatabas</h2>
             <p className="text-xs text-ink/50">Texter, bilder och stilprofiler från riktiga böcker</p>
           </div>
           <button onClick={onClose} className="btn-icon" title="Stäng" aria-label="Stäng">

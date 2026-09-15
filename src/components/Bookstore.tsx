@@ -94,7 +94,7 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
             <button onClick={closeReader} className="inline-flex items-center gap-1 -ml-1 px-1 text-sm font-medium text-ink/55 hover:text-ink transition-colors">
               <Icon name="arrow_back" size={18} /> Bokhandeln
             </button>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-heading font-semibold text-ink truncate">{reading.title}</h2>
+            <h2 className="mt-2 text-3xl sm:text-4xl font-heading font-bold tracking-tight text-ink truncate">{reading.title}</h2>
             {reading.author && <p className="mt-1 text-ink/55">av {reading.author}</p>}
           </div>
           <button onClick={() => shareBook(reading.id, reading.title)} className="btn-primary shrink-0">
@@ -171,7 +171,7 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
       ) : filtered.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-ink/20 bg-white/60 px-6 py-14 text-center">
           <Icon name="storefront" size={32} className="text-ink/30" />
-          <h3 className="mt-3 text-xl font-heading font-semibold text-ink">
+          <h3 className="mt-3 text-xl font-heading font-bold text-ink">
             {books.length === 0 ? 'Inga böcker ännu' : 'Inga träffar'}
           </h3>
           <p className="mt-1 text-ink/55">
