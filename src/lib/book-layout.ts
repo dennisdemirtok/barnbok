@@ -41,7 +41,10 @@ export interface BookLayout {
   mode: LayoutMode;
 }
 
-export type ImageSizes = Map<string, { w: number; h: number }>;
+// Bildmått, och för bilder på vitt papper även var motivet finns rad för rad
+// (andel av bredden från vänster/höger) så att texten kan flyta runt figurerna
+export interface ImageInfo { w: number; h: number; rows?: { l: number; r: number }[] }
+export type ImageSizes = Map<string, ImageInfo>;
 
 const INK = '#231f20';
 const MUTED = '#8b8591';
@@ -53,8 +56,8 @@ const NBSP = '\u00A0';
 
 type Block =
   | { type: 'heading'; label?: string; title: string }
-  | { type: 'para'; text: string }
-  | { type: 'image'; src?: string; aspect: number; spreadNumber: number };
+  | { type: 'para'; text: string; continued?: boolean } // continued: fortsättning på ett stycke, inget indrag
+  | { type: 'image'; src?: string; aspect: number; spreadNumber: number; composition?: Composition };
 
 interface Scene {
   spread: Spread;
@@ -363,7 +366,7 @@ function setColumn(blocks: Block[], width: number, style: ColumnStyle, m: Measur
     }
     if (block.type !== 'para') continue;
 
-    const indent = afterHeading ? 0 : style.indent;
+    const indent = afterHeading || block.continued ? 0 : style.indent;
     const lines = breakLines(block.text, style.font, style.size, width, indent, m);
     lines.forEach((line, i) => {
       const gaps = line.text.split(' ').length - 1;
@@ -569,12 +572,13 @@ function buildSpreadScene(pb: PageBuilder, scene: Scene, sizes: ImageSizes, t: T
 
 const CB_MARGIN = { top: 22, bottom: 27, inner: 19, outer: 16 };
 
-function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationShape, sizes: ImageSizes, t: Typography, m: Measurer) {
+function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationShape, sizes: ImageSizes, t: Typography, m: Measurer, lively = false) {
   const textW = PAGE_W - CB_MARGIN.inner - CB_MARGIN.outer;
   const style: ColumnStyle = {
     size: t.bs(11.5), leading: 1.55, indent: 5, paraGap: 0, justify: true, font: t.body, heading: t.heading, headingScale: t.hs(10) / t.bs(10),
   };
   const lh = style.size * PT * style.leading;
+  const GAP = 4; // luft mellan figur och text
 
   let page: LayoutPage | null = null;
   let y = CB_MARGIN.top;
@@ -584,6 +588,10 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
   const pendingSpreads: (string | undefined)[] = [];
   let pageHasText = false;
   let spotCount = 0;
+
+  // Figur som texten flyter runt på aktuell sida
+  type WrapZone = { top: number; bottom: number; side: 'left' | 'right'; occupied: (y0: number, y1: number) => number };
+  let wrap = null as WrapZone | null;
 
   const xFor = () => (pb.isRecto(pb.count - 1) ? CB_MARGIN.inner : CB_MARGIN.outer);
   const aspectOf = (src: string, fallback: number) => {
@@ -618,13 +626,33 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
     bottom = PAGE_H - CB_MARGIN.bottom;
     numbered = true;
     pageHasText = false;
+    wrap = null;
   };
 
   let justOpened = false;
 
-  // Bild i textflödet: se till att den ryms, annars ny sida
   const ensureSpace = (h: number) => {
     if (!page || y + h > bottom) openPage();
+  };
+
+  // Hur mycket av textbredden en figur tar på höjden y0-y1 (mm från sin sida), med luft
+  const occupiedFn = (src: string, box: Box, side: 'left' | 'right', x0: number) => (y0: number, y1: number) => {
+    if (y1 <= box.y || y0 >= box.y + box.h) return 0;
+    const rows = sizes.get(src)?.rows;
+    let extent = 1;
+    if (rows && rows.length > 0) {
+      const a = Math.max(0, Math.floor(((y0 - box.y) / box.h) * rows.length));
+      const b = Math.min(rows.length - 1, Math.ceil(((y1 - box.y) / box.h) * rows.length));
+      extent = 0;
+      for (let k = a; k <= b; k++) {
+        const r = rows[k];
+        if (!r) continue;
+        extent = Math.max(extent, side === 'left' ? r.r : 1 - r.l);
+      }
+      if (extent === 0) return 0; // tom rad i bilden: texten får hela bredden
+    }
+    const reach = side === 'left' ? box.x + box.w * extent - x0 : x0 + textW - (box.x + box.w * (1 - extent));
+    return Math.max(0, reach + GAP);
   };
 
   const placeSceneImage = (src: string | undefined, composition: Composition | undefined) => {
@@ -636,8 +664,13 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
 
     if (comp === 'band') {
       const h = PAGE_W / aspectOf(src ?? '', 16 / 9);
-      const bandH = Math.min(h, 95);
-      if (page && pageHasText && y + lh * 4 < bottom - bandH) {
+      const bandH = Math.min(h, 92);
+      if (page && justOpened && y + bandH + lh * 4 < bottom) {
+        // Direkt under en kapitelrubrik: bandet går över hela sidbredden
+        const box: Box = { x: 0, y, w: PAGE_W, h: bandH };
+        page.els.push(...(src ? [imageEl(src, box, aspectOf(src, 16 / 9))] : missingImage(box, t.body)));
+        y += bandH + lh * 0.8;
+      } else if (page && pageHasText && y + lh * 4 < bottom - bandH) {
         // Band längst ner på sidan, utfallande - texten tar slut ovanför
         const box: Box = { x: 0, y: PAGE_H - bandH, w: PAGE_W, h: bandH };
         page.els.push(...(src ? [imageEl(src, box, aspectOf(src, 16 / 9))] : missingImage(box, t.body)));
@@ -655,17 +688,32 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
     }
 
     if (comp === 'spot' || comp === 'round') {
-      const size = textW * (comp === 'spot' ? 0.64 : 0.62);
-      ensureSpace(size + lh * 2);
-      // Figurerna hoppar mellan vänster, höger och mitten
-      const align = comp === 'round' ? 'center' : (['left', 'right', 'center'] as const)[spotCount++ % 3];
+      // Varierad storlek och placering - figurer får gärna gå ut i marginalen
+      const variants = comp === 'round' ? [0.6] : [0.52, 0.66, 0.46, 0.6];
+      let size = textW * variants[spotCount % variants.length];
+      // Hellre en mindre figur än en halvtom sida
+      if (page && y + size > bottom + lh && bottom + lh - y >= textW * 0.42) size = bottom + lh - y;
+      // Mest till höger eller vänster så att texten kan flyta runt; ibland mitt i
+      const align = comp === 'round' ? (spotCount % 2 ? 'left' : 'right') : (['right', 'left', 'right', 'left', 'center'] as const)[spotCount % 5];
+      spotCount++;
+      // Figuren läggs aldrig över text som redan är satt: ryms den inte, ny sida
+      if (!page || y + size > bottom + lh) openPage();
       const x0 = xFor();
-      const x = align === 'left' ? x0 : align === 'right' ? x0 + textW - size : x0 + (textW - size) / 2;
-      const box: Box = { x, y, w: size, h: size };
+      const bleed = comp === 'spot' ? 8 : 0;
+      const x = align === 'left' ? x0 - bleed : align === 'right' ? x0 + textW - size + bleed : x0 + (textW - size) / 2;
+      const box: Box = { x, y, w: size, h: Math.min(size, bottom + lh - y) };
       if (src) page!.els.push({ ...imageEl(src, box, aspectOf(src, 1)), ...(comp === 'round' ? { clip: 'circle' as const } : {}) });
       else page!.els.push(...missingImage(box, t.body));
-      y += size + lh * 0.8;
       pageHasText = true;
+      if (align === 'center') {
+        y = Math.max(y, box.y + box.h + lh * 0.6);
+      } else {
+        // Texten flyter runt figuren
+        wrap = {
+          top: box.y, bottom: box.y + box.h, side: align,
+          occupied: src && comp === 'spot' ? occupiedFn(src, box, align, x0) : (y0, y1) => (y1 <= box.y || y0 >= box.y + size ? 0 : (align === 'left' ? box.x + size - x0 : x0 + textW - box.x) + GAP),
+        };
+      }
       return;
     }
 
@@ -691,9 +739,65 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
     pageHasText = true;
   };
 
+  // Rader bredvid en figur: bredden följer figurens kontur rad för rad.
+  // Returnerar det som återstår (resten av ett avbrutet stycke + följande block).
+  const flowAroundWrap = (run: Block[]): Block[] => {
+    const space = m.width(' ', style.font, style.size);
+    const wordW = (w: string) => m.width(w, style.font, style.size);
+    let afterHeading = justOpened;
+    for (let b = 0; b < run.length; b++) {
+      const block = run[b];
+      if (block.type !== 'para') return run.slice(b);
+      const words = block.text.split(' ').filter(Boolean);
+      let first = true;
+      while (words.length > 0) {
+        if (!wrap || y >= wrap.bottom || y + lh > bottom) {
+          const rest = { type: 'para' as const, text: words.join(' '), continued: !first || block.continued };
+          return [rest, ...run.slice(b + 1)];
+        }
+        const occ = wrap.occupied(y, y + lh);
+        const avail = textW - occ;
+        const x0 = xFor();
+        if (avail < 28) { y += lh; continue; } // för smalt bredvid figuren - hoppa ner en rad
+        const indent = first && !afterHeading && !block.continued ? style.indent : 0;
+        const line: string[] = [];
+        let width = 0;
+        while (words.length > 0) {
+          const nextW = width + (line.length ? space : 0) + wordW(words[0]);
+          if (line.length > 0 && nextW > avail - indent) break;
+          line.push(words.shift()!);
+          width = nextW;
+        }
+        const last = words.length === 0;
+        const gaps = line.length - 1;
+        // Smala rader bredvid en figur blir ojämna i högerkanten i stället för glesa
+        const justify = !last && gaps > 0 && avail > 70;
+        const lineX = (wrap.side === 'left' ? x0 + occ : x0) + indent;
+        page!.els.push({
+          kind: 'text', x: lineX, y: y + style.size * PT * 0.95, width: avail - indent, text: line.join(' '),
+          font: style.font, size: style.size, color: INK,
+          align: justify ? 'justify' : 'left',
+          wordSpacing: justify ? (avail - indent - width) / gaps : undefined,
+        });
+        y += lh;
+        first = false;
+      }
+      afterHeading = false;
+    }
+    return [];
+  };
+
   for (const scene of scenes) {
-    let blocks = scene.blocks;
+    // Figurer och vinjetter hamnar mitt i scenen, där det händer - inte före texten
+    let blocks: Block[] = scene.blocks;
+    const comp = scene.spread.composition;
+    const paraIdx = blocks.map((bl, k) => (bl.type === 'para' ? k : -1)).filter(k => k >= 0);
     let imagePlaced = false;
+    if ((comp === 'spot' || comp === 'round') && paraIdx.length >= 3) {
+      const at = paraIdx[Math.max(1, Math.round(paraIdx.length * 0.35))];
+      blocks = [...blocks.slice(0, at), { type: 'image', src: scene.image, aspect: 1, spreadNumber: scene.spread.spreadNumber, composition: comp }, ...blocks.slice(at)];
+      imagePlaced = true;
+    }
 
     while (blocks.length > 0 || !imagePlaced) {
       const headingIdx = blocks.findIndex(b => b.type === 'heading');
@@ -702,7 +806,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
       if (headingIdx === 0) {
         const heading = blocks[0] as Extract<Block, { type: 'heading' }>;
         if (!page || pageHasText) openPage();
-        let hy = CB_MARGIN.top + 38;
+        let hy = CB_MARGIN.top + (lively ? 8 : 38);
         if (heading.label) {
           page!.els.push({
             kind: 'text', x: 0, y: hy, width: PAGE_W, text: heading.label.toUpperCase(),
@@ -711,23 +815,43 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
           hy += 10;
         }
         hy = centeredLines(page!, heading.title, t.heading, t.hs(19), hy, textW, INK, m, 1.2);
-        ornament(page!, hy + 1);
-        y = hy + 14;
+        if (!lively) ornament(page!, hy + 1);
+        y = hy + (lively ? 9 : 14);
         pageHasText = true;
         justOpened = true;
         blocks = blocks.slice(1);
         continue;
       }
 
+      if (blocks[0]?.type === 'image') {
+        const img = blocks[0];
+        placeSceneImage(img.src, img.composition);
+        blocks = blocks.slice(1);
+        continue;
+      }
+
       // Scenens bild efter en ev. inledande kapitelrubrik, före brödtexten
       if (!imagePlaced) {
-        placeSceneImage(scene.image, scene.spread.composition);
+        placeSceneImage(scene.image, comp);
         imagePlaced = true;
         if (blocks.length === 0) break;
       }
 
-      const run = headingIdx === -1 ? blocks : blocks.slice(0, headingIdx);
-      blocks = headingIdx === -1 ? [] : blocks.slice(headingIdx);
+      // Text bredvid en figur flyter runt den
+      if (wrap && page && y < wrap.bottom) {
+        const stopAt = blocks.findIndex(b => b.type !== 'para');
+        const run = stopAt === -1 ? blocks : blocks.slice(0, stopAt);
+        const rest = flowAroundWrap(run);
+        blocks = [...rest, ...(stopAt === -1 ? [] : blocks.slice(stopAt))];
+        justOpened = false;
+        if (wrap && y >= wrap.bottom) y = Math.max(y, wrap.bottom + lh * 0.3);
+        if (y + lh > bottom && blocks.length > 0) openPage();
+        continue;
+      }
+
+      const nextBreak = blocks.findIndex(b => b.type !== 'para');
+      const run = nextBreak === -1 ? blocks : blocks.slice(0, nextBreak);
+      blocks = nextBreak === -1 ? [] : blocks.slice(nextBreak);
       const lines = setColumn(run, textW, style, m, !justOpened);
       justOpened = false;
 
@@ -829,7 +953,7 @@ export function buildBookLayout(book: BookProject, m: Measurer, sizes: ImageSize
       buildHalfTitle(pb, book, t, m);
       buildPictureBook(pb, scenes, shape, sizes, t, m);
     } else {
-      buildChapterBook(pb, scenes, shape, sizes, t, m);
+      buildChapterBook(pb, scenes, shape, sizes, t, m, !!getStylePreset(book.stylePresetId)?.book.compositionMix);
     }
   }
 
@@ -844,9 +968,43 @@ export async function loadImageSizes(sources: string[]): Promise<ImageSizes> {
   await Promise.all(Array.from(new Set(sources)).map(src => new Promise<void>(resolve => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => { sizes.set(src, { w: img.naturalWidth, h: img.naturalHeight }); resolve(); };
+    img.onload = () => { sizes.set(src, { w: img.naturalWidth, h: img.naturalHeight, rows: motifRows(img) }); resolve(); };
     img.onerror = () => resolve();
     img.src = src;
   })));
   return sizes;
+}
+
+// Rad för rad: hur långt från vänster och höger motivet sträcker sig (0-1).
+// Används för att låta texten flyta runt figurer på vitt papper.
+function motifRows(img: HTMLImageElement, rowsCount = 48): { l: number; r: number }[] | undefined {
+  try {
+    const cols = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = cols;
+    canvas.height = rowsCount;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return undefined;
+    ctx.drawImage(img, 0, 0, cols, rowsCount);
+    const data = ctx.getImageData(0, 0, cols, rowsCount).data;
+    const rows: { l: number; r: number }[] = [];
+    for (let yy = 0; yy < rowsCount; yy++) {
+      let l = -1;
+      let r = -1;
+      for (let xx = 0; xx < cols; xx++) {
+        const i = (yy * cols + xx) * 4;
+        const [rr, gg, bb] = [data[i], data[i + 1], data[i + 2]];
+        const light = (rr + gg + bb) / 3;
+        const chroma = Math.max(rr, gg, bb) - Math.min(rr, gg, bb);
+        if (light < 232 || chroma > 22) {
+          if (l < 0) l = xx;
+          r = xx;
+        }
+      }
+      rows.push(l < 0 ? { l: 1, r: 0 } : { l: l / cols, r: (r + 1) / cols });
+    }
+    return rows;
+  } catch {
+    return undefined; // bild från annan domän utan CORS - ingen kontur
+  }
 }
