@@ -11,6 +11,10 @@ import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
 import { pasteManuscript } from '@/lib/dialogue';
 import { aspectFor, balanceCompositions, COMPOSITION_LABEL, resolveComposition } from '@/lib/compositions';
+import { comicPageScript, comicTextBlocks, fallbackComicPage } from '@/lib/comic';
+
+// Serieromaner provas som färdiga seriesidor med texten i bilden; övriga stilar sätter texten själva
+const isComicStyle = (styleId: string) => getStylePreset(styleId)?.book.format === 'bildbok-text-pa-bild';
 
 interface Props {
   // Vald stil tas vidare till manussteget, där hela boken skapas
@@ -83,24 +87,29 @@ function buildPages(plan: StyleTestPlan, title: string, styleId: string): PageRo
   // Rörliga boktyper blandar bildtyper redan på testsidorna
   const mix = getStylePreset(styleId)?.book.compositionMix;
   const compositions = mix ? balanceCompositions(sceneList.map(() => undefined), mix, `${styleId}:${title}`) : [];
-  const scenes = sceneList.map((scene, i): PageRow => ({
-    id: `scene-${i}`,
-    label: scene.label,
-    spread: {
+  const comic = isComicStyle(styleId);
+  const scenes = sceneList.map((scene, i): PageRow => {
+    // Serie: sidmanus och pratbubblor från planeringen (äldre provningar får en enkel seriesida)
+    const comicPage = comic && !scene.textBlocks ? fallbackComicPage(scene.text, scene.imagePrompt) : undefined;
+    return {
       id: `scene-${i}`,
-      spreadNumber: i + 1,
-      pages: `${6 + i * 2}-${7 + i * 2}`,
-      // Stycken blir egna textblock så layouterna kan fördela texten
-      textBlocks: scene.text
-        .split(/\n\s*\n/)
-        .map(t => t.trim())
-        .filter(Boolean)
-        .map((text, j) => ({ position: `stycke ${j + 1}`, text })),
-      imagePrompt: scene.imagePrompt,
-      composition: compositions[i],
-      status: 'pending',
-    },
-  }));
+      label: scene.label,
+      spread: {
+        id: `scene-${i}`,
+        spreadNumber: i + 1,
+        pages: `${6 + i * 2}-${7 + i * 2}`,
+        // Stycken blir egna textblock så layouterna kan fördela texten
+        textBlocks: comicPage ? comicTextBlocks(comicPage) : scene.textBlocks ?? scene.text
+          .split(/\n\s*\n/)
+          .map(t => t.trim())
+          .filter(Boolean)
+          .map((text, j) => ({ position: `stycke ${j + 1}`, text })),
+        imagePrompt: comicPage ? comicPageScript(comicPage, plan.characters) : scene.imagePrompt,
+        composition: compositions[i],
+        status: 'pending',
+      },
+    };
+  });
   return [cover, ...scenes];
 }
 
@@ -181,8 +190,9 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
           spread: page.spread,
           characters: s.plan.characters,
           styleGuide,
-          // Texten sätts av layoutmotorn - bildform enligt stilens bokkoncept
-          bookFormat: 'bildbok-separat-text',
+          // Texten sätts av layoutmotorn - utom i serieromaner där den letras i bilden.
+          // Bildform enligt stilens bokkoncept.
+          bookFormat: isComicStyle(styleId) ? 'bildbok-text-pa-bild' : 'bildbok-separat-text',
           illustrationShape: getStylePreset(styleId)?.shape,
         }),
       });

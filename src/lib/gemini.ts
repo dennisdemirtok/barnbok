@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { aspectFor, resolveComposition } from './compositions';
 import { Character, Spread, BookFormat, IllustrationShape } from './types';
 import { textSideForSpread } from './styles';
+import { describeLettering, letteringCaps } from './comic';
 
 const MODEL = 'gemini-3.1-flash-image-preview';
 
@@ -188,6 +189,18 @@ export function resolveIllustrationShape(bookFormat?: BookFormat, shape?: Illust
 // Layoutinstruktioner. VIKTIGT: inga stilord här (linjer, ögon, färger, teknik) -
 // stilen kommer enbart från STYLE GUIDE, annars blir alla stilar likadana.
 function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: IllustrationShape, spreadNumber: number, composition?: Spread['composition']): string {
+  if (bookFormat === 'bildbok-text-pa-bild' && shape === 'page') {
+    // Serieroman: bilden ÄR den färdiga boksidan, med all text letrad i bilden
+    return `LAYOUT: ONE COMPLETE COMIC BOOK PAGE (portrait 3:4, 16×21 cm) - the finished printed page of a kids' comic novel, with all lettering drawn in. This is NOT an illustration that gets text added later.
+- Draw exactly the panels of the PAGE SCRIPT in the image description (2-6 panels), in reading order left to right, top to bottom, with a small even paper margin around the whole page
+- Follow the panel sizes in the script; a sound effect may burst over panel borders
+- Hand-letter every speech bubble, caption box and sound effect from the script INSIDE the image, in bold ALL-CAPS comic lettering, large and easy for a 6-year-old to read
+- Speech bubbles: white with a black outline, the tail pointing clearly at the character who speaks; bubbles never cover a face. When a panel has several bubbles, the first spoken one sits highest / leftmost
+- Caption boxes: small rectangular boxes tucked into a corner of their panel. Sound effects: giant colorful letters
+- ONLY the texts in the script: no empty bubbles, no extra or invented words, no page numbers, titles, labels, signatures or words on signs
+- The same character looks identical in every panel they appear in, and appears at most once per panel`;
+  }
+
   if (bookFormat === 'bildbok-text-pa-bild') {
     return `LAYOUT: Comic/graphic-novel spread with panels.
 - A professional comic spread with several panels of varied size
@@ -210,7 +223,7 @@ function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: Illust
     return `LAYOUT: SPOT ILLUSTRATION (square) that will sit inside a text page of a chapter book.
 - Only the character(s) of the moment and the one or two props they hold or use - NO room, landscape or background scenery
 - Plain white paper background all around, with generous empty white margins on every side so the figures can float on the page
-- At most a small, soft, flat patch of color on the ground under their feet (like a puddle of watercolor), nothing else
+- Under their feet at most a simple ground hint in the style's own means - only if the style guide uses color, a small soft flat patch of color (like a puddle of watercolor); in a pure black-and-white style just a short ink floor line, never a grey wash - nothing else
 - Full body, clear readable silhouettes and funny body language; figures fill roughly the central 60-70% of the square
 - Absolutely NO text, letters, numbers or speech bubbles`;
   }
@@ -334,11 +347,26 @@ export async function generatePageImage(
     : getLayoutInstructions(bookFormat, shape, spread.spreadNumber, spread.composition);
   const includeTextOnImage = !isCover && textInImage(bookFormat);
   const composition = isCover ? 'full' : resolveComposition(spread.composition, shape);
+  // Serieroman: en stående bild per boksida med rutor och letrade pratbubblor
+  const comicPage = !isCover && bookFormat === 'bildbok-text-pa-bild' && shape === 'page';
+  // Figurer får förekomma en gång per ruta i serier
+  const perPanel = composition === 'panels' || (!isCover && bookFormat === 'bildbok-text-pa-bild');
 
   // Build text section based on format - CLEAN position labels
   let textSection = '';
   if (isCover) {
     textSection = `TEXT ON THE COVER: The ONLY text allowed on the cover is the book title in Swedish (given in the image description below), rendered as large, clearly readable title lettering in the style given under COVER TITLE LETTERING in the style guide (if present) - it must look like this book series' own logo, not a generic decorative serif. No other words, labels or text anywhere on the image.`;
+  } else if (comicPage) {
+    const entries = spread.textBlocks
+      .map((tb, idx) => `${idx + 1}. ${describeLettering(tb, idx)}: "${letteringCaps(tb.text)}"`)
+      .join('\n');
+    textSection = spread.textBlocks.length > 0
+      ? `LETTERING - these are ALL ${spread.textBlocks.length} texts on this page. Letter each one exactly once, in its panel, copied letter for letter:
+${entries}
+
+SPELLING IS CRITICAL: the texts are Swedish and must never be translated. Keep every Å, Ä and Ö with its ring or dots (Å is not A, Ä is not A, Ö is not O), keep all punctuation, and never add, drop, change or reorder a word. Check every bubble, caption and sound effect against this list before finishing.
+No other text anywhere on the page: no page number, no title, no labels, no extra bubbles.`
+      : 'LETTERING: this page has no texts - draw no speech bubbles, caption boxes, sound effects or any other letters.';
   } else if (includeTextOnImage) {
     const textEntries = spread.textBlocks.map((tb, idx) => {
       const placement = cleanPositionForPrompt(tb.position);
@@ -372,8 +400,8 @@ IMPORTANT: Do NOT include any text, letters, words, page numbers, or labels on t
     characterPresenceSection = `\nCHARACTERS THAT MUST BE VISIBLE IN THIS SCENE:
 ${charList}
 
-CRITICAL: There are exactly ${charsInScene.length} character(s) in this scene. Each character must appear EXACTLY ONCE${composition === 'panels' ? ' PER PANEL' : ''}.
-${composition === 'panels' ? 'IMPORTANT: Within each panel, draw every character at most once.' : 'IMPORTANT: Do NOT draw any character more than once. Each person appears only ONE time in the illustration.'}
+CRITICAL: There are exactly ${charsInScene.length} character(s) in this scene. Each character must appear EXACTLY ONCE${perPanel ? ' PER PANEL' : ''}.
+${perPanel ? `IMPORTANT: Within each panel, draw every character at most once.${comicPage ? ' Showing a character in several panels is normal comic storytelling.' : ''}` : 'IMPORTANT: Do NOT draw any character more than once. Each person appears only ONE time in the illustration.'}
 ${mainCharsInScene.length > 1 ? `There are ${mainCharsInScene.length} main characters in this scene - make sure ALL of them are clearly visible and recognizable, but each drawn only ONCE.` : ''}
 ${supportingCharsInScene.length > 0 ? `Supporting characters: ${supportingCharsInScene.map(c => c.name).join(', ')} - include them as described in the scene, each appearing once.` : ''}`;
   }
@@ -383,6 +411,8 @@ ${supportingCharsInScene.length > 0 ? `Supporting characters: ${supportingCharsI
   const isPortrait = composition === 'full';
   const imageSize = isCover
     ? 'the front cover of a children\'s book (portrait, 16cm x 21cm)'
+    : comicPage
+    ? 'a complete comic book page with panels and lettering (portrait, 16cm x 21cm)'
     : composition === 'spread'
     ? 'a children\'s book spread (double page, 32cm x 21cm)'
     : composition === 'full'
@@ -413,7 +443,7 @@ ${composition === 'spread'
   : `- Follow the ${aspectRatio} format and the layout instructions above`}
 - Make sure character proportions, hair, clothing, and features match their reference sheets
 - Every character must look the SAME across all pages - same hair color, same clothing, same features
-- NEVER duplicate a character - each person appears EXACTLY ONCE ${composition === 'panels' ? 'in each panel' : 'in the image'}
+- NEVER duplicate a character - each person appears EXACTLY ONCE ${perPanel ? 'in each panel' : 'in the image'}
 - NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image`;
 
   contents.push({ text: mainPrompt });

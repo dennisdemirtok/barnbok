@@ -9,6 +9,8 @@ import type { Composition } from './types';
 import { BookFormat } from './types';
 import type { BookConcept, StylePreset } from './styles';
 import type { VoiceProfile } from './author-types';
+import type { TextBlock } from './types';
+import { normalizeComicPages, type ComicPage } from './comic';
 
 export type TextDensity = 'minimal' | 'lite' | 'medium' | 'mycket';
 
@@ -316,6 +318,8 @@ export interface StyleTestScene {
   label: string;
   text: string;
   imagePrompt: string;
+  // Serieformat: sidmanuset står i imagePrompt och de lettrade texterna här
+  textBlocks?: TextBlock[];
 }
 
 export interface StyleTestPlan {
@@ -576,6 +580,265 @@ Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. D
   });
 }
 
+// ═══════════════════════════════════════════
+//  Serieroman: ett prosamanus blir seriesidor
+// ═══════════════════════════════════════════
+
+export interface ComicCastPlan {
+  title: string;
+  characters: StyleTestCharacter[];
+  coverPrompt: string;
+}
+
+export interface ComicBookPlan extends ComicCastPlan {
+  pages: ComicPage[];
+}
+
+const COMIC_CAST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'characters', 'coverPrompt'],
+  properties: {
+    title: { type: 'string' },
+    characters: CHARACTERS_SCHEMA,
+    coverPrompt: { type: 'string' },
+  },
+};
+
+const COMIC_PANEL_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['size', 'description', 'caption', 'dialogue', 'sfx'],
+  properties: {
+    size: { type: 'string', enum: ['small', 'medium', 'large', 'wide'] },
+    description: { type: 'string' },
+    caption: { type: 'string' },
+    dialogue: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['speaker', 'text'],
+        properties: {
+          speaker: { type: 'string' },
+          text: { type: 'string' },
+        },
+      },
+    },
+    sfx: { type: 'string' },
+  },
+};
+
+const COMIC_PAGES_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['sections'],
+  properties: {
+    sections: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['pages'],
+        properties: {
+          pages: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['panels'],
+              properties: { panels: { type: 'array', items: COMIC_PANEL_SCHEMA } },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+async function streamJson<T>(prompt: string, schema: { [key: string]: unknown }, opts: { effort: 'low' | 'medium'; maxTokens: number; refusal: string; tooLong: string }): Promise<T> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+  return withModelFallback(model, async (m) => {
+    const stream = client.messages.stream({
+      model: m,
+      max_tokens: opts.maxTokens,
+      output_config: {
+        effort: opts.effort,
+        format: { type: 'json_schema', schema },
+      },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const message = await stream.finalMessage();
+    if (message.stop_reason === 'refusal') throw new Error(opts.refusal);
+    if (message.stop_reason === 'max_tokens') throw new Error(opts.tooLong);
+    const textBlock = message.content.find(c => c.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') throw new Error('Inget svar från Claude');
+    return JSON.parse(textBlock.text) as T;
+  });
+}
+
+// Steg 1: titel, figurer och omslag för hela serien (så att alla delar använder samma figurer)
+export async function planComicCast(paragraphs: string[], title?: string): Promise<ComicCastPlan> {
+  const numbered = paragraphs.map((p, i) => `[${i + 1}] ${p}`).join('\n');
+  const prompt = `Du är redaktör på ett barnboksförlag och ska göra en färgglad, tokig serieroman för barn av ett färdigt manus.
+
+MANUS - numrerade stycken:
+"""
+${numbered}
+"""
+
+${title ? `Författarens titel: "${title}"` : 'Ingen titel angiven - föreslå en kort, lockande titel på svenska utifrån texten.'}
+
+UPPGIFT:
+1. KARAKTÄRER: Lista alla namngivna figurer som återkommer (även djur och skurkar). Använd utseendet som står i texten; där det saknas, hitta på ett konkret, konsekvent och lätt tecknat utseende (ålder, art, hår/päls, ögon, kroppsbyggnad, ett tydligt kännetecken) och vardagskläder med färger.
+2. OMSLAG: Bildprompt på ENGELSKA för framsidan av serieromanen: huvudfigurerna i en rolig, actionfylld pose med stor energi. Titeln ska stå som stor titeltext på svenska. Ingen ritstil (den läggs på separat).`;
+
+  return streamJson<ComicCastPlan>(prompt, COMIC_CAST_SCHEMA, {
+    effort: 'low',
+    maxTokens: 8000,
+    refusal: 'Claude avböjde att bearbeta manuset',
+    tooLong: 'Manuset är för långt för att bearbetas - dela upp det i flera böcker',
+  });
+}
+
+export interface ComicSectionInput {
+  text: string;
+  pages: number;
+}
+
+// Steg 2: manusdelar blir seriesidor. Varje del får exakt det antal sidor som anges.
+export async function writeComicPages(input: {
+  sections: ComicSectionInput[];
+  cast: StyleTestCharacter[];
+  title?: string;
+  targetAge?: string;
+  textStyle?: string;
+  before?: string; // slutet av föregående del, bara som sammanhang
+  effort?: 'low' | 'medium';
+}): Promise<ComicPage[][]> {
+  const cast = input.cast.length > 0
+    ? input.cast.map(c => `- ${c.name}${c.age ? `, ${c.age}` : ''}: ${c.appearance}${c.personality ? ` (${c.personality})` : ''}`).join('\n')
+    : '(inga angivna - använd figurerna i texten)';
+  const sections = input.sections
+    .map((s, i) => `<del nr="${i + 1}" sidor="${s.pages}">\n${s.text.trim()}\n</del>`)
+    .join('\n\n');
+
+  const prompt = `Du är manusförfattare och redaktör för en svensk serieroman för barn ${input.targetAge ?? '6-10 år'}: tokig, snäll och färgglad, med rutor, pratbubblor, små textrutor och stora ljudord. Du gör om ett färdigt prosamanus till seriesidor.
+${input.title ? `\nTITEL: "${input.title}"\n` : ''}
+FIGURER (använd exakt dessa namn):
+${cast}
+${input.before?.trim() ? `
+SÅ HÄR SLUTADE FÖREGÅENDE DEL (bara sammanhang - gör inga sidor av den):
+"""
+${input.before.trim()}
+"""
+` : ''}
+MANUSDELAR SOM SKA BLI SERIESIDOR:
+${sections}
+
+UPPGIFT: Gör varje del till EXAKT det antal seriesidor som står i sidor="...". Svara med en post i sections per del, i samma ordning (${input.sections.length} ${input.sections.length === 1 ? 'post' : 'poster'}).
+
+SIDOR OCH RUTOR
+- Varje sida har 2-6 rutor, oftast 3-5. Variera: en stor ruta när något stort händer, flera små när det går snabbt. Sidans sista ruta slutar gärna med en poäng eller en liten cliffhanger.
+- Håll dig trogen manuset: samma händelser i samma ordning, samma figurer och samma slut. Du får korta, slå ihop och göra om berättartext till textrutor, repliker och bild - en serie kan inte ha all prosa. Hoppa aldrig över något som betyder något för handlingen. Hitta inte på nya händelser.
+- En kapitelrubrik i manuset kan bli en textruta i första rutan på en ny sida, t.ex. "Kapitel 2: Den stora flykten".
+- size: small, medium, large eller wide (hur stor rutan är på sidan). Använd wide eller large för etablerande bilder och stora ögonblick.
+- description: 1-3 korta meningar på ENGELSKA om vad rutan visar: vilka figurer som syns (med namn exakt som i listan), vad de gör, tydliga ansiktsuttryck och kroppsspråk, miljön och bildvinkeln (närbild, helbild, från ovan). Skriv inte ritstil eller utseende - det läggs på separat. Ingen text, inga skyltar med ord och inga pratbubblor i beskrivningen.
+
+TEXT I RUTORNA
+- caption: kort textruta på svenska, högst 8 ord, t.ex. "Under tiden ..." eller "Senare samma kväll". Tom sträng om rutan inte behöver någon. Inte i varje ruta.
+- dialogue: 0-3 repliker per ruta, i den ordning de sägs. speaker = figurens namn exakt som i listan (eller en kort beskrivning som "en polis" för okända). text = bara själva repliken på svenska, 2-10 ord, utan talstreck, citattecken eller namnet på den som pratar. Den som pratar ska synas i rutan. Högst ett betonat ORD i versaler per replik.
+- sfx: ett ljudord när något låter eller smäller (t.ex. "KLONK!", "PANG!", "SVISCH!", "ZOOOM!"), annars tom sträng. Inte i varje ruta.
+- Högst ca 30 ord text per sida sammanlagt, så att texten kan letras stort och läsas av barn.
+- Skriv aldrig sidnummer.
+${input.textStyle ? `
+BOKTYPENS SPRÅK (fånga känslan, härma aldrig en förlaga):
+${input.textStyle}
+` : ''}
+SPRÅKET I BUBBLOR OCH TEXTRUTOR
+- Levande, naturlig talad svenska som barn själva kan läsa. Korta, roliga repliker som låter som när folk faktiskt pratar, med ordvitsar och slapstick där det passar.
+- Stava rätt med å, ä och ö.
+- Inga långa tankstreck (—) och inga tankstreck mitt i meningar. Inga klyschor som "magisk" eller "ett äventyr de aldrig skulle glömma".
+- Figurer, namn, platser och varumärken från befintliga serier, böcker och filmer får aldrig förekomma, inte heller från den serie boktypen är inspirerad av. Behåll manusets egna namn.`;
+
+  // Ungefär 450 tokens per sida - marginal för långa beskrivningar
+  const totalPages = input.sections.reduce((n, s) => n + s.pages, 0);
+  const raw = await streamJson<{ sections?: { pages?: Partial<ComicPage>[] }[] }>(prompt, COMIC_PAGES_SCHEMA, {
+    effort: input.effort ?? 'medium',
+    maxTokens: Math.min(32000, 4000 + totalPages * 900),
+    refusal: 'Claude avböjde att göra serien',
+    tooLong: 'Seriesidorna blev för långa - försök igen',
+  });
+  return input.sections.map((_, i) => normalizeComicPages(raw.sections?.[i]?.pages ?? []));
+}
+
+// Hela serieromanen: figurer först, sedan manuset i delar som skrivs parallellt
+export async function planComicBook(
+  paragraphs: string[],
+  options: { title?: string; pages: number; wordsPerImage: number; targetAge?: string; textStyle?: string }
+): Promise<ComicBookPlan> {
+  const PAGES_PER_CALL = 14;
+  // Högst 120 sidor = högst 9 delar - alla körs parallellt så att routen hinner inom 300 s
+  const CONCURRENCY = 9;
+  const wordCount = (p: string) => p.split(/\s+/).filter(Boolean).length;
+  const totalWords = Math.max(1, paragraphs.reduce((n, p) => n + wordCount(p), 0));
+  const wordsPerCall = Math.max(options.wordsPerImage, Math.round((totalWords / options.pages) * PAGES_PER_CALL));
+
+  // Dela manuset vid styckegränser, helst vid en kapitelrubrik när delen nästan är full
+  const chunks: string[][] = [];
+  let current: string[] = [];
+  let words = 0;
+  for (const p of paragraphs) {
+    const heading = /^(kapitel\s+\S+|prolog|epilog)\b/i.test(p);
+    if (current.length > 0 && (words >= wordsPerCall || (heading && words >= wordsPerCall * 0.6))) {
+      chunks.push(current);
+      current = [];
+      words = 0;
+    }
+    current.push(p);
+    words += wordCount(p);
+  }
+  if (current.length > 0) {
+    // En mycket kort sista del slås ihop med föregående
+    if (chunks.length > 0 && words < wordsPerCall * 0.3) chunks[chunks.length - 1].push(...current);
+    else chunks.push(current);
+  }
+
+  const castPlan = await planComicCast(paragraphs, options.title);
+  const title = options.title || castPlan.title;
+
+  const results: ComicPage[][] = new Array(chunks.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < chunks.length) {
+      const i = next++;
+      const text = chunks[i].join('\n');
+      const pages = Math.max(1, Math.round((options.pages * wordCount(text)) / totalWords));
+      const before = i > 0 ? chunks[i - 1].slice(-3).join('\n').slice(-600) : undefined;
+      const run = () => writeComicPages({
+        sections: [{ text, pages }],
+        cast: castPlan.characters,
+        title,
+        targetAge: options.targetAge,
+        textStyle: options.textStyle,
+        before,
+      });
+      let pagesOut: ComicPage[][];
+      try {
+        pagesOut = await run();
+      } catch (err) {
+        console.warn(`[serie] del ${i + 1} misslyckades, försöker igen:`, err instanceof Error ? err.message : err);
+        pagesOut = await run();
+      }
+      results[i] = pagesOut[0] ?? [];
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker));
+
+  return { ...castPlan, title, pages: normalizeComicPages(results.flat()) };
+}
+
 async function generate(client: Anthropic, model: string, prompt: string) {
   // Streaming krävs vid höga max_tokens och skyddar långa genereringar mot timeout.
   const stream = client.messages.stream({
@@ -795,8 +1058,31 @@ function proseRules(targetAge: string): string {
 ${PROSE_QUALITY_RULES}`;
 }
 
-function manuscriptFormatRules(isChapterBook: boolean, voice?: AuthorVoiceRef, dialogueStyle?: 'dash' | 'quotes'): string {
+// Dagboksroman (linjerat papper): manuset är dagboksinlägg som börjar med veckodagen
+function isDiaryBook(preset: { id: string; book: { paper?: 'lined' } }): boolean {
+  return preset.book.paper === 'lined' || preset.id === 'dagbok';
+}
+
+function diaryOutlineUnits(book: BookConcept): string {
+  const weeks = Math.min(12, Math.max(3, Math.round(book.targetWords / 900)));
+  return `${weeks} veckor (ca ${Math.round(book.targetWords / weeks / 50) * 50} ord per vecka, fördelade på 4-7 inlägg)`;
+}
+
+const DIARY_FORMAT_RULES = `- Boken är en DAGBOK. Varje inlägg börjar med veckodagen ensam på en egen rad, t.ex. "Måndag", "Tisdag" ... "Söndag" (ibland med datum eller tid på dagen, t.ex. "Onsdag 4 september" eller "Fredag kväll"), med en tom rad före. Veckodagarna kommer i rätt ordning; dagar utan något att berätta hoppas över.
+- Inga kapitelrubriker och inga andra rubriker - skriv ALDRIG ordet Kapitel.
+- Jagform genom hela boken. Korta stycken på 2-4 meningar, ett stycke per rad. Ett inlägg är oftast 3-8 stycken.`;
+
+const DIARY_DIALOGUE_RULE = '- Repliker återges oftast indirekt i berättarens egna ord (Mamma sa att jag MÅSTE städa rummet). Ibland, när det gör skämtet bättre, ett kort citat inom svenska citattecken mitt i stycket, t.ex. ”Ut!” skrek Viktor genom dörren. Aldrig talstreck och aldrig långa samtal i replikform.';
+
+function manuscriptFormatRules(isChapterBook: boolean, voice?: AuthorVoiceRef, dialogueStyle?: 'dash' | 'quotes', diary = false): string {
   const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
+  if (diary) {
+    return `MANUSFORMAT (viktigt - texten sätts automatiskt i boken):
+- Ren löptext med ett stycke per rad.
+${DIARY_FORMAT_RULES}
+${voice ? '- Repliker skrivs som i författarens text, men mest indirekt så att det låter som en dagbok.' : DIARY_DIALOGUE_RULE}
+- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, * eller **).`;
+  }
   const dialogueRule = !voice && dialogueStyle === 'quotes'
     ? '- Repliker står i egna stycken inom svenska citattecken med anföringen efter, t.ex. ”Kom hit!” säger Ture. Flera korta repliker får gärna följa tätt på varandra.'
     : marker
@@ -814,7 +1100,7 @@ ${dialogueRule}
 }
 
 // Städar bort markdown och fel talstreck så att manuset följer formatet
-function normalizeManuscript(text: string, voice?: AuthorVoiceRef): string {
+function normalizeManuscript(text: string, voice?: AuthorVoiceRef, diary = false): string {
   // Med författarspråk byts andra replikstreck mot författarens egen markering
   const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
   const dashMarker = marker ? /^\s*[-—―–]\s+/ : /^\s*[-—―]\s+/;
@@ -831,14 +1117,28 @@ function normalizeManuscript(text: string, voice?: AuthorVoiceRef): string {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-    // Repliker som skrevs utan talstreck får det (tomma rader hoppas över)
-    .replace(/^[\s\S]*$/, all => restoreDialogueMarkers(all, marker ?? DEFAULT_MARKER).text);
+    // Repliker som skrevs utan talstreck får det (tomma rader hoppas över).
+    // Inte i dagböcker: där är "..., sa jag." indirekt berättartext, inte en replik.
+    .replace(/^[\s\S]*$/, all => (diary ? all : restoreDialogueMarkers(all, marker ?? DEFAULT_MARKER).text));
+}
+
+// Serieroman: prosan görs om till seriesidor vid planeringen - skriv så att den blir en bra serie
+function comicWritingHint(book: BookConcept): string {
+  if (book.format !== 'bildbok-text-pa-bild') return '';
+  return `
+TEXTEN BLIR EN SERIE: Manuset görs sedan om till seriesidor med rutor, pratbubblor, textrutor och ljudord. Skriv därför för serien: mycket dialog i korta repliker, visuella skämt och slapstick som går att rita, ljudord när något händer (KLONK, PANG, SVISCH), korta scener med tydliga platser och mindre berättartext. Beskriv det man ser, inte långa tankar.
+`;
 }
 
 function outlineUnits(book: BookConcept): string {
   if (book.format === 'kapitelbok') {
     const chapters = Math.min(15, Math.max(4, Math.round(book.targetWords / 600)));
     return `${chapters} kapitel (ca ${Math.round(book.targetWords / chapters / 50) * 50} ord per kapitel)`;
+  }
+  if (book.format === 'bildbok-text-pa-bild') {
+    // Serieroman: dispositionen i scener, inte en rad per seriesida
+    const scenes = Math.min(20, Math.max(8, Math.round(book.targetWords / 250)));
+    return `${scenes} scener (ca ${Math.round(book.targetWords / scenes / 50) * 50} ord per scen)`;
   }
   const scenes = Math.max(6, Math.round(book.targetWords / book.wordsPerImage));
   return `${scenes} scener/bildmoment (ca ${book.wordsPerImage} ord per bild)`;
@@ -861,6 +1161,7 @@ export async function writeBookBeginning(input: BeginningInput): Promise<BookBeg
   const { preset, targetAge } = input;
   const book = preset.book;
   const isChapterBook = book.format === 'kapitelbok';
+  const diary = isDiaryBook(preset);
   const beginningWords = beginningWordTarget(book);
 
   const characterLines = [
@@ -870,7 +1171,7 @@ export async function writeBookBeginning(input: BeginningInput): Promise<BookBeg
     ...(input.characterNotes?.trim() ? [input.characterNotes.trim()] : []),
   ];
 
-  const prompt = `Du är en erfaren svensk barnboksförfattare. Du ska skriva en ${isChapterBook ? 'kapitelbok' : 'bilderbok'} på SVENSKA - men i det här steget bara planera hela boken och skriva BÖRJAN, så att författaren kan läsa texten och prova illustrationerna innan resten skrivs.
+  const prompt = `Du är en erfaren svensk barnboksförfattare. Du ska skriva en ${diary ? 'dagboksroman' : isChapterBook ? 'kapitelbok' : 'bilderbok'} på SVENSKA - men i det här steget bara planera hela boken och skriva BÖRJAN, så att författaren kan läsa texten och prova illustrationerna innan resten skrivs.
 
 BOKTYP: ${preset.label} – ${preset.concept}
 MÅLÅLDER: ${targetAge}
@@ -891,12 +1192,14 @@ UPPGIFT:
 1. title: bokens titel${input.title?.trim() ? ' (använd författarens titel oförändrad)' : ''}.
 2. outline: en kort disposition för HELA boken som ren text (ingen markdown), så att resten kan skrivas senare utan att tappa tråden:
    - Först raden "Karaktärer:" följd av en rad per namngiven figur: "– Namn, ålder – roll, utseende i några ord, personlighet".
-   - Sedan raden "${isChapterBook ? 'Kapitel:' : 'Handling:'}" följd av ${outlineUnits(book)}, en rad var: ${isChapterBook ? '"Kapitel 1 – Titel: vad som händer i 1-2 meningar"' : '"1. vad som händer i 1-2 meningar"'}.
+${diary
+    ? `   - Sedan raden "Veckor:" följd av ${diaryOutlineUnits(book)}, en rad var: "Vecka 1: vad som händer i 1-2 meningar".`
+    : `   - Sedan raden "${isChapterBook ? 'Kapitel:' : 'Handling:'}" följd av ${outlineUnits(book)}, en rad var: ${isChapterBook ? '"Kapitel 1 – Titel: vad som händer i 1-2 meningar"' : '"1. vad som händer i 1-2 meningar"'}.`}
    - Planera en hel spänningskurva med ett tydligt, tillfredsställande slut.
-3. beginning: BARA bokens början, ca ${beginningWords} ord (håll dig nära den längden). Börja med en fångande öppning, presentera huvudpersonen och sätt igång handlingen. Sluta vid ett naturligt avbrott efter en scen - skriv INTE vidare i handlingen och avsluta inte berättelsen.
+3. beginning: BARA bokens början, ca ${beginningWords} ord (håll dig nära den längden). ${diary ? 'Börja med det första dagboksinlägget ("Måndag"), där berättaren presenterar sig själv och dagboken med egna ord, och sätt igång handlingen. Sluta efter ett avslutat inlägg' : 'Börja med en fångande öppning, presentera huvudpersonen och sätt igång handlingen. Sluta vid ett naturligt avbrott efter en scen'} - skriv INTE vidare i handlingen och avsluta inte berättelsen.
 
-${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue)}
-
+${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary)}
+${comicWritingHint(book)}
 ${proseRules(targetAge)}
 
 ${variationBlock({ names: characterLines.length === 0, opening: true })}
@@ -931,11 +1234,11 @@ ${memoryBlock(recent)}`;
     const beginning = {
       title: input.title?.trim() || result.title.trim(),
       outline: result.outline.trim(),
-      rawText: normalizeManuscript(result.beginning, input.voice),
+      rawText: normalizeManuscript(result.beginning, input.voice, diary),
     };
     // Kom ihåg namn, titel och öppning (inte författarens idé) för kommande böcker
     const opening = beginning.rawText.split('\n').map(l => l.trim())
-      .find(l => l && !/^(kapitel\s+\S+|prolog|inledning)\b/i.test(l));
+      .find(l => l && !/^(kapitel\s+\S+|prolog|inledning)\b/i.test(l) && !(diary && /^(måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)\b.{0,25}$/i.test(l)));
     await rememberStory({
       kind: 'beginning',
       style: preset.id,
@@ -958,17 +1261,21 @@ export async function continueBook(input: ContinueInput, deadline: number): Prom
   const { preset, targetAge } = input;
   const book = preset.book;
   const isChapterBook = book.format === 'kapitelbok';
+  const diary = isDiaryBook(preset);
   const writtenWords = countWords(input.rawText);
   const remainingWords = Math.max(book.targetWords - writtenWords, book.wordsPerImage * 2);
 
   // Senaste kapitelrubriken så att numreringen fortsätter rätt
   const headings = input.rawText.match(/^(Kapitel\s+\d+.*|Prolog.*)$/gim) ?? [];
   const lastHeading = headings[headings.length - 1]?.trim();
+  // Dagbok: senaste veckodagen så att inläggen fortsätter i rätt ordning
+  const days = input.rawText.match(/^(måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)\b.{0,25}$/gim) ?? [];
+  const lastDay = days[days.length - 1]?.trim();
 
   // Svensk prosa blir ungefär 2-2,5 tokens per ord - marginal för att inte klippa slutet
   const maxTokens = Math.min(32000, Math.max(4000, Math.round(remainingWords * 3) + 1000));
 
-  const prompt = `Du är en erfaren svensk barnboksförfattare och skriver klart en ${isChapterBook ? 'kapitelbok' : 'bilderbok'} på SVENSKA.
+  const prompt = `Du är en erfaren svensk barnboksförfattare och skriver klart en ${diary ? 'dagboksroman' : isChapterBook ? 'kapitelbok' : 'bilderbok'} på SVENSKA.
 
 BOKTYP: ${preset.label} – ${preset.concept}
 TITEL: "${input.title}"
@@ -988,16 +1295,18 @@ BOKTYPENS SPRÅK (beskrivet med egna ord - fånga känslan, härma aldrig en fö
 ${book.textStyle}
 ` : ''}
 UPPGIFT:
-Skriv RESTEN av boken, från exakt där början slutar till bokens slut. Ca ${remainingWords} ord till (hela boken blir då ca ${book.targetWords} ord) - fördela dem jämnt över återstoden av dispositionen${isChapterBook ? ' så att varje kapitel får ungefär lika mycket text' : ''}, och skynda inte igenom slutet.
+Skriv RESTEN av boken, från exakt där början slutar till bokens slut. Ca ${remainingWords} ord till (hela boken blir då ca ${book.targetWords} ord) - fördela dem jämnt över återstoden av dispositionen${diary ? ' så att varje vecka får ungefär lika mycket text' : isChapterBook ? ' så att varje kapitel får ungefär lika mycket text' : ''}, och skynda inte igenom slutet.
 - Fortsätt sömlöst i samma röst, tempus och berättarperspektiv. Upprepa inte något ur början och sammanfatta inte det som redan hänt.
-${isChapterBook
+${diary
+    ? `- Fortsätt dagboken med nya inlägg${lastDay ? ` - senaste inlägget i början är "${lastDay}". Skriv klart det inlägget om det inte är avslutat och fortsätt sedan med nästa veckodag i ordning` : ''}. Inga kapitelrubriker.`
+    : isChapterBook
     ? `- ${lastHeading ? `Senaste kapitelrubriken i början är "${lastHeading}". Skriv klart det kapitlet om det inte är avslutat, och fortsätt sedan numreringen därifrån.` : 'Början saknar kapitelrubriker - fortsätt med nästa kapitel enligt dispositionen och numrera från Kapitel 2.'}`
     : '- Berättelsen fortsätter utan rubriker.'}
 - Knyt ihop alla trådar och avsluta med ett tydligt, tillfredsställande slut.
 - Svara ENBART med fortsättningen av manuset - ingen inledning, inga kommentarer, inget "Slut".
 
-${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue)}
-
+${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary)}
+${comicWritingHint(book)}
 ${proseRules(targetAge)}`;
 
   return withModelFallback(model, async (m) => {
@@ -1020,10 +1329,10 @@ ${proseRules(targetAge)}`;
       const text = message.content
         .map(c => (c.type === 'text' ? c.text : ''))
         .join('');
-      return finishContinuation(text || written, message.stop_reason === 'max_tokens', input.voice);
+      return finishContinuation(text || written, message.stop_reason === 'max_tokens', input.voice, diary);
     } catch (err) {
       if (err instanceof Anthropic.APIUserAbortError) {
-        if (written.trim()) return finishContinuation(written, true, input.voice);
+        if (written.trim()) return finishContinuation(written, true, input.voice, diary);
         throw new Error('Det tog för lång tid att skriva resten av boken - försök igen');
       }
       throw err;
@@ -1033,14 +1342,14 @@ ${proseRules(targetAge)}`;
   });
 }
 
-function finishContinuation(text: string, truncated: boolean, voice?: AuthorVoiceRef): { rawText: string; truncated: boolean } {
+function finishContinuation(text: string, truncated: boolean, voice?: AuthorVoiceRef, diary = false): { rawText: string; truncated: boolean } {
   let clean = text;
   // Avbruten text: släng det halvfärdiga sista stycket
   if (truncated) {
     const lastBreak = clean.lastIndexOf('\n');
     if (lastBreak > 0) clean = clean.slice(0, lastBreak);
   }
-  return { rawText: normalizeManuscript(clean, voice), truncated };
+  return { rawText: normalizeManuscript(clean, voice, diary), truncated };
 }
 
 // ═══════════════════════════════════════════

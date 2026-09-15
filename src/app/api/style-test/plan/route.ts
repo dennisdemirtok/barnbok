@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { planStyleTest, StyleTestPlan, StyleTestScene, StyleTestSplitRequest } from '@/lib/claude';
+import { planStyleTest, writeComicPages, StyleTestCharacter, StyleTestPlan, StyleTestScene, StyleTestSplitRequest } from '@/lib/claude';
 import { fetchStyleProfile } from '@/lib/style-profiles';
-import { STYLE_PRESETS, composeStyleGuide } from '@/lib/styles';
+import { STYLE_PRESETS, composeStyleGuide, StylePreset } from '@/lib/styles';
+import { ComicPage, comicPageScript, comicTextBlocks, fallbackComicPage } from '@/lib/comic';
 
 export const maxDuration = 300;
 
@@ -74,6 +75,12 @@ export async function POST(request: Request) {
 
     const scenesByStyle: Record<string, StyleTestScene[]> = {};
     for (const s of STYLE_PRESETS) scenesByStyle[s.id] = scenesForKey.get(keyOf[s.id]) ?? [];
+
+    // Serieromaner: varje testsida blir en seriesida med riktiga svenska pratbubblor
+    const comicStyles = STYLE_PRESETS.filter(s => s.book.format === 'bildbok-text-pa-bild');
+    await Promise.all(comicStyles.map(async s => {
+      scenesByStyle[s.id] = await comicScenes(scenesByStyle[s.id], raw.characters, raw.title, s);
+    }));
     const longest = Object.values(scenesByStyle).sort((a, b) => b.length - a.length)[0] ?? [];
 
     const plan: StyleTestPlan = {
@@ -97,4 +104,35 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : 'Okänt fel';
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+// Sidmanus per testscen (en seriesida per scen). Går planeringen inte att köra byggs
+// en enkel seriesida av scenens text så att provningen ändå fungerar.
+async function comicScenes(scenes: StyleTestScene[], cast: StyleTestCharacter[], title: string, preset: StylePreset): Promise<StyleTestScene[]> {
+  if (scenes.length === 0) return scenes;
+  let planned: ComicPage[][] = [];
+  try {
+    planned = await writeComicPages({
+      sections: scenes.map(sc => ({ text: sc.text, pages: 1 })),
+      cast,
+      title,
+      targetAge: preset.book.age,
+      textStyle: preset.book.textStyle,
+      effort: 'low',
+    });
+  } catch (err) {
+    console.warn('Stilprovning: seriesidorna kunde inte planeras, använder enkla sidor:', err instanceof Error ? err.message : err);
+  }
+  return scenes.map((scene, i) => {
+    // Bara en sida per testscen - blev det fler slås rutorna ihop till högst sex
+    const pages = planned[i] ?? [];
+    const page: ComicPage = pages.length > 0
+      ? { panels: pages.flatMap(p => p.panels).slice(0, 6) }
+      : fallbackComicPage(scene.text, scene.imagePrompt);
+    return {
+      ...scene,
+      imagePrompt: comicPageScript(page, cast),
+      textBlocks: comicTextBlocks(page),
+    };
+  });
 }

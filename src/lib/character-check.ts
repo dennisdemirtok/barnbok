@@ -9,6 +9,7 @@ import {
 } from './types';
 import { generatePageImage, resolveIllustrationShape, textInImage, PageImageOptions } from './gemini';
 import { textSideForSpread } from './styles';
+import { describeLettering, letteringCaps, scriptPanelCount } from './comic';
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -278,9 +279,13 @@ function buildReviewPrompt(ctx: ReviewContext, required: Character[], optional: 
   const shape = isCover ? 'page' : resolveIllustrationShape(bookFormat, ctx.shape);
   const textAllowed = !isCover && textInImage(bookFormat);
   const scene = isComic ? 'panel' : 'scene';
+  // Serieroman: en stående bild per boksida, all text letrad i bilden enligt sidmanuset
+  const comicPage = !isCover && isComic && shape === 'page';
 
   const formatLine = isCover
     ? 'FRONT COVER of the book (portrait 16x21 cm).'
+    : comicPage
+    ? 'ONE complete portrait COMIC BOOK PAGE (16x21 cm) of a kids\' comic novel: 2-6 panels, with speech bubbles, caption boxes and sound effects hand-lettered in the image following the page script in the brief.'
     : isComic
     ? 'Comic / graphic-novel double-page spread with several panels, speech bubbles and narration boxes (landscape 32x21 cm).'
     : bookFormat === 'larobok'
@@ -292,6 +297,19 @@ function buildReviewPrompt(ctx: ReviewContext, required: Character[], optional: 
   let textRules: string;
   if (isCover) {
     textRules = `This is the FRONT COVER: the book title (given in the brief) MUST appear as large, legible Swedish title lettering, spelled exactly as in the brief including å, ä, ö. Title missing -> major missing_element. Title misspelled or garbled -> major unwanted_text. ANY other text (taglines, author names, labels, stray letters, signs with words) -> major unwanted_text.`;
+  } else if (comicPage) {
+    const blocks = spread.textBlocks || [];
+    const expected = blocks.map((tb, i) => `  ${i + 1}. ${describeLettering(tb, i)}: "${letteringCaps(tb.text)}"`).join('\n');
+    textRules = blocks.length === 0
+      ? 'This comic page has NO texts in its script: any speech bubble, caption box, sound effect, letters or page number -> major unwanted_text.'
+      : `This comic page must contain EXACTLY these ${blocks.length} Swedish texts, each once, in its panel (lettered in ALL CAPS - ignore upper/lower case and line breaks when comparing, compare everything else letter for letter):
+${expected}
+Read every speech bubble, caption box and sound effect in the image one by one and compare it with the list:
+- A text with a misspelled word, a wrong, missing or extra letter, Å/Ä/Ö drawn as A/O or missing their ring/dots, missing words, extra words, changed or reordered words, or garbled pseudo-letters -> major unwanted_text. The correction MUST quote the exact expected text, e.g. 'Re-letter the speech bubble in panel 2 exactly as "VAR ÄR MIN KATT?"'. Report each wrong text as its own issue.
+- An expected text that is missing entirely -> major missing_element, correction e.g. 'Add a speech bubble for Otis in panel 3 with exactly "..."'.
+- Any text that is not in the list (invented or duplicated bubbles, English words, empty bubbles or boxes, page numbers, titles, labels, words on signs) -> major unwanted_text.
+- A speech bubble whose tail clearly points to the wrong character -> major layout, correction names the right speaker and panel.
+- Only a missing or different final punctuation mark (! ? .) -> minor unwanted_text. Different line breaks inside a bubble are fine.`;
   } else if (textAllowed) {
     const expected = (spread.textBlocks || []).map((tb, i) => `  ${i + 1}. "${tb.text}"`).join('\n') || '  (no texts)';
     textRules = `Text belongs in the image in this format${isComic ? ' (in speech bubbles and narration boxes)' : bookFormat === 'larobok' ? ' (helpful labels and arrows are also allowed)' : ''}. Expected Swedish texts:
@@ -304,6 +322,9 @@ Major unwanted_text: English text, empty speech bubbles or empty text boxes, inv
   let layoutRules: string;
   if (isCover) {
     layoutRules = 'Portrait cover. The title area in the upper part must be uncluttered and the title must not cover a character\'s face (covered face -> major layout). Image must be portrait (landscape -> major layout).';
+  } else if (comicPage) {
+    const panels = scriptPanelCount(spread.imagePrompt || '');
+    layoutRules = `Portrait comic page with panels in reading order (left to right, top to bottom).${panels ? ` The script has ${panels} panels: a panel count that differs by 2 or more -> major layout; off by one -> minor layout.` : ''} Fewer than 2 or more than 6 panels -> major layout. The same character appearing in several DIFFERENT panels is expected comic storytelling, never a duplicate; only twice inside one panel is a duplicate. A speech bubble covering a character's face -> major layout. No gutter/fold rules. Image must be portrait (landscape -> major layout).`;
   } else if (spread.composition === 'spot') {
     layoutRules = 'Square SPOT illustration: the figures should stand on plain white paper with no scenery (a small soft color patch under the feet is fine). A full background or room -> major layout. Missing environment from the brief is NOT an issue for spots.';
   } else if (spread.composition === 'round') {
@@ -548,7 +569,7 @@ interface Attempt {
   review: ImageReview | null;
 }
 
-function buildCorrections(attempts: Attempt[]): string[] {
+function buildCorrections(attempts: Attempt[], isComic = false): string[] {
   const latest = attempts[attempts.length - 1].review;
   const current = (latest?.issues || []).filter(i => i.severity === 'major' && i.correction).map(i => i.correction);
   const earlier = attempts.slice(0, -1)
@@ -560,7 +581,12 @@ function buildCorrections(attempts: Attempt[]): string[] {
   ];
   const cats = new Set((latest?.issues || []).filter(i => i.severity === 'major').map(i => i.category));
   if (cats.has('duplicate_character') || cats.has('extra_figure')) {
-    corrections.push('Count the characters before finishing: every named character appears exactly once - no twins, clones or repeated figures');
+    corrections.push(isComic
+      ? 'Count the characters in each panel before finishing: every named character appears at most once per panel - no twins, clones or repeated figures inside a panel'
+      : 'Count the characters before finishing: every named character appears exactly once - no twins, clones or repeated figures');
+  }
+  if (isComic && cats.has('unwanted_text')) {
+    corrections.push('Before finishing, compare every bubble, caption and sound effect letter by letter with the LETTERING list - Swedish spelling with Å, Ä and Ö exactly as given, no extra words');
   }
   return corrections;
 }
@@ -604,7 +630,7 @@ export async function generatePageWithQualityCheck(
         console.log(`[Kvalitetsloop] ${label}: ingen tid för försök ${n} (${Math.round(remaining / 1000)} s kvar)`);
         break;
       }
-      const corrections = buildCorrections(attempts);
+      const corrections = buildCorrections(attempts, bookFormat === 'bildbok-text-pa-bild');
       console.log(`[Kvalitetsloop] ${label}: försök ${n} med ${corrections.length} rättelser`);
       try {
         image = await generatePageImage(spread, characters, styleGuide, bookFormat, {

@@ -204,7 +204,8 @@ export default function BookImporter({
           targetAge: draft.targetAge ?? preset.book.age,
           bookFormat: format,
           stylePresetId: preset.id,
-          illustrationShape: format === 'bildbok-separat-text' || format === 'kapitelbok' ? preset.shape : undefined,
+          // Serieformat i en seriestil blir stående seriesidor; äldre serieformat är liggande uppslag
+          illustrationShape: format === 'bildbok-separat-text' || format === 'kapitelbok' || format === preset.book.format ? preset.shape : undefined,
           styleGuide: composeStyleGuide(preset)
             + (draft.imageWishes.trim() ? `\n\nADDITIONAL WISHES FROM THE AUTHOR: ${draft.imageWishes.trim()}` : ''),
         };
@@ -437,14 +438,14 @@ export default function BookImporter({
             <div className="min-w-0">
               <h3 className="text-2xl font-heading font-bold text-ink">{parsedBook.title}</h3>
               <p className="text-sm text-ink/55 mt-0.5">
-                {[parsedBook.author && `av ${parsedBook.author}`, bookPreset?.label, bookPreset?.book.format === 'kapitelbok' ? 'Kapitelbok' : 'Bilderbok', parsedBook.targetAge]
+                {[parsedBook.author && `av ${parsedBook.author}`, bookPreset?.label, bookPreset?.book.format === 'kapitelbok' ? 'Kapitelbok' : parsedBook.bookFormat === 'bildbok-text-pa-bild' ? 'Serieroman' : 'Bilderbok', parsedBook.targetAge]
                   .filter(Boolean).join(' · ')}
               </p>
             </div>
             <div className="flex gap-2 text-center">
               <div className="rounded-2xl bg-paper border border-line px-4 py-2">
                 <p className="text-xl font-bold text-ink">{pagesWithText.length}</p>
-                <p className="text-[11px] text-ink/50">{pagesWithText.length === 1 ? 'bild' : 'bilder'} + omslag</p>
+                <p className="text-[11px] text-ink/50">{parsedBook.bookFormat === 'bildbok-text-pa-bild' ? (pagesWithText.length === 1 ? 'seriesida' : 'seriesidor') : pagesWithText.length === 1 ? 'bild' : 'bilder'} + omslag</p>
               </div>
               <div className="rounded-2xl bg-paper border border-line px-4 py-2">
                 <p className="text-xl font-bold text-ink">{parsedBook.characters.length}</p>
