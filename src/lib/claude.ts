@@ -1,5 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { PROSE_QUALITY_RULES, variationBlock, sanitizeProse } from './writing';
+import { drawStorySeeds, seedsBlock } from './story-seeds';
+import { recentStories, rememberStory, memoryBlock, avoidTextOf } from './story-memory';
+import { extractNames } from './text-eval';
 import { BookFormat } from './types';
 import type { BookConcept, StylePreset } from './styles';
 import type { VoiceProfile } from './author-types';
@@ -611,29 +614,11 @@ export function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-// Idéfrön som slumpas in i prompten så att upprepade klick ger olika förslag
-const PLOT_SEEDS = {
-  themes: [
-    'vänskap som sätts på prov', 'att våga säga ifrån', 'en hemlighet som växer', 'att flytta till ett nytt ställe',
-    'ett nytt syskon', 'att vilja vara bäst', 'något viktigt som försvinner', 'avundsjuka', 'mod fast man är rädd',
-    'att hitta hem igen', 'en orättvisa som måste rättas till', 'att inte passa in', 'ett löfte som är svårt att hålla',
-    'en tävling som går överstyr', 'ett stort missförstånd', 'att ta hand om någon', 'en omöjlig uppgift',
-  ],
-  places: [
-    'en kolonilott', 'hustaken i en storstad', 'en ö i skärgården', 'en fjällstuga i snöstorm', 'skolan efter stängning',
-    'ett museum en natt', 'ett nattåg genom Sverige', 'en campingplats i regn', 'ett gammalt bibliotek', 'en loppmarknad',
-    'en mörk granskog', 'ett höghus med en knarrig hiss', 'ett badhus', 'en bondgård', 'en fyr', 'en tivolikväll',
-    'grannens förvildade trädgård', 'en båt på en insjö',
-  ],
-  sparks: [
-    'ett djur som kan prata men bara med ett barn', 'en gammal karta', 'en nyckel som inte passar någonstans', 'en konstig ny granne',
-    'ett paket med fel adress', 'en borttappad hund', 'ett spöke som är mörkrädd', 'en hemmabyggd robot', 'ett gammalt fotografi',
-    'mellanmål som försvinner spårlöst', 'en penna som ritar saker som blir verkliga', 'en drake stor som en katt',
-    'ett mystiskt ljud i väggen', 'en flaskpost', 'ett ägg som ingen vet vad det kommer från', 'en mormor med ett hemligt förflutet',
-    'ett snöfall mitt i sommaren',
-  ],
-  tones: ['busig och rolig', 'varm och mysig', 'spännande', 'lite läskig men trygg', 'tokig och absurd', 'stillsam och poetisk'],
-};
+// Namn i en kort handling: ord med stor bokstav som inte är vanliga ord
+function plotNames(plot: string): string[] {
+  const common = new Set(['Det', 'Den', 'När', 'Men', 'Och', 'Hon', 'Han', 'De', 'En', 'Ett', 'Sverige', 'Kapitel', 'Till', 'Där', 'Under', 'Efter', 'Tillsammans', 'Problemet', 'Samtidigt', 'Varje', 'Ingen', 'Alla', 'Nu', 'Då']);
+  return Array.from(new Set((plot.match(/\b[A-ZÅÄÖ][a-zåäöé]{1,14}\b/g) ?? []).filter(n => !common.has(n)))).slice(0, 8);
+}
 
 function pickOne<T>(list: T[]): T {
   return list[Math.floor(Math.random() * list.length)];
@@ -652,13 +637,9 @@ const PLOT_SCHEMA = {
 
 export async function suggestRandomPlot(preset: StylePreset, targetAge: string, hint?: string): Promise<PlotSuggestion> {
   const client = getClient();
-  const model = await resolveLatestModel(client);
+  const [model, recent] = await Promise.all([resolveLatestModel(client), recentStories(40)]);
   const isChapterBook = preset.book.format === 'kapitelbok';
-  const seeds = `Tema: ${pickOne(PLOT_SEEDS.themes)}
-Miljö: ${pickOne(PLOT_SEEDS.places)}
-Gnista: ${pickOne(PLOT_SEEDS.sparks)}
-Tonläge: ${pickOne(PLOT_SEEDS.tones)}
-Slumptal: ${Math.floor(Math.random() * 100000)}`;
+  const seeds = seedsBlock(drawStorySeeds(preset.id, avoidTextOf(recent)), hint ? 'krydda' : 'grund');
 
   const prompt = `Du är en prisbelönt svensk barnboksförfattare. Hitta på en ny, originell idé till en ${isChapterBook ? 'kapitelbok' : 'bilderbok'} på svenska.
 
@@ -668,8 +649,9 @@ MÅLÅLDER: ${targetAge}
 ${hint ? `
 FÖRFATTARENS IDÉ (bygg vidare på den, den går före allt annat): ${hint}
 ` : ''}
-SLUMPADE IDÉFRÖN (${hint ? 'bara krydda - använd det som passar författarens idé' : 'utgå från dessa'}; byt tonläge om det krockar med boktypen):
 ${seeds}
+
+${memoryBlock(recent)}
 
 Svara med:
 - title: kort, lockande svensk titel
@@ -697,8 +679,18 @@ ${variationBlock({ names: true, opening: false })}`;
     if (!textBlock || textBlock.type !== 'text') {
       throw new Error('Inget svar från Claude');
     }
-    const plot = JSON.parse(textBlock.text) as PlotSuggestion;
-    return { title: sanitizeProse(plot.title), plot: sanitizeProse(plot.plot), setting: sanitizeProse(plot.setting) };
+    const raw = JSON.parse(textBlock.text) as PlotSuggestion;
+    const plot = { title: sanitizeProse(raw.title), plot: sanitizeProse(raw.plot), setting: sanitizeProse(raw.setting) };
+    // Kom ihåg idén så att nästa förslag inte upprepar den
+    await rememberStory({
+      kind: 'plot',
+      style: preset.id,
+      title: plot.title,
+      names: plotNames(plot.plot),
+      setting: plot.setting.slice(0, 160),
+      premise: plot.plot.split(/(?<=[.!?])\s+/)[0]?.slice(0, 200),
+    });
+    return plot;
   });
 }
 
@@ -829,7 +821,7 @@ const BEGINNING_SCHEMA = {
 
 export async function writeBookBeginning(input: BeginningInput): Promise<BookBeginning> {
   const client = getClient();
-  const model = await resolveLatestModel(client);
+  const [model, recent] = await Promise.all([resolveLatestModel(client), recentStories(30)]);
   const { preset, targetAge } = input;
   const book = preset.book;
   const isChapterBook = book.format === 'kapitelbok';
@@ -868,7 +860,9 @@ ${manuscriptFormatRules(isChapterBook, input.voice)}
 
 ${proseRules(targetAge)}
 
-${variationBlock({ names: characterLines.length === 0, opening: true })}`;
+${variationBlock({ names: characterLines.length === 0, opening: true })}
+${input.plot.trim().length < 120 ? `\n${seedsBlock(drawStorySeeds(preset.id, avoidTextOf(recent)), 'krydda')}\n` : ''}
+${memoryBlock(recent)}`;
 
   return withModelFallback(model, async (m) => {
     // Strömmar - tänkande + prosa kan ta en stund
@@ -895,11 +889,22 @@ ${variationBlock({ names: characterLines.length === 0, opening: true })}`;
       throw new Error('Inget svar från Claude');
     }
     const result = JSON.parse(textBlock.text) as { title: string; outline: string; beginning: string };
-    return {
+    const beginning = {
       title: input.title?.trim() || result.title.trim(),
       outline: result.outline.trim(),
       rawText: normalizeManuscript(result.beginning, input.voice),
     };
+    // Kom ihåg namn, titel och öppning (inte författarens idé) för kommande böcker
+    const opening = beginning.rawText.split('\n').map(l => l.trim())
+      .find(l => l && !/^(kapitel\s+\S+|prolog|inledning)\b/i.test(l));
+    await rememberStory({
+      kind: 'beginning',
+      style: preset.id,
+      title: beginning.title,
+      names: extractNames(beginning.rawText),
+      opening: opening?.slice(0, 160),
+    });
+    return beginning;
   });
 }
 

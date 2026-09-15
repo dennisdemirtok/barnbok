@@ -32,13 +32,21 @@ const OVERUSED_DEFAULTS = [
 const GIVEN_NAMES = [
   'Ines', 'Majken', 'Tuva', 'Selma', 'Juni', 'Hedda', 'Lovisa', 'Amina', 'Stina', 'Freja', 'Nelly', 'Siri', 'Ronja', 'Tyra',
   'Minna', 'Edith', 'Leia', 'Yara', 'Hanna', 'Iris', 'Märta', 'Rut', 'Klara', 'Dagny', 'Noor', 'Svea', 'Lea', 'Tilde',
+  'Ebba', 'Signhild', 'Greta', 'Liv', 'Moa', 'Filippa', 'Zara', 'Maja-Li', 'Ester-Lo', 'Idun', 'Vilja', 'Sanna', 'Hilma',
+  'Nova', 'Lykke', 'Mira', 'Sara', 'Ayla', 'Wilma', 'Lin', 'Emmy', 'Asta', 'Doris-Mae', 'Jasmin', 'Elina', 'Frida', 'Sofi',
   'Malte', 'Ture', 'Hugo', 'Elis', 'Kasim', 'Bruno', 'Otto', 'Aron', 'Nils', 'Isak', 'Melker', 'Loke', 'Viggo', 'Samir',
   'Tage', 'Colin', 'Axel', 'Harald', 'Jonatan', 'Emil', 'Folke', 'Ivar', 'Milo', 'Adam', 'Gustav', 'Lukas', 'Frans', 'Omar',
-  'Kim', 'Robin', 'Alex', 'Charlie', 'Sam', 'Love',
+  'Albin', 'Sixten', 'Knut', 'Ludvig', 'Ali', 'Teo', 'Vidar', 'Arvid', 'Edvin', 'Hampus', 'Noel', 'Olle', 'Ragnar', 'Yusuf',
+  'Mio', 'Birk', 'Enzo', 'Idris', 'Julian', 'Levi', 'Matteo', 'Otis', 'Rasmus', 'Svante', 'Tim', 'Valter', 'Wilgot', 'Zakaria',
+  'Kim', 'Robin', 'Alex', 'Charlie', 'Sam', 'Love', 'Nour', 'Eli', 'Juno', 'Ariel',
 ];
 const ADULT_NAMES = [
   'Gunnel', 'Birgitta', 'Ulla', 'Margit', 'Lena', 'Anneli', 'Pia', 'Maud', 'Kerstin', 'Yvonne', 'Farida', 'Gun',
+  'Agneta', 'Britt', 'Carina', 'Eivor', 'Helena', 'Inger', 'Jessica', 'Katarina', 'Lotta', 'Marianne', 'Nadia', 'Petra',
+  'Ronja-Britt', 'Susanne', 'Tove', 'Viveka', 'Åsa', 'Zeynep', 'Mona', 'Solveig', 'Hayat', 'Therese', 'Camilla', 'Ingela',
   'Lasse', 'Göran', 'Kent', 'Arne', 'Bosse', 'Stig', 'Håkan', 'Mats', 'Reza', 'Ulf', 'Tomas', 'Leif',
+  'Anders', 'Bengt-Åke', 'Christer', 'Dragan', 'Erik', 'Fredrik', 'Gösta', 'Hassan', 'Ingvar', 'Jörgen', 'Kjell', 'Lennart',
+  'Magnus', 'Nisse', 'Olof', 'Peter', 'Roger', 'Sven-Erik', 'Torbjörn', 'Urban', 'Yngve', 'Janne', 'Mehmet', 'Pontus',
 ];
 const OPENING_APPROACHES = [
   'mitt i en replik, utan presentation',
@@ -77,16 +85,23 @@ export function variationBlock(options: { names?: boolean; opening?: boolean } =
 }
 
 // ── Städning: ta bort AI-tecken som ändå slinker igenom ──
+// Kapitelrubriker ("Kapitel 2 – Titel") får behålla sitt streck
+const HEADING_LINE = /^\s*(kapitel\s+\S+|prolog|epilog|inledning|förord|efterord)\b/i;
+
 export function sanitizeProse(text: string): string {
   return text
     .split('\n')
-    .map(line => line
+    .map(line => {
       // Talstreck först i raden är bokkonvention
-      .replace(/^(\s*)[—―]\s*/, '$1– ')
+      let out = line.replace(/^(\s*)[—―]\s*/, '$1– ');
       // Långt tankstreck mitt i en mening blir komma
-      .replace(/\s*[—―]\s*/g, ', ')
-      .replace(/,\s*,/g, ',')
-      .replace(/,\s*([.!?])/g, '$1'))
+      out = out.replace(/(\S)\s*[—―]\s*/g, '$1, ');
+      // Tankstreck med mellanslag mitt i en mening (inte talstreck, inte "3–6 år", inte rubriker)
+      if (!HEADING_LINE.test(out)) out = out.replace(/(\S)\s+–\s+(?=\S)/g, '$1, ');
+      return out
+        .replace(/,\s*,/g, ',')
+        .replace(/,\s*([.!?])/g, '$1');
+    })
     .join('\n');
 }
 

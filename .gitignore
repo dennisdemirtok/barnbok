@@ -6,3 +6,6 @@ out
 .next-dev.log.err
 tsconfig.tsbuildinfo
 referensbocker/
+
+# Textmätningar (scripts/eval-texts.mjs)
+eval-reports/
