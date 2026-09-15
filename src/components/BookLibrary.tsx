@@ -230,10 +230,6 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
         </button>
       </Reveal>
 
-      <footer className="border-t border-line pt-6 pb-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-ink/45">
-        <span className="font-heading font-semibold text-ink/70">Bokverktyget</span>
-        <span>Illustrationer skapas med AI · Texten är din</span>
-      </footer>
     </div>
   );
 }

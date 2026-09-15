@@ -643,7 +643,7 @@ export async function isPrintInterestSupported(): Promise<boolean> {
 }
 
 // Spara "meddela mig när tryckta böcker går att beställa". Ingen beställning läggs.
-export async function registerPrintInterest(bookId: string, email: string): Promise<void> {
+export async function registerPrintInterest(bookId: string, email: string, kind: 'print' | 'audio' = 'print'): Promise<void> {
   const clean = email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean) || clean.length > 254) {
     throw new Error('Ange en giltig e-postadress.');
@@ -653,6 +653,7 @@ export async function registerPrintInterest(bookId: string, email: string): Prom
     book_id: bookId,
     email: clean,
     user_id: userData.user?.id ?? null,
+    kind,
   });
   if (error) {
     if (isMissingSchema(error)) socialSupport.printInterest = false;

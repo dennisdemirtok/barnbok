@@ -7,7 +7,6 @@ import { STYLE_PRESETS, composeStyleGuide, getStylePreset } from '@/lib/styles';
 import { CHARACTER_TEMPLATES, CharacterTemplate } from '@/lib/character-templates';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
-import StylePicker from './StylePicker';
 
 interface Props {
   onBack: () => void;
@@ -339,7 +338,8 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
   const [draft, setDraft] = useState<StudioCharacter>(initial);
   const [templateId, setTemplateId] = useState<string | undefined>(initialTemplateId);
   const [styleId, setStyleId] = useState<string>(() => initial.stylePresetId && getStylePreset(initial.stylePresetId) ? initial.stylePresetId : readLastStyle());
-  const [showStyles, setShowStyles] = useState(false);
+  const [suggesting, setSuggesting] = useState<'fill' | 'random' | null>(null);
+  const [suggestError, setSuggestError] = useState('');
   const [showHero, setShowHero] = useState(() => hasHeroFields(initial));
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
@@ -395,6 +395,47 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
       document.body.style.overflow = prev;
     };
   }, []);
+
+  const TEXT_FIELDS = ['name', 'age', 'appearance', 'normalClothes', 'personality', 'heroName', 'heroCostume', 'power'] as const;
+  const hasAnyText = TEXT_FIELDS.some(f => (draft[f] || '').toString().trim());
+
+  // Slumpa: 'fill' behåller det som är ifyllt och fyller i resten, 'random' hittar på en helt ny
+  const suggest = async (mode: 'fill' | 'random') => {
+    setSuggesting(mode);
+    setSuggestError('');
+    try {
+      const fields = mode === 'fill'
+        ? { ...Object.fromEntries(TEXT_FIELDS.map(f => [f, draft[f] || ''])), role: draft.role }
+        : {};
+      const res = await fetch('/api/random-character', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields, hero: showHero }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.character) throw new Error(data.error || 'Kunde inte hitta på en karaktär');
+      const c = data.character;
+      setDraft(prev => ({
+        ...prev,
+        name: c.name || prev.name,
+        age: c.age || prev.age,
+        role: c.role || prev.role,
+        appearance: c.appearance || prev.appearance,
+        normalClothes: c.normalClothes || prev.normalClothes,
+        personality: c.personality || prev.personality,
+        heroName: c.heroName || (mode === 'random' ? '' : prev.heroName),
+        heroCostume: c.heroCostume || (mode === 'random' ? '' : prev.heroCostume),
+        power: c.power || (mode === 'random' ? '' : prev.power),
+      }));
+      if (mode === 'random') setTemplateId(undefined);
+      if (c.heroCostume || c.heroName || c.power) setShowHero(true);
+      setDirty(true);
+    } catch (err) {
+      setSuggestError(err instanceof Error ? err.message : 'Något gick fel');
+    } finally {
+      setSuggesting(null);
+    }
+  };
 
   const canGenerate = draft.appearance.trim().length > 0 && !generating;
   const canSave = draft.name.trim().length > 0 && draft.appearance.trim().length > 0 && !saving && !generating;
@@ -551,6 +592,38 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
 
         {/* Innehåll */}
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-6">
+          {/* Slumpa */}
+          <section className="rounded-2xl bg-paper border border-line p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-ink">Ont om idéer eller tid?</p>
+              <p className="text-xs text-ink/55">
+                Skriv det du vet – t.ex. bara ett namn eller &quot;en busig katt&quot; – och låt AI:n fylla i resten. Eller slumpa en helt ny.
+              </p>
+              {suggestError && <p className="text-xs text-red-700 font-medium mt-1">{suggestError}</p>}
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => suggest('fill')}
+                disabled={!hasAnyText || !!suggesting || generating}
+                title={hasAnyText ? 'Behåller det du skrivit' : 'Skriv något i ett fält först'}
+                className="btn-ghost !px-3.5 !py-2 text-sm flex-1 sm:flex-none"
+              >
+                {suggesting === 'fill' ? <span className="spinner !w-4 !h-4" /> : <Icon name="auto_awesome" size={18} />}
+                Fyll i resten
+              </button>
+              <button
+                type="button"
+                onClick={() => suggest('random')}
+                disabled={!!suggesting || generating}
+                className="btn-primary !px-3.5 !py-2 text-sm flex-1 sm:flex-none"
+              >
+                {suggesting === 'random' ? <span className="spinner !w-4 !h-4" /> : <Icon name="casino" size={18} />}
+                Slumpa ny
+              </button>
+            </div>
+          </section>
+
           {/* Mallar */}
           <section className="space-y-2">
             <p className="text-xs font-semibold text-ink/55 uppercase tracking-wide">Börja från en mall</p>
@@ -690,33 +763,36 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
 
             {/* Bild */}
             <div className="md:sticky md:top-0 md:self-start space-y-3">
-              {imagePanel}
-              <div className="rounded-2xl border border-line p-3 flex items-center gap-3">
-                <span className={`w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] text-ink/45 leading-none">Bildstil</p>
-                  <p className="text-sm font-semibold text-ink truncate mt-1">{style.label}</p>
+              <div role="group" aria-label="Bildstil" className="space-y-1.5">
+                <p className="text-xs font-semibold text-ink/60">Bildstil</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {STYLE_PRESETS.map(st => {
+                    const on = st.id === styleId;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => { setStyleId(st.id); writeLastStyle(st.id); }}
+                        aria-pressed={on}
+                        disabled={generating}
+                        className={`flex items-center gap-2 p-1.5 pr-2 rounded-xl text-left text-xs transition-all ${
+                          on ? 'bg-white ring-2 ring-ink font-semibold text-ink' : 'bg-white ring-1 ring-line text-ink/70 hover:ring-ink/25'
+                        }`}
+                      >
+                        <span className={`w-6 h-6 shrink-0 rounded-lg bg-gradient-to-br ${st.swatch} flex items-center justify-center text-white`}>
+                          {on && <Icon name="check" size={14} />}
+                        </span>
+                        <span className="leading-tight line-clamp-2">{st.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <button type="button" onClick={() => setShowStyles(v => !v)} className="btn-ghost !px-3 !py-1.5 text-sm shrink-0" aria-expanded={showStyles}>
-                  {showStyles ? 'Klar' : 'Byt'}
-                </button>
+                <p className="text-[11px] text-ink/45 leading-snug">Välj samma stil som boken du tänker använda karaktären i.</p>
               </div>
+              {imagePanel}
             </div>
           </div>
 
-          {showStyles && (
-            <section className="space-y-2">
-              <p className="text-xs font-semibold text-ink/55 uppercase tracking-wide">Stil för referensbilden</p>
-              <StylePicker
-                value={styleId}
-                onChange={id => {
-                  setStyleId(id);
-                  setShowStyles(false);
-                }}
-              />
-              <p className="text-xs text-ink/45">Välj samma stil som boken du tänker använda karaktären i, så blir figuren mest lik.</p>
-            </section>
-          )}
         </div>
 
         {/* Fot */}
@@ -736,7 +812,7 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
             >
               {confirmClose ? 'Släng ändringar?' : 'Avbryt'}
             </button>
-            <button onClick={save} disabled={saving || generating} className="btn-action flex-1 sm:flex-none">
+            <button onClick={save} disabled={saving || generating} className="btn-action flex-1 sm:flex-none whitespace-nowrap">
               {saving ? <span className="spinner !w-4 !h-4" /> : <Icon name="bookmark_add" filled size={19} />}
               Spara karaktär
             </button>

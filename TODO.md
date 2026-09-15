@@ -30,12 +30,19 @@ Upptäckta under designgranskningen 2026-08-12. Sorterade efter uppskattat värd
 - [ ] Karaktärsbiblioteket sparas bara i webbläsaren - synka till molnet för inloggade.
 - [ ] Referensbilder för karaktärer sparas inte i molnet (visas som initialer i bokhandeln).
 
+## Ljudbok
+- [ ] **Ljudbok med ElevenLabs** (kräver konto + API-nyckel `ELEVENLABS_API_KEY`): svensk röst per boktyp,
+      uppläsning sida för sida (en ljudfil per sida i Supabase Storage), uppspelning i läsaren med
+      automatisk bläddring, och "Lyssna" i bokhandeln. Idag: knapp + intresseanmälan ("kommer snart").
+
 ## Konto & säkerhet
 - [ ] **Glömt lösenord**-flöde (Supabase `resetPasswordForEmail`).
 - [ ] **Google-inloggning** (Supabase OAuth) – sänker tröskeln rejält.
 - [ ] **Gör anonyma böcker "claimbara"**: när testläget stängs, låt inloggad användare ta ägarskap
       över böcker skapade utan konto (user_id är null). Ta sedan bort anon-policies
       (se `scripts/anon-save-migration.sql`).
+- [ ] **Admin**: sätt `NEXT_PUBLIC_ADMIN_EMAILS` i Railway så att Referensdatabasen syns i kontomenyn (annars via `/?admin=1`).
+- [ ] **Juridik i sidfoten**: integritetspolicy, villkor och kontakt.
 - [ ] **Moderering**: admin-vy för att avpublicera olämpliga böcker ur bokhandeln
       (viktigt så länge allt auto-publiceras).
 

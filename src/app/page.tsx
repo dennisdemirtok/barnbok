@@ -14,6 +14,7 @@ import ReferenceManager from '@/components/ReferenceManager';
 import LoginModal from '@/components/LoginModal';
 import Bookstore from '@/components/Bookstore';
 import Icon from '@/components/Icon';
+import { SiteHeader, SiteFooter, MobileTabBar, NavTarget } from '@/components/AppNav';
 
 type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore' | 'characterStudio';
 
@@ -31,6 +32,24 @@ export default function Home() {
   const [showLogin, setShowLogin] = useState(false);
   const [sharedBookId, setSharedBookId] = useState<string | null>(null);
   const { user, signOut, loading: authLoading } = useAuth();
+
+  // Referensdatabasen är ett internt verktyg. Visas för e-postadresser i
+  // NEXT_PUBLIC_ADMIN_EMAILS, eller på en enhet som öppnat /?admin=1 (av: /?admin=0).
+  // Bara ett sätt att dölja menyn - behörigheten styrs av databasens regler.
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let flag = false;
+    try {
+      const admin = new URLSearchParams(window.location.search).get('admin');
+      if (admin === '1') localStorage.setItem('barnbok-admin', '1');
+      if (admin === '0') localStorage.removeItem('barnbok-admin');
+      flag = localStorage.getItem('barnbok-admin') === '1';
+    } catch {
+      // Lagring blockerad - bara e-postlistan gäller
+    }
+    const admins = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+    setIsAdmin(flag || (!!user?.email && admins.includes(user.email.toLowerCase())));
+  }, [user]);
 
   // Börja överst på varje nytt steg
   useEffect(() => {
@@ -187,83 +206,34 @@ export default function Home() {
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === step);
+
+  // Huvudmenyn: skapa-flödets steg räknas som "Skapa"
+  const navActive: NavTarget =
+    step === 'library' || step === 'bookstore' || step === 'characterStudio' ? step : 'create';
+
+  const handleNavigate = (target: NavTarget) => {
+    if (target === 'create') {
+      // Redan i skapa-flödet: stanna kvar i stället för att börja om
+      if (navActive !== 'create') handleNewBook();
+      return;
+    }
+    if (target === 'library') return handleBackToLibrary();
+    if (target === 'characterStudio') setBook(null);
+    setStep(target);
+  };
   const showSteps = step !== 'library' && step !== 'bookstore' && step !== 'characterStudio';
 
   return (
     <main className="min-h-screen overflow-x-clip">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-md border-b border-line">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">
-          <button onClick={handleBackToLibrary} className="flex items-center gap-2.5 min-w-0 group" title="Till startsidan">
-            <span className="w-9 h-9 shrink-0 rounded-xl bg-ink text-white flex items-center justify-center group-hover:bg-brand transition-colors">
-              <Icon name="auto_stories" filled size={20} />
-            </span>
-            <span className="font-heading text-lg font-semibold text-ink tracking-tight truncate">Bokverktyget</span>
-          </button>
-
-          {/* Pågående bok - bara på bredare skärmar */}
-          {book && showSteps && (
-            <p className="hidden lg:block flex-1 text-center text-sm text-ink/55 truncate px-4">
-              <span className="text-ink/35">Arbetar med</span> <span className="font-medium text-ink/80">{book.title}</span>
-            </p>
-          )}
-
-          <nav className="flex items-center gap-1 sm:gap-2 shrink-0">
-            <button
-              onClick={handleBackToLibrary}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-                step === 'library' ? 'bg-ink/[0.06] text-ink' : 'text-ink/65 hover:text-ink hover:bg-ink/[0.04]'
-              }`}
-            >
-              <Icon name="collections_bookmark" size={18} /> Mina böcker
-            </button>
-            <button
-              onClick={() => { setBook(null); setStep('characterStudio'); }}
-              title="Karaktärer"
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-                step === 'characterStudio' ? 'bg-ink/[0.06] text-ink' : 'text-ink/65 hover:text-ink hover:bg-ink/[0.04]'
-              }`}
-            >
-              <Icon name="face" size={18} /> <span className="hidden md:inline">Karaktärer</span>
-            </button>
-            <button
-              onClick={() => setStep('bookstore')}
-              title="Bokhandeln"
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-                step === 'bookstore' ? 'bg-ink/[0.06] text-ink' : 'text-ink/65 hover:text-ink hover:bg-ink/[0.04]'
-              }`}
-            >
-              <Icon name="storefront" size={18} /> <span className="hidden sm:inline">Bokhandeln</span>
-            </button>
-            <button
-              onClick={() => setShowRefManager(true)}
-              title="Referensdata"
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-full text-sm font-medium text-ink/65 hover:text-ink hover:bg-ink/[0.04] transition-colors"
-            >
-              <Icon name="photo_library" size={18} /> <span className="hidden md:inline">Referenser</span>
-            </button>
-            {!authLoading && (
-              user ? (
-                <div className="flex items-center gap-1">
-                  <span
-                    className="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center text-sm font-semibold uppercase"
-                    title={user.email}
-                  >
-                    {user.email?.charAt(0) || '?'}
-                  </span>
-                  <button onClick={signOut} className="btn-icon" title="Logga ut">
-                    <Icon name="logout" size={19} />
-                  </button>
-                </div>
-              ) : (
-                <button onClick={() => setShowLogin(true)} className="btn-primary !px-3.5 sm:!px-4 !py-2 text-sm whitespace-nowrap sm:ml-1">
-                  Logga in
-                </button>
-              )
-            )}
-          </nav>
-        </div>
-      </header>
+      <SiteHeader
+        active={navActive}
+        onNavigate={handleNavigate}
+        userEmail={user?.email}
+        authLoading={authLoading}
+        onLogin={() => setShowLogin(true)}
+        onLogout={signOut}
+        onOpenReferences={isAdmin ? () => setShowRefManager(true) : undefined}
+      />
 
       {/* Stegindikator */}
       {showSteps && (
@@ -300,7 +270,7 @@ export default function Home() {
       )}
 
       {/* Main content - key på step ger mjuk intoning vid stegbyte */}
-      <div key={step} className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 animate-fade-up">
+      <div key={step} className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-12 sm:pt-10 sm:pb-16 animate-fade-up">
         {step === 'library' && (
           <BookLibrary
             onLoadBook={handleLoadBook}
@@ -406,6 +376,13 @@ export default function Home() {
       )}
 
       {/* Login Modal */}
+      <SiteFooter
+        onNavigate={handleNavigate}
+        onStyleTest={() => { handleNewBook(); setImportMode('styleTest'); }}
+      />
+
+      <MobileTabBar active={navActive} onNavigate={handleNavigate} />
+
       {showLogin && (
         <LoginModal onClose={() => setShowLogin(false)} />
       )}

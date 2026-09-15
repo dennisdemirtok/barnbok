@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import Providers from './providers'
@@ -10,6 +10,14 @@ const jakarta = Plus_Jakarta_Sans({
   variable: '--font-sans',
   display: 'swap',
 })
+
+// viewport-fit=cover så att mobilens flikrad kan lägga sig ovanför hemindikatorn
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#f7f4ef',
+}
 
 export const metadata: Metadata = {
   title: 'Bokverktyget - Skapa barnböcker med AI',

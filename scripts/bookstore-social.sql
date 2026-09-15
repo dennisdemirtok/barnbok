@@ -168,6 +168,10 @@ create table if not exists barnbok_print_interest (
   created_at timestamptz not null default now()
 );
 
+-- Vad man vill bli meddelad om: tryckt bok eller ljudbok
+alter table barnbok_print_interest add column if not exists kind text not null default 'print'
+  check (kind in ('print', 'audio'));
+
 alter table barnbok_print_interest enable row level security;
 
 drop policy if exists "anmal intresse tryck" on barnbok_print_interest;

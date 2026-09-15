@@ -293,6 +293,12 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     { key: 'save', label: 'Spara i molnet', icon: 'cloud_upload', onClick: handleSaveBook },
     { key: 'check', label: 'Kontrollera karaktärer', icon: 'verified_user', onClick: handleCheckCharacters },
     {
+      key: 'audio',
+      label: 'Skapa ljudbok (kommer snart)',
+      icon: 'headphones',
+      onClick: () => showNotice({ tone: 'warning', text: 'Ljudböcker kommer snart – boken ska kunna läsas upp med en naturlig svensk röst, sida för sida.' }, 6000),
+    },
+    {
       key: 'done',
       label: book.status === 'done' ? 'Markerad som klar' : 'Markera som klar',
       icon: 'task_alt',

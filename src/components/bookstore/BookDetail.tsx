@@ -30,7 +30,7 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [showPrint, setShowPrint] = useState(false);
+  const [showPrint, setShowPrint] = useState<'print' | 'audio' | null>(null);
 
   // Baksidestext skapas första gången någon öppnar en bok som saknar en
   useEffect(() => {
@@ -163,7 +163,10 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
                 <Icon name={copied ? 'check' : 'ios_share'} size={19} />
                 {copied ? 'Länken är kopierad' : 'Dela'}
               </button>
-              <button onClick={() => setShowPrint(true)} className="btn-ghost">
+              <button onClick={() => setShowPrint('audio')} className="btn-ghost">
+                <Icon name="headphones" size={19} /> Lyssna som ljudbok
+              </button>
+              <button onClick={() => setShowPrint('print')} className="btn-ghost">
                 <Icon name="print" size={19} /> Beställ tryckt bok
               </button>
             </div>
@@ -229,7 +232,7 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
       )}
 
       {showPrint && (
-        <PrintOrderModal book={book} onDownload={download} downloading={downloading} onClose={() => setShowPrint(false)} />
+        <PrintOrderModal book={book} kind={showPrint} onDownload={download} downloading={downloading} onClose={() => setShowPrint(null)} />
       )}
     </div>
   );

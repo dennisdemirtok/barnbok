@@ -1003,3 +1003,99 @@ ${input.text}
     return description;
   });
 }
+
+// ═══════════════════════════════════════════
+//  Slumpa karaktär: fyll i det som saknas
+// ═══════════════════════════════════════════
+
+export interface CharacterFields {
+  name: string;
+  age: string;
+  role: 'main' | 'supporting' | 'villain';
+  appearance: string;
+  normalClothes: string;
+  personality: string;
+  heroName: string;
+  heroCostume: string;
+  power: string;
+}
+
+const CHARACTER_FIELDS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['name', 'age', 'role', 'appearance', 'normalClothes', 'personality', 'heroName', 'heroCostume', 'power'],
+  properties: {
+    name: { type: 'string' },
+    age: { type: 'string' },
+    role: { type: 'string', enum: ['main', 'supporting', 'villain'] },
+    appearance: { type: 'string' },
+    normalClothes: { type: 'string' },
+    personality: { type: 'string' },
+    heroName: { type: 'string' },
+    heroCostume: { type: 'string' },
+    power: { type: 'string' },
+  },
+};
+
+const CHARACTER_SEEDS = {
+  kinds: ['ett barn', 'ett barn', 'ett barn', 'en vuxen', 'en mor- eller farförälder', 'ett talande djur', 'ett fantasiväsen', 'en robot', 'en liten drake', 'ett spöke som är rädd för mörker'],
+  traits: ['nyfiken', 'blyg men modig', 'busig', 'klok', 'tankspridd', 'envis', 'omtänksam', 'skrytig men snäll', 'uppfinningsrik', 'drömmande', 'orädd', 'lite grinig'],
+  details: ['en speciell hatt', 'glasögon som alltid sitter snett', 'fräknar', 'ett plåster på knät', 'en ryggsäck full av saker', 'en halsduk i fel färg', 'ett husdjur i fickan', 'stora stövlar', 'en ficklampa', 'målarfärg på händerna'],
+};
+
+// Behåller allt författaren redan skrivit och fyller i resten. Utan några fält
+// blir det en helt slumpad karaktär.
+export async function suggestCharacter(partial: Partial<CharacterFields>, options: { hint?: string; hero?: boolean } = {}): Promise<CharacterFields> {
+  const client = getClient();
+  const model = await resolveLatestModel(client);
+  const given = Object.entries(partial)
+    .filter(([, v]) => typeof v === 'string' && v.trim())
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join('\n');
+
+  const prompt = `Du hjälper en barnboksförfattare att hitta på en karaktär till en svensk barnbok. Skriv på svenska.
+
+${given ? `REDAN IFYLLT (behåll exakt som det står och bygg vidare så att allt passar ihop):\n${given}` : 'Inget är ifyllt - hitta på en helt ny, minnesvärd karaktär.'}
+${options.hint ? `\nFÖRFATTARENS IDÉ: ${options.hint}\n` : ''}
+SLUMPADE IDÉFRÖN (använd bara om det passar det som redan är ifyllt):
+- Typ: ${pickOne(CHARACTER_SEEDS.kinds)}
+- Drag: ${pickOne(CHARACTER_SEEDS.traits)}
+- Detalj: ${pickOne(CHARACTER_SEEDS.details)}
+- Slumptal: ${Math.floor(Math.random() * 100000)}
+
+Fyll i alla fält:
+- name: ett svenskt eller passande namn
+- age: t.ex. "7 år" (eller "okänd ålder" för väsen)
+- role: main, supporting eller villain
+- appearance: 1-2 konkreta meningar om hår, ögon, hy, kroppsbyggnad och ett särdrag (för djur: art, päls/fjäll, färger) - tillräckligt tydligt för att en illustratör ska rita samma figur varje gång
+- normalClothes: vardagskläder med färger
+- personality: 3-5 ord eller en kort mening
+- heroName, heroCostume, power: ${options.hero ? 'fyll i en hjälteidentitet som passar' : 'lämna tomma strängar om inte det ifyllda tyder på en hjälte'}
+
+Undvik klyschor, håll det barnvänligt och konsekvent.`;
+
+  return withModelFallback(model, async (m) => {
+    const message = await client.messages.create({
+      model: m,
+      max_tokens: 1200,
+      output_config: {
+        effort: 'low',
+        format: { type: 'json_schema', schema: CHARACTER_FIELDS_SCHEMA },
+      },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    if (message.stop_reason === 'refusal') {
+      throw new Error('Claude avböjde att föreslå en karaktär - prova en annan idé');
+    }
+    const textBlock = message.content.find(c => c.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+      throw new Error('Inget svar från Claude');
+    }
+    const suggestion = JSON.parse(textBlock.text) as CharacterFields;
+    // Det författaren skrev vinner alltid
+    for (const [k, v] of Object.entries(partial)) {
+      if (typeof v === 'string' && v.trim()) (suggestion as unknown as Record<string, string>)[k] = v;
+    }
+    return suggestion;
+  });
+}
