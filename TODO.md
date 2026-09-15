@@ -6,23 +6,23 @@ Upptäckta under designgranskningen 2026-08-12. Sorterade efter uppskattat värd
 - [ ] **Egen sida per bok** (`/bok/[id]`) med Open Graph-metadata, så att delade länkar får
       omslagsbild och titel som förhandsvisning i sociala medier/meddelandeappar.
       Idag är delningslänken en query-param (`/?bok=<id>`) som renderas client-side och saknar OG-data.
-- [ ] **Riktig bokläsare** i bokhandeln: bläddra uppslag för uppslag (pilar/svep) i stället för
-      en lång bildlista. Fullskärmsläge. Stöd för Luna-layouter (text + bild) – idag visas bara bilder,
-      så böcker i "separat text"-format tappar sin text i läsaren.
-- [ ] **Sök/filter/sortering i bokhandeln**: ålder, bokformat, nyast/populärast.
-- [ ] **Ladda ner PDF från bokhandeln** (idag bara från granska-steget).
+- [x] **Riktig bokläsare** i bokhandeln: den satta boken (samma sidor som PDF:en), pilar/svep/tangentbord.
+- [ ] **Fullskärmsläge** och zoom i läsaren (brödtexten blir liten på mobil).
+- [x] **Sök/filter/sortering i bokhandeln**: sök, bokformat, nyast/titel.
+- [ ] Filter på ålder och sortering på popularitet (kräver läsräknare).
+- [x] **Ladda ner PDF från bokhandeln**.
 - [ ] **Dela med QR-kod** (visa QR för bokens länk).
 - [ ] **Läsräknare + gilla-knapp** per bok, och topplista i bokhandeln.
 
 ## Skapa-flödet
 - [ ] **Molnautospar med statusindikator** ("Sparad i molnet ✓" i headern). Idag autosparas bara
       lokalt; molnsynk kräver att man klickar "Spara bok" i steg 4 – lätt att missa.
-- [ ] **Generera om bild med feedback**: textfält "vad ska ändras?" vid regenerering i granska-vyn.
+- [x] **Generera om bild med feedback**: AI-förslag + egna instruktioner i Redigera-vyn.
 - [ ] **Ångra/versionshistorik** för uppslag (behåll föregående bild när man regenererar och kunna växla tillbaka).
 - [ ] **Fortsätt där du var**: bokgenereringen (steg 1, "Skapa med AI") tar 1–2 min utan progress i procent
       – visa streamad progress eller delresultat, och överlev en sidomladdning.
-- [ ] **Aktivera de tre låsta bokformaten** (separat text, kapitelbok, lärobok är "kommer snart" i creatorn
-      men stöds redan av prompt/parser-lagret).
+- [x] **Aktivera bokformaten** separat text och kapitelbok (sätts nu som riktig bok).
+- [ ] Lärobok: egen sättning (idag samma som serieformat).
 - [ ] **Onboarding**: kort guidad tur första gången man skapar en bok.
 
 ## Konto & säkerhet
@@ -35,7 +35,7 @@ Upptäckta under designgranskningen 2026-08-12. Sorterade efter uppskattat värd
       (viktigt så länge allt auto-publiceras).
 
 ## Mobil & tillgänglighet
-- [ ] **Mobilmeny** (hamburgare) – Referensdata är helt dold på mobil idag.
+- [x] **Referensdata nåbar på mobil** (ikon i headern).
 - [ ] **Uppläsning** (text-to-speech) av boktext i läsaren – målgruppen är barn.
 - [ ] **Alt-texter** på uppslagsbilder (generera beskrivning per bild).
 
