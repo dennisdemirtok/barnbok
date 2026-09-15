@@ -39,7 +39,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Välj en stil för boken' }, { status: 400 });
     }
     // Formatet följer stilens bokkoncept om inget annat anges
-    const format: ManuscriptFormat = bookFormat ?? preset.book.format;
+    // Serieformat (text i bilderna) planeras som bilderbok tills serieflödet finns
+    const conceptFormat = preset.book.format === 'kapitelbok' ? 'kapitelbok' : 'bildbok-separat-text';
+    const format: ManuscriptFormat = bookFormat ?? conceptFormat;
 
     // Ett stycke per rad - samma uppdelning som sättningen använder
     const paragraphs = rawText.split(/\n/).map(l => l.trim()).filter(Boolean);

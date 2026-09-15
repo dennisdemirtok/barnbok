@@ -33,7 +33,8 @@ export interface StylePreset {
 }
 
 export interface BookConcept {
-  format: 'bildbok-separat-text' | 'kapitelbok';
+  // bildbok-text-pa-bild = serieroman där texten står i pratbubblor i bilderna
+  format: 'bildbok-separat-text' | 'kapitelbok' | 'bildbok-text-pa-bild';
   wordsPerImage: number; // ungefär hur mycket text som hör till varje bild
   targetWords: number; // typisk längd när AI:n skriver boken
   age: string;
@@ -44,6 +45,8 @@ export interface BookConcept {
   dialogue?: 'dash' | 'quotes';
   // Språket i boktypen, beskrivet med egna ord utifrån analys av förlagor (aldrig citat)
   textStyle?: string;
+  // Sidans papper: linjerat som ett skrivhäfte (dagbok)
+  paper?: 'lined';
 }
 
 
@@ -150,6 +153,46 @@ COMPOSITION: Cinematic framing with foreground, midground and background depth.`
 RENDERING: Flat vector shapes with NO outlines, a strictly limited palette of 3-4 colors plus off-white, subtle risograph grain texture.
 CHARACTER DESIGN LANGUAGE: Highly simplified geometric figures - dot eyes, no nose or a single line, simple shapes for hair and bodies, emotion shown through posture.
 COMPOSITION: Bold asymmetric composition with large areas of empty negative space.
+${NO_GENERIC}`,
+  },
+  {
+    id: 'dagbok',
+    label: 'Dagbok (Wimpy Kid-känsla)',
+    concept: 'Rolig dagbok i jagform med svartvita teckningar på linjerat papper',
+    shape: 'page',
+    fonts: { body: 'Schoolbell', heading: 'Schoolbell' },
+    swatch: 'from-slate-600 to-slate-900',
+    book: {
+      format: 'kapitelbok', wordsPerImage: 90, targetWords: 9000, age: '8-12 år', lengthLabel: 'Dagboksroman · ca 150 sidor',
+      // Teckningarna står mitt i texten: breda band och figurer, ibland en tankebubbla eller rutor
+      compositionMix: { band: 0.42, spot: 0.36, round: 0.12, panels: 0.1 },
+      dialogue: 'quotes',
+      paper: 'lined',
+      textStyle: `Jagform och preteritum, som en riktig dagbok. Varje inlägg börjar med veckodagen på en egen rad ("Måndag", "Tisdag" ...). Berättaren är ett barn som tycker att hen själv har rätt och alla andra är orättvisa, och läsaren ser mer än berättaren. Korta stycken på 2-4 meningar. Repliker återges oftast indirekt ("Mamma sa att jag MÅSTE ...") och ibland som korta citat. Enstaka ord i VERSALER för betoning. Humorn kommer från pinsamma situationer, felaktiga slutsatser, syskonbråk och vuxna regler som berättaren försöker ta sig runt. Konkreta vardagsdetaljer från skola, familj och kompisar. Varje inlägg slutar gärna med en torr kommentar eller en plan som uppenbart kommer att gå fel. Inga långa beskrivningar - allt låter som när ett barn skriver snabbt och ärligt.`,
+    },
+    coverLettering: 'Simple, slightly uneven hand-drawn marker lettering in black on a torn piece of lined notebook paper taped onto the cover, as if the kid wrote the title himself.',
+    artDirection: `ART STYLE: Simple black-and-white cartoon doodles, as if drawn by a kid with a black fineliner in a lined diary - for a funny diary novel.
+RENDERING: Pure black ink on white, no color, no grey shading, no gradients. Clean, confident, slightly wobbly line of even thickness. Large areas of SOLID FLAT BLACK are used for hair, shoes, clothes details and especially for background people and crowds drawn as black silhouettes. Simple patterns (checks, stripes, dots) instead of shading. Plain white background with only the props the gag needs.
+CHARACTER DESIGN LANGUAGE: Very simple figures: big round or oval heads, dot eyes, small line mouths, a few lines of hair or solid black hair shapes, thin stick-like arms and legs, simple rectangular bodies and clothes. Expressions are clear and funny with minimal lines. Everyone is drawn in the same flat, graphic doodle style - never realistic, never cute or glossy.
+COMPOSITION: Flat, frontal or side-on views like a quick sketch, figures standing on an implied floor line, generous white space around. Objects are simplified (a bed, a car, a table) and easy to read. The drawing should look good sitting between lines of handwritten text.
+${NO_GENERIC}`,
+  },
+  {
+    id: 'serie',
+    label: 'Färgglad serie (Dog Man-känsla)',
+    concept: 'Tokig serieroman i färg med rutor, pratbubblor och ljudord',
+    shape: 'page',
+    fonts: { body: 'ComicNeue', heading: 'LuckiestGuy' },
+    swatch: 'from-yellow-400 to-red-600',
+    book: {
+      format: 'bildbok-text-pa-bild', wordsPerImage: 45, targetWords: 3500, age: '6-10 år', lengthLabel: 'Serieroman · ca 80 sidor',
+      textStyle: `Serieroman i presens där allt berättas i rutor: korta repliker i pratbubblor, små textrutor som "Under tiden ..." eller "Senare ...", och stora ljudord (ZOOOM, KLONK, PANG). Repliker är korta, 2-10 ord, ofta med utropstecken och ett betonat ord. Tokig, snäll humor med ordvitsar, missförstånd, slapstick och en skurk som inte är farlig på riktigt. Hjärtat i berättelsen är vänskap och att vara modig och snäll. Tempo: en händelse per ruta, cliffhanger längst ner på sidan, ofta en helsida eller ett uppslag när något stort händer.`,
+    },
+    coverLettering: 'Big bouncy comic-book title lettering with thick black outlines, bright fill colors, a drop shadow and a jagged burst shape behind it.',
+    artDirection: `ART STYLE: Bright, loud full-color comic book for kids, hand-drawn and hand-lettered.
+RENDERING: Thick, wobbly black ink outlines with a marker feel. Saturated flat colors (red, yellow, purple, turquoise, orange) with visible halftone dot shading and simple color gradients in the backgrounds, like printed comics. Panels have thick black borders on off-white paper with white gutters. Sparkly stars, speed lines and motion puffs.
+CHARACTER DESIGN LANGUAGE: Simple, chunky cartoon characters with big round heads, huge round eyes with small pupils, big grins, rubbery limbs and oversized hands and feet. Very exaggerated, slapstick poses and expressions. Everything is goofy and friendly.
+COMPOSITION: Classic comic page with 3-6 panels of varied size; occasional big splash panel. Hand-lettered speech bubbles and caption boxes in ALL-CAPS comic lettering, and giant colorful sound effects that burst out of the panels. Backgrounds are simple: a brick wall, a starry night, a city skyline in silhouette, a green field.
 ${NO_GENERIC}`,
   },
 ];

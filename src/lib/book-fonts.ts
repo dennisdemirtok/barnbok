@@ -12,7 +12,10 @@ export type FontFamily =
   | 'Fredoka'
   | 'Bangers'
   | 'PatrickHand'
-  | 'CourierPrime';
+  | 'CourierPrime'
+  | 'Schoolbell'
+  | 'LuckiestGuy'
+  | 'ComicNeue';
 export type FontStyle = 'normal' | 'bold' | 'italic';
 
 export interface FontSpec {
@@ -60,6 +63,18 @@ export const BOOK_FONTS: Record<FontFamily, FamilyDef> = {
   Bangers: {
     name: 'Bangers', fallback: 'Impact, sans-serif', boldWeight: 400, scale: 1.3, baseline: 0.851,
     files: { normal: 'bangers-400.ttf' },
+  },
+  Schoolbell: {
+    name: 'Schoolbell', fallback: '"Comic Sans MS", cursive', boldWeight: 400, scale: 1.3, baseline: 0.811,
+    files: { normal: 'schoolbell-400.ttf' },
+  },
+  LuckiestGuy: {
+    name: 'Luckiest Guy', fallback: 'Impact, sans-serif', boldWeight: 400, scale: 0.95, baseline: 0.703,
+    files: { normal: 'luckiestguy-400.ttf' },
+  },
+  ComicNeue: {
+    name: 'Comic Neue', fallback: '"Comic Sans MS", sans-serif', boldWeight: 700, scale: 1.05, baseline: 0.825,
+    files: { normal: 'comicneue-400.ttf', bold: 'comicneue-700.ttf' },
   },
   CourierPrime: {
     name: 'Courier Prime', fallback: '"Courier New", monospace', boldWeight: 700, scale: 1.05, baseline: 0.72,
