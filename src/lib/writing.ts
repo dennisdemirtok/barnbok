@@ -64,7 +64,10 @@ function shuffle<T>(list: T[]): T[] {
 export function variationBlock(options: { names?: boolean; opening?: boolean } = { names: true, opening: true }): string {
   const lines = ['VARIATION (varje bok ska bli unik)'];
   if (options.names !== false) {
-    lines.push(`- Behöver du hitta på namn, välj bland eller i samma anda som: ${shuffle(GIVEN_NAMES).slice(0, 8).join(', ')} (barn) och ${shuffle(ADULT_NAMES).slice(0, 4).join(', ')} (vuxna).`);
+    // Exakta namn i stället för en lista - annars väljer modellen samma favoriter varje gång
+    const [kid1, kid2] = shuffle(GIVEN_NAMES);
+    const [adult1, adult2] = shuffle(ADULT_NAMES);
+    lines.push(`- Behöver du hitta på namn: huvudpersonen heter ${kid1}. Fler barn: ${kid2}. Vuxna: ${adult1}, ${adult2}. Hitta bara på andra namn om fler figurer behövs, och undvik de vanligaste barnboksnamnen.`);
   }
   if (options.opening !== false) {
     lines.push(`- Förslag på öppning: ${OPENING_APPROACHES[Math.floor(Math.random() * OPENING_APPROACHES.length)]}.`);
