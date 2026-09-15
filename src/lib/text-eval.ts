@@ -45,6 +45,10 @@ export interface BatchReport {
     repeatedSettings: { word: string; count: number }[];
     avgContentOverlap: number; // snittlik ordlikhet mellan texter i samma grupp/typ (0-1)
     avgOpeningOverlap: number;
+    // Fraser (3-4 ord) som dyker upp i flera olika böcker - fångar formler som
+    // "bor varannan vecka hos mamma" även när namn och miljöer skiljer sig
+    repeatedPhrases: { phrase: string; count: number }[];
+    phraseRepeatRate: number; // repeterade fraser per text
   };
 }
 
@@ -192,12 +196,43 @@ export function evaluateBatch(items: EvalItem[]): BatchReport {
   const avgContentOverlap = pairs ? overlap / pairs : 0;
   const avgOpeningOverlap = pairs ? openOverlap / pairs : 0;
   const settingPenalty = repeatedSettings.reduce((n, s) => n + (s.count / lineageCount), 0);
+
+  // Fraser som återkommer i olika lineages
+  const phraseLineages = new Map<string, Set<string>>();
+  items.forEach((it, i) => {
+    const tokens = wordsOf(it.text);
+    const seen = new Set<string>();
+    for (let n = 3; n <= 4; n++) {
+      for (let k = 0; k + n <= tokens.length; k++) {
+        const gram = tokens.slice(k, k + n);
+        // Minst två innehållsord, annars räknas "och så var det" som formel
+        if (gram.filter(t => t.length >= 4 && !STOPWORDS.has(t)).length < 2) continue;
+        seen.add(gram.join(' '));
+      }
+    }
+    seen.forEach(g => {
+      if (!phraseLineages.has(g)) phraseLineages.set(g, new Set());
+      phraseLineages.get(g)!.add(lineageOf(i));
+    });
+  });
+  const phraseCounts = Array.from(phraseLineages.entries())
+    .map(([phrase, set]) => ({ phrase, count: set.size }))
+    .filter(p => p.count >= 3)
+    .sort((a, b) => b.count - a.count || b.phrase.length - a.phrase.length);
+  // Slå ihop överlappande fraser ("varannan vecka hos" + "vecka hos mamma")
+  const repeatedPhrases: { phrase: string; count: number }[] = [];
+  for (const p of phraseCounts) {
+    if (!repeatedPhrases.some(r => r.phrase.includes(p.phrase) || p.phrase.includes(r.phrase) ||
+      r.phrase.split(' ').filter(x => p.phrase.split(' ').includes(x)).length >= 2)) repeatedPhrases.push(p);
+  }
+  const phraseRepeatRate = repeatedPhrases.reduce((n, p) => n + p.count, 0) / lineageCount;
   const variationScore = Math.round(Math.max(0,
     100
     - nameRepeatRate * 40
     - Math.min(25, settingPenalty * 12)
     - Math.min(20, avgContentOverlap * 100)
     - Math.min(15, avgOpeningOverlap * 60)
+    - Math.min(25, phraseRepeatRate * 10)
   ));
 
   return {
@@ -215,6 +250,8 @@ export function evaluateBatch(items: EvalItem[]): BatchReport {
       repeatedSettings,
       avgContentOverlap: Math.round(avgContentOverlap * 1000) / 1000,
       avgOpeningOverlap: Math.round(avgOpeningOverlap * 1000) / 1000,
+      repeatedPhrases: repeatedPhrases.slice(0, 15),
+      phraseRepeatRate: Math.round(phraseRepeatRate * 100) / 100,
     },
   };
 }

@@ -44,7 +44,15 @@ const { evaluateBatch } = loadTs(path.join(ROOT, 'src/lib/text-eval.ts'));
 
 async function post(url, body) {
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const res = await fetch(BASE + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let res;
+    try {
+      res = await fetch(BASE + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch (err) {
+      // Nätverksfel (t.ex. när servern startas om) - vänta och försök igen
+      console.warn(`  ${url} nätverksfel: ${err.cause?.code ?? err.message}`);
+      await new Promise(r => setTimeout(r, 5000 * attempt));
+      continue;
+    }
     const data = await res.json().catch(() => null);
     if (res.ok && data) return data;
     console.warn(`  ${url} misslyckades (${res.status}) ${data?.error ?? ''}`);
@@ -126,6 +134,7 @@ function report(raw) {
     `- Återkommande miljöer/figurer: ${batch.variation.repeatedSettings.map(s => `${s.word} (${s.count})`).join(', ') || 'inga'}`,
     `- Innehållslikhet mellan texter: ${batch.variation.avgContentOverlap}`,
     `- Likhet i öppningar: ${batch.variation.avgOpeningOverlap}`,
+    `- Formler som återkommer i 3+ böcker: ${batch.variation.repeatedPhrases.slice(0, 12).map(p => `"${p.phrase}" (${p.count})`).join(', ') || 'inga'}`,
     `- Dubblerade titlar: ${duplicateTitles.join(', ') || 'inga'}`,
     '',
     '## Samma handling tre gånger',
@@ -143,6 +152,7 @@ function report(raw) {
 }
 
 const raw = REUSE ? JSON.parse(fs.readFileSync(REUSE, 'utf8')) : await generate();
+if (REUSE && args.tag) raw.tag = args.tag;
 fs.mkdirSync(OUT, { recursive: true });
 if (!REUSE) fs.writeFileSync(path.join(OUT, `${TAG}.raw.json`), JSON.stringify(raw, null, 1));
 const { md, summary } = report(raw);

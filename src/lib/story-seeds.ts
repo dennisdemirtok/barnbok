@@ -4,13 +4,11 @@
 
 export interface StorySeeds {
   engine: string; // vilken sorts berättelse
-  structure: string; // hur den är byggd
-  family: string; // huvudpersonens livssituation
   place: string;
-  spark: string; // det som sätter igång
-  stakes: string; // vad som står på spel
   tone: string;
-  twist: string; // en ovanlig begränsning eller vinkel
+  // Två slumpade detaljer ur uppbyggnad, livssituation, gnista, insats och vinkel.
+  // Fler än så gjorde att AI:n bockade av alla och böckerna fick samma formler.
+  extras: { label: string; text: string }[];
 }
 
 type Tag = 'humor' | 'spanning' | 'kansla' | 'fantasi' | 'vardag' | 'action' | 'enkel' | 'djur';
@@ -147,10 +145,23 @@ const PRESET_TAGS: Record<string, Tag[]> = {
   minimalistisk: ['enkel', 'djur', 'vardag'],
 };
 
-function pick<T>(list: T[], avoid: (item: T) => boolean = () => false): T {
-  const allowed = list.filter(x => !avoid(x));
-  const source = allowed.length > 0 ? allowed : list;
-  return source[Math.floor(Math.random() * source.length)];
+// Rotation: det som dragits nyligen dras inte igen förrän halva poolen har använts.
+// Lever i serverns minne - räcker för att upprepade klick och parallella böcker skiljer sig.
+const recentPicks = new Map<string, string[]>();
+
+function rotate(category: string, list: string[], avoid: (item: string) => boolean = () => false): string {
+  const recent = recentPicks.get(category) ?? [];
+  const fresh = list.filter(x => !recent.includes(x) && !avoid(x));
+  const source = fresh.length > 0 ? fresh : list.filter(x => !recent.includes(x));
+  const choice = (source.length > 0 ? source : list)[Math.floor(Math.random() * (source.length > 0 ? source.length : list.length))];
+  recent.push(choice);
+  const memory = Math.max(1, Math.floor(list.length / 2));
+  recentPicks.set(category, recent.slice(-memory));
+  return choice;
+}
+
+function pick<T>(list: T[]): T | undefined {
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 function pickWeighted(list: Weighted[], tags: Tag[]): Weighted {
@@ -168,32 +179,36 @@ function pickWeighted(list: Weighted[], tags: Tag[]): Weighted {
 export function drawStorySeeds(presetId: string, avoidText = ''): StorySeeds {
   const tags = PRESET_TAGS[presetId] ?? ['vardag', 'kansla'];
   const recent = avoidText.toLowerCase();
-  const used = (text: string) => {
-    const key = text.toLowerCase().split(/\s+/).filter(x => x.length > 4)[0];
-    return !!key && recent.includes(key);
-  };
-  const engine = pickWeighted(ENGINES, tags);
+  const usedRecently = (text: string) => text.toLowerCase().split(/[\s,]+/)
+    .filter(x => x.length > 5).some(word => recent.includes(word));
+
+  // Berättelsetypen viktas efter boktypen men roterar också
+  let engine = pickWeighted(ENGINES, tags);
+  const recentEngines = recentPicks.get('engine') ?? [];
+  for (let tries = 0; tries < 4 && recentEngines.includes(engine.text); tries++) engine = pickWeighted(ENGINES, tags);
+  recentPicks.set('engine', [...recentEngines, engine.text].slice(-Math.floor(ENGINES.length / 2)));
+
   const toneTag = pick(engine.tags.filter(t => tags.includes(t))) ?? tags[0];
+  const pool = [
+    { label: 'Uppbyggnad', list: STRUCTURES },
+    { label: 'Huvudpersonens liv', list: FAMILIES },
+    { label: 'Det som sätter igång', list: SPARKS },
+    { label: 'Vad som står på spel', list: STAKES },
+    { label: 'Vinkel', list: TWISTS },
+  ].sort(() => Math.random() - 0.5).slice(0, 2);
+
   return {
     engine: engine.text,
-    structure: pick(STRUCTURES),
-    family: pick(FAMILIES),
-    place: pick(PLACES, used),
-    spark: pick(SPARKS, used),
-    stakes: pick(STAKES),
-    tone: pick(TONES[toneTag ?? tags[0]] ?? TONES.vardag),
-    twist: pick(TWISTS),
+    place: rotate('place', PLACES, usedRecently),
+    tone: rotate(`tone:${toneTag}`, TONES[toneTag] ?? TONES.vardag),
+    extras: pool.map(p => ({ label: p.label, text: rotate(p.label, p.list, usedRecently) })),
   };
 }
 
 export function seedsBlock(seeds: StorySeeds, strength: 'grund' | 'krydda'): string {
-  return `IDÉFRÖN (${strength === 'grund' ? 'bygg idén på dessa, men du får byta ut det som inte passar boktypen' : 'bara krydda - använd det som passar författarens idé, ignorera resten'}):
+  return `INSPIRATION (${strength === 'grund' ? 'utgå från detta' : 'bara krydda till författarens idé'}). Det här är inspiration, inte text: formulera allt med egna ord, kopiera aldrig formuleringarna och byt ut det som inte passar.
 - Sorts berättelse: ${seeds.engine}
-- Uppbyggnad: ${seeds.structure}
-- Huvudpersonens liv: ${seeds.family}
 - Miljö: ${seeds.place}
-- Det som sätter igång: ${seeds.spark}
-- Vad som står på spel: ${seeds.stakes}
 - Ton: ${seeds.tone}
-- Vinkel: ${seeds.twist}`;
+${seeds.extras.map(e => `- ${e.label}: ${e.text}`).join('\n')}`;
 }

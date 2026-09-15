@@ -655,7 +655,7 @@ ${memoryBlock(recent)}
 
 Svara med:
 - title: kort, lockande svensk titel
-- plot: 2-3 korta, vanliga meningar (högst 60 ord) om vad boken handlar om: huvudperson med namn och ålder, vad hen vill eller måste lösa och vad som står i vägen. Avslöja inte slutet. Handlingen ska räcka till bokens längd${isChapterBook ? ' och bära flera kapitel' : ' och vara enkel nog för en bilderbok'}.
+- plot: 2-3 korta, vanliga meningar (högst 60 ord) om vad boken handlar om: vem huvudpersonen är (namn, och ålder om det behövs), vad hen vill eller måste lösa och vad som står i vägen. Avslöja inte slutet. Variera hur du börjar: inte alltid "Namn är åtta år och ...", inte "Problemet är att", inte "lögnen växer". Handlingen ska räcka till bokens längd${isChapterBook ? ' och bära flera kapitel' : ' och vara enkel nog för en bilderbok'}.
 - setting: en kort mening om miljön
 
 Skriv som en författare som berättar sin idé för en vän, inte som en säljtext. Inga tankstreck, inga långa bisatskedjor, inga klyschor. Anpassa innehållet till målåldern.
