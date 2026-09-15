@@ -222,9 +222,10 @@ const REVIEW_SCHEMA = {
           visible: { type: 'boolean' },
           max_count_in_one_scene: { type: 'integer', minimum: 0 },
           matches_reference: { type: 'boolean' },
+          same_person_as_reference: { type: 'boolean' },
           note: { type: 'string' },
         },
-        required: ['name', 'should_be_visible', 'visible', 'max_count_in_one_scene', 'matches_reference', 'note'],
+        required: ['name', 'should_be_visible', 'visible', 'max_count_in_one_scene', 'matches_reference', 'same_person_as_reference', 'note'],
       },
     },
     issues: {
@@ -254,6 +255,7 @@ interface RawReview {
     visible: boolean;
     max_count_in_one_scene: number;
     matches_reference: boolean;
+    same_person_as_reference?: boolean;
     note: string;
   }[];
   issues?: { category: string; character: string; severity: string; description_sv: string; correction: string }[];
@@ -369,15 +371,16 @@ LAYOUT RULES:
 ${layoutRules}
 
 CHECKLIST:
-1. CHARACTERS: add one entry to "characters" for EVERY character listed above (required and optional). should_be_visible = true for characters named in the brief unless the brief clearly says they are absent, off-screen or only thought of; false for optional ones. visible = whether you can see them. max_count_in_one_scene = how many times that character is drawn inside one ${scene} (0 if absent, 2+ means duplicated). matches_reference = hair, clothes, species, age/size match the reference/description. note = short English observation.
+1. CHARACTERS: add one entry to "characters" for EVERY character listed above (required and optional). should_be_visible = true for characters named in the brief unless the brief clearly says they are absent, off-screen or only thought of; false for optional ones. visible = whether you can see them. max_count_in_one_scene = how many times that character is drawn inside one ${scene} (0 if absent, 2+ means duplicated). matches_reference = hair, clothes, species, age/size match the reference/description. same_person_as_reference = a child who has seen the reference sheet would instantly recognize this as the SAME person (true if not visible or no reference sheet). note = short English observation, for visible characters naming what differs in the face if anything.
 2. MISSING: a character that should be visible but is not -> major missing_character.
 3. DUPLICATES: the same character drawn twice or more in one ${scene} -> major duplicate_character.${isComic ? ' The same character in DIFFERENT panels (also normal clothes vs hero costume in different panels) is normal comic storytelling - not an issue.' : ''} Unexplained twin/clone figures, or unnamed figures that look like a copy of a book character -> major extra_figure. Background extras that the brief calls for are fine.
-4. APPEARANCE: compare with the reference sheets (they contain labels and color swatches - those are not part of the character). Wrong hair color/style, wrong outfit (neither the normal clothes nor, when fitting the scene, the hero costume), wrong species, clearly wrong age/size or skin tone -> major wrong_appearance. Small shade or accessory differences -> minor.
-5. SCENE ELEMENTS: identify the few elements the brief makes essential to this moment (the action, important props, animals, places, time of day). An essential element missing or clearly wrong -> major missing_element. A missing background detail -> minor.
-6. TEXT: apply TEXT RULES.
-7. ANATOMY: clearly visible extra or missing fingers, extra/missing limbs, fused or merged bodies, two heads, badly broken faces -> major anatomy.
-8. CROPPING: a main character's head or face cut off by the image edge, or a body cut off in a way that looks accidental -> major cropped_character. A face touching the very edge (print trim) -> minor.
-9. LAYOUT: apply LAYOUT RULES.
+4. IDENTITY (most important): the reference sheet decides who the character IS. Compare the FACE feature by feature: face shape, eye shape and color, eyebrows, nose, mouth/teeth (e.g. buck teeth), freckles, moles or dimples, ears, hairline, hair color and hairstyle, skin tone, apparent age and body proportions. If the face reads as a different child/person - even when the hair and clothes are right - that is major wrong_appearance with a correction naming the exact features to restore (e.g. "Otis must have the round face, big green eyes, freckles across the nose and two front buck teeth from his reference sheet"). A slightly different expression or angle is fine.
+5. CLOTHES: the reference sheets contain labels and color swatches - those are not part of the character. Clothes MAY change when the scene motivates it (pajamas in bed, a jacket outdoors, swimwear, the hero costume) - that is never an error as long as the face and hair are the same person. Unmotivated different clothes -> minor; clothes that contradict the brief -> major wrong_appearance. Wrong species or clearly wrong age/size -> major wrong_appearance. Small shade or accessory differences -> minor.
+6. SCENE ELEMENTS: identify the few elements the brief makes essential to this moment (the action, important props, animals, places, time of day). An essential element missing or clearly wrong -> major missing_element. A missing background detail -> minor.
+7. TEXT: apply TEXT RULES.
+8. ANATOMY: clearly visible extra or missing fingers, extra/missing limbs, fused or merged bodies, two heads, badly broken faces -> major anatomy.
+9. CROPPING: a main character's head or face cut off by the image edge, or a body cut off in a way that looks accidental -> major cropped_character. A face touching the very edge (print trim) -> minor.
+10. LAYOUT: apply LAYOUT RULES.
 
 SEVERITY: major = a reader or parent would notice it, or the story/brief is broken. minor = small acceptable deviation.
 
@@ -428,6 +431,17 @@ function normalizeReview(raw: RawReview, required: Character[], optional: Charac
         correction: `${c.name} must be clearly visible in the ${isComic ? 'panels where the brief places them' : 'scene'}, drawn exactly once and matching the reference sheet`,
       });
       problemsExtra.push(`${c.name} saknades`);
+    }
+    // Säkerhetsnät: ansiktet ser ut som en annan person än referensbilden
+    if (entry.visible && entry.same_person_as_reference === false && c.referenceImage && !hasIssue('wrong_appearance', c.name)) {
+      issues.push({
+        category: 'wrong_appearance',
+        character: c.name,
+        severity: 'major',
+        descriptionSv: `${c.name} ser ut som en annan person`,
+        correction: `${c.name} must be the same person as on the reference sheet: copy the face shape, eyes, eyebrows, nose, mouth, freckles/marks, hair color and hairstyle exactly${entry.note ? ` (now: ${entry.note})` : ''}`,
+      });
+      problemsExtra.push(`${c.name} såg ut som en annan person`);
     }
     if (entry.max_count_in_one_scene > 1 && !hasIssue('duplicate_character', c.name)) {
       issues.push({

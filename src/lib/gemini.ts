@@ -309,7 +309,7 @@ export async function generatePageImage(
   // Add reference images for characters in this scene FIRST (higher priority)
   for (const char of charsInScene) {
     contents.push({
-      text: `Reference image for character "${char.name}"${char.heroName ? ` (${char.heroName})` : ''} - THIS CHARACTER APPEARS IN THIS SCENE. ${char.appearance}`,
+      text: `Reference image for character "${char.name}"${char.heroName ? ` (${char.heroName})` : ''} - THIS CHARACTER APPEARS IN THIS SCENE. This sheet defines who ${char.name} IS: draw exactly this face (face shape, eyes, eyebrows, nose, mouth and teeth, freckles or marks, ears), this hair color and hairstyle, skin tone, age and body proportions. Clothes may change only when the scene calls for it; the face never changes. ${char.appearance}`,
     });
     contents.push({
       inlineData: {
@@ -442,7 +442,7 @@ ${composition === 'spread'
   ? '- The image must be a portrait illustration, NOT a wide landscape spread'
   : `- Follow the ${aspectRatio} format and the layout instructions above`}
 - Make sure character proportions, hair, clothing, and features match their reference sheets
-- Every character must look the SAME across all pages - same hair color, same clothing, same features
+- Every character must be recognizably the SAME person on every page - same face (shape, eyes, nose, mouth, freckles/marks), same hair color and hairstyle, same age and proportions. Only the clothes may change, and only when the scene motivates it (pajamas in bed, a jacket outside); otherwise use their normal clothes
 - NEVER duplicate a character - each person appears EXACTLY ONCE ${perPanel ? 'in each panel' : 'in the image'}
 - NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image`;
 
