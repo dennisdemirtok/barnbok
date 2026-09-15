@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TimelineChapter } from '@/lib/author-types';
 import { findAiTells } from '@/lib/writing';
+import { pasteManuscript } from '@/lib/dialogue';
 import Icon from '../Icon';
 import { BusyNote, ChapterBadge } from './ui';
 import { countWords, fmt } from './finish-utils';
@@ -57,6 +58,10 @@ interface Props {
   onNext?: () => void;
   armed: string | null;
   confirm: (key: string) => boolean;
+  // Repliker som saknar talstreck i det här kapitlet / i hela boken
+  missingDialogue: number;
+  missingDialogueAll: number;
+  onRestoreDialogue: (scope: 'chapter' | 'all') => void;
 }
 
 const WRITE_STAGES = ['Läser tidslinjen och kapitlen före', 'Lyssnar på ditt språk', 'Skriver scenerna', 'Putsar på meningarna', 'Nästan klart'];
@@ -67,6 +72,7 @@ export default function ChapterEditor(props: Props) {
     chapter, index, count, targetWords, busy, aiLocked, truncated, error, notice, onDismissMessage,
     selection, onSelection, variants, focusRange, onTitle, onNotes, onText, onSource, onWrite, onPolish, onUndo,
     onRewriteSelection, onUseVariant, onCloseVariants, onPrev, onNext, armed, confirm,
+    missingDialogue, missingDialogueAll, onRestoreDialogue,
   } = props;
 
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -328,6 +334,29 @@ export default function ChapterEditor(props: Props) {
         </div>
       )}
 
+      {/* Repliker utan talstreck */}
+      {missingDialogue > 0 && !busyWhole && (
+        <div className="note-warning !font-normal flex flex-col sm:flex-row sm:items-center gap-2">
+          <p className="flex-1 min-w-0 flex items-start gap-2">
+            <Icon name="format_quote" size={18} className="shrink-0 mt-px" />
+            <span>
+              <span className="font-semibold">{missingDialogue} {missingDialogue === 1 ? 'replik saknar' : 'repliker saknar'} talstreck.</span>{' '}
+              Det händer ofta när repliker skrivits som punktlista i Word eller Pages.
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button type="button" onClick={() => onRestoreDialogue('chapter')} disabled={aiLocked} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-900 text-white text-xs font-semibold hover:bg-amber-950 disabled:opacity-40">
+              <Icon name="format_list_bulleted" size={15} /> Lägg till talstreck
+            </button>
+            {missingDialogueAll > missingDialogue && (
+              <button type="button" onClick={() => onRestoreDialogue('all')} disabled={aiLocked} className="px-3 py-1.5 rounded-full text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-40">
+                I alla kapitel ({missingDialogueAll})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* AI-tecken */}
       {tells.length > 0 && !hideTells && !busyWhole && (
         <div className="note-warning !font-normal">
@@ -372,6 +401,7 @@ export default function ChapterEditor(props: Props) {
             ref={textRef}
             value={chapter.text}
             onChange={e => onText(e.target.value)}
+            onPaste={e => { const v = pasteManuscript(e, chapter.text); if (v !== null) onText(v); }}
             onSelect={readSelection}
             onMouseUp={readSelection}
             onKeyUp={readSelection}

@@ -5,6 +5,7 @@ import type { AuthorVoice, FinishProject, FinishSettings, TimelineChapter, Timel
 import { saveAuthorVoice, saveFinishProject } from '@/lib/storage';
 import { postJson } from '@/lib/fetch-json';
 import Icon from '../Icon';
+import { countMissingMarkers, pasteManuscript, restoreDialogueMarkers } from '@/lib/dialogue';
 import StepHeader from '../StepHeader';
 import { FreedomPicker } from './SettingsModal';
 import { FieldLabel, Stepper, useElapsed } from './ui';
@@ -61,6 +62,7 @@ export default function NewFinishProject({ voices, onCancel, onCreated, onVoices
 
   const parts = useMemo(() => splitBeginning(beginning), [beginning]);
   const beginningWords = useMemo(() => countWords(beginning), [beginning]);
+  const missingBeginningDialogue = useMemo(() => countMissingMarkers(beginning), [beginning]);
   const autoWords = useMemo(() => {
     const written = parts.filter(p => p.text.trim());
     if (!written.length) return 1000;
@@ -214,6 +216,7 @@ export default function NewFinishProject({ voices, onCancel, onCreated, onVoices
               ref={beginningRef}
               value={beginning}
               onChange={e => setBeginning(e.target.value)}
+              onPaste={e => { const v = pasteManuscript(e, beginning); if (v !== null) setBeginning(v); }}
               className="field min-h-[16rem] sm:min-h-[22rem] resize-y text-[15px] leading-relaxed"
               placeholder={'Prolog\n\nKlistra in din inledning här...\n\nKapitel 1 – Titel\n\nOch början av första kapitlet.'}
               spellCheck
@@ -225,6 +228,17 @@ export default function NewFinishProject({ voices, onCancel, onCreated, onVoices
                 {beginningWords > 0 && beginningWords < 300 && ' · ju mer text, desto bättre lär sig AI:n ditt språk'}
               </span>
             </div>
+            {missingBeginningDialogue > 0 && (
+              <div className="mt-3 note-warning !font-normal flex flex-col sm:flex-row sm:items-center gap-2">
+                <p className="flex-1">
+                  <span className="font-semibold">{missingBeginningDialogue} {missingBeginningDialogue === 1 ? 'replik verkar sakna' : 'repliker verkar sakna'} talstreck.</span>{' '}
+                  Skrev du dem som punktlista i Word eller Pages? Punkterna försvinner när texten klistras in.
+                </p>
+                <button type="button" onClick={() => setBeginning(restoreDialogueMarkers(beginning).text)} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-900 text-white text-xs font-semibold hover:bg-amber-950">
+                  <Icon name="format_list_bulleted" size={15} /> Lägg till talstreck
+                </button>
+              </div>
+            )}
             {parts.length > 0 && (
               <div className="mt-3 rounded-2xl bg-white border border-line p-3">
                 <p className="text-xs font-semibold text-ink/55 mb-2 flex items-center gap-1.5">

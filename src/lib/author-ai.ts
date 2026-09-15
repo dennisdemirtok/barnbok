@@ -2,6 +2,7 @@
 // Analyserar författarens språk, planerar tidslinjen, skriver kapitel och
 // skriver om markerade stycken - alltid med författarens röst.
 import Anthropic from '@anthropic-ai/sdk';
+import { restoreDialogueMarkers, DEFAULT_MARKER } from './dialogue';
 import {
   getClient,
   resolveLatestModel,
@@ -179,7 +180,7 @@ FÖRFATTARSPRÅK: Ingen sparad analys finns. Läs författarens egna kapitel nog
 
 // Tar bort markdown, rubriker och fel replikstreck. Ett stycke per rad.
 function normalizeProse(text: string, voice?: AuthorVoiceRef, dropTitle?: string): string {
-  const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
+  const marker = lineDialogueMarker(voice?.profile.dialogueMarker) ?? DEFAULT_MARKER;
   let lines = text
     .replace(/\r\n?/g, '\n')
     .split('\n')
@@ -196,7 +197,8 @@ function normalizeProse(text: string, voice?: AuthorVoiceRef, dropTitle?: string
     const first = lines[0].replace(/[.:]$/, '').trim().toLowerCase();
     if ((dropTitle && first === dropTitle.trim().toLowerCase()) || isHeading(lines[0])) lines = lines.slice(1);
   }
-  return lines.join('\n').trim();
+  // Repliker som AI:n skrev utan markering får den
+  return restoreDialogueMarkers(lines.join('\n'), marker).text.trim();
 }
 
 function textOf(message: Anthropic.Message): string {
@@ -297,13 +299,22 @@ export const VOICE_MIN_WORDS = 150;
 export const VOICE_MAX_CHARS = LIMITS.voiceText;
 
 export async function analyzeVoice(text: string, name: string | undefined, deadline: number): Promise<VoiceResponse['voice']> {
-  const paragraphs = splitParagraphs(text);
   const words = countWords(text);
   if (words < VOICE_MIN_WORDS) {
     throw new AuthorInputError(`Klistra in mer text så att författarspråket kan analyseras (minst ${VOICE_MIN_WORDS} ord)`);
   }
+  let paragraphs = splitParagraphs(text);
+  let detectedMarker = detectDialogueMarker(paragraphs);
+  // Repliker utan talstreck (punktlistor som tappats vid inklistring): lägg tillbaka
+  // dem innan analysen, så att AI:n lär sig att repliker står i egna stycken med streck
+  if (!detectedMarker) {
+    const restored = restoreDialogueMarkers(paragraphs.join('\n'), DEFAULT_MARKER);
+    if (restored.added >= 2) {
+      paragraphs = splitParagraphs(restored.text);
+      detectedMarker = DEFAULT_MARKER;
+    }
+  }
   const numbered = paragraphs.map((p, i) => `[${i + 1}] ${p}`).join('\n');
-  const detectedMarker = detectDialogueMarker(paragraphs);
 
   const prompt = `Du är en erfaren svensk förlagsredaktör och stilanalytiker. En författare har skrivit början av sin bok själv. Resten ska skrivas så att ingen läsare märker var författaren slutade. Din uppgift är att beskriva EXAKT hur just den här författaren skriver, så noggrant att en annan skribent kan härma rösten utan att se originalet.
 
@@ -581,7 +592,7 @@ export async function writeChapter(
   }
 
   const story = await storySoFar(previous, project, deadline);
-  const marker = voice?.profile.dialogueMarker;
+  const marker = voice?.profile.dialogueMarker?.trim() ? voice.profile.dialogueMarker : DEFAULT_MARKER;
 
   const system = `Du är spökskrivare åt en svensk författare. Författaren har skrivit början av sin bok själv och du skriver nästa del så att ingen läsare kan märka var författaren slutade och du tog vid. Du skriver med författarens röst, aldrig med din egen.
 ${voiceOrFallback(voice)}
@@ -625,7 +636,7 @@ FORMAT:
 - Svara ENBART med kapitlets brödtext. Ingen kapitelrubrik (den lagras separat), ingen inledning, inga kommentarer, inget "Slut".
 - Ett stycke per rad, inga tomma rader mellan styckena.
 - ${lineDialogueMarker(marker)
-    ? `Varje replik står i ett eget stycke som börjar med exakt "${lineDialogueMarker(marker)}", som i författarens text.`
+    ? `Varje replik står i ett eget stycke som börjar med exakt "${lineDialogueMarker(marker)}", som i författarens text. Glöm aldrig markeringen, inte heller på korta repliker som "Vad blir det för mat?".`
     : 'Repliker skrivs exakt som i författarens text.'}
 - Ingen markdown.`;
 
@@ -845,7 +856,7 @@ variants: ${count === 2 ? 'exakt två versioner' : 'exakt en version'}.`;
 
 // Städar ett förslag och ser till att det passar in där markeringen stod
 function fitReplacement(raw: string, before: string, selection: string, after: string, voice?: AuthorVoiceRef): string {
-  const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
+  const marker = lineDialogueMarker(voice?.profile.dialogueMarker) ?? DEFAULT_MARKER;
   let text = raw
     .replace(/\r\n?/g, '\n')
     .split('\n')
@@ -856,6 +867,7 @@ function fitReplacement(raw: string, before: string, selection: string, after: s
     })
     .filter(Boolean)
     .join('\n');
+  text = restoreDialogueMarkers(text, marker).text;
   // Citattecken runt hela förslaget
   if (/^["”»][^"”»]*["”«]$/.test(text) && !/^["”»]/.test(selection.trim())) text = text.slice(1, -1).trim();
   text = stripOverlap(text, before, after);

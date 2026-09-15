@@ -9,6 +9,7 @@ import StyleThumb from './StyleThumb';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
+import { pasteManuscript } from '@/lib/dialogue';
 
 interface Props {
   // Vald stil tas vidare till manussteget, där hela boken skapas
@@ -355,6 +356,7 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
               <textarea
                 value={state.rawText}
                 onChange={e => setState(prev => ({ ...prev, rawText: e.target.value }))}
+                onPaste={e => { const v = pasteManuscript(e, state.rawText); if (v !== null) setState(prev => ({ ...prev, rawText: v })); }}
                 placeholder={'Klistra in prolog och kapitel 1 här...\n\n– Vänta på mig! ropar Otis och kippar efter andan.\n\nHan ligger en bra bit efter sin storasyster...'}
                 className="field h-[22rem] lg:h-[30rem] text-sm leading-relaxed resize-y"
               />

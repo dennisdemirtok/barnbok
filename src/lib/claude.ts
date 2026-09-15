@@ -3,6 +3,7 @@ import { PROSE_QUALITY_RULES, variationBlock, sanitizeProse } from './writing';
 import { drawStorySeeds, seedsBlock } from './story-seeds';
 import { recentStories, rememberStory, memoryBlock, avoidTextOf } from './story-memory';
 import { extractNames } from './text-eval';
+import { restoreDialogueMarkers, DEFAULT_MARKER } from './dialogue';
 import { BookFormat } from './types';
 import type { BookConcept, StylePreset } from './styles';
 import type { VoiceProfile } from './author-types';
@@ -796,7 +797,9 @@ function normalizeManuscript(text: string, voice?: AuthorVoiceRef): string {
     .map(sanitizeProse)
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
-    .trim();
+    .trim()
+    // Repliker som skrevs utan talstreck får det (tomma rader hoppas över)
+    .replace(/^[\s\S]*$/, all => restoreDialogueMarkers(all, marker ?? DEFAULT_MARKER).text);
 }
 
 function outlineUnits(book: BookConcept): string {

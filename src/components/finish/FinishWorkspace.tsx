@@ -17,6 +17,7 @@ import type {
 } from '@/lib/author-types';
 import { saveAuthorVoice, saveFinishProject } from '@/lib/storage';
 import { postJson } from '@/lib/fetch-json';
+import { countMissingMarkers, preferredMarker, restoreDialogueMarkers, DEFAULT_MARKER } from '@/lib/dialogue';
 import Icon from '../Icon';
 import StepHeader from '../StepHeader';
 import TimelinePanel from './TimelinePanel';
@@ -218,6 +219,33 @@ export default function FinishWorkspace({ initial, voices, onVoicesChanged, onBa
         source: startedWriting ? 'author' : c.source,
         updatedAt: nowIso(),
       };
+    });
+  };
+
+  // ── Talstreck som tappats (t.ex. punktlistor från Word som blev vanlig text) ──
+  const restoreDialogue = (scope: 'chapter' | 'all', id: string) => {
+    const p = projectRef.current;
+    const voiceMarker = p.voice?.profile.dialogueMarker?.trim() ? p.voice.profile.dialogueMarker : '';
+    const marker = voiceMarker || preferredMarker(p.chapters.map(c => c.text).join('\n')) || DEFAULT_MARKER;
+    let total = 0;
+    editBase.current = null;
+    update(prev => ({
+      ...prev,
+      chapters: prev.chapters.map(c => {
+        if (scope === 'chapter' && c.id !== id) return c;
+        const r = restoreDialogueMarkers(c.text, marker);
+        if (!r.added) return c;
+        total += r.added;
+        return withText(c, r.text);
+      }),
+      // Författarspråket ska också veta att repliker har streck
+      voice: prev.voice && !voiceMarker ? { ...prev.voice, profile: { ...prev.voice.profile, dialogueMarker: marker } } : prev.voice,
+    }));
+    setMessage({
+      scope: 'editor', kind: 'success', chapterId: id,
+      text: total > 0
+        ? `${total} ${total === 1 ? 'replik' : 'repliker'} fick talstreck igen. Kontrollera gärna – Ångra finns om något blev fel.`
+        : 'Hittade inga repliker utan talstreck.',
     });
   };
 
@@ -736,6 +764,9 @@ export default function FinishWorkspace({ initial, voices, onVoicesChanged, onBa
                 onWrite={comment => writeChapter(selected.id, comment)}
                 onPolish={() => polish(selected.id)}
                 onUndo={() => undo(selected.id)}
+                missingDialogue={countMissingMarkers(selected.text)}
+                missingDialogueAll={chapters.reduce((n, c) => n + countMissingMarkers(c.text), 0)}
+                onRestoreDialogue={scope => restoreDialogue(scope, selected.id)}
                 onRewriteSelection={rewriteSelection}
                 onUseVariant={applyVariant}
                 onCloseVariants={() => setVariants(null)}

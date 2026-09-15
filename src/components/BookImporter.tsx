@@ -11,6 +11,7 @@ import StylePicker from './StylePicker';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
+import { countMissingMarkers, pasteManuscript, restoreDialogueMarkers } from '@/lib/dialogue';
 import type { AuthorVoice } from '@/lib/author-types';
 
 export type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
@@ -139,6 +140,7 @@ export default function BookImporter({
   const preset = getStylePreset(draft.stylePresetId) ?? STYLE_PRESETS[0];
   const words = countWords(draft.rawText);
   const structured = isStructuredText(draft.rawText);
+  const missingDialogue = structured ? 0 : countMissingMarkers(draft.rawText);
 
   const handleSaveText = async () => {
     if (!draft.rawText.trim()) return;
@@ -545,10 +547,22 @@ export default function BookImporter({
             <textarea
               value={draft.rawText}
               onChange={e => update({ rawText: e.target.value })}
+              onPaste={e => { const v = pasteManuscript(e, draft.rawText); if (v !== null) update({ rawText: v }); }}
               placeholder={'Klistra in hela manuset här...\n\nKapitel 1 – Drömmen\n– Vänta på mig! ropar Otis och kippar efter andan.\nHan ligger en bra bit efter sin storasyster...'}
               className="field h-[22rem] lg:h-[34rem] text-sm leading-relaxed resize-y"
               disabled={busy}
             />
+            {missingDialogue > 0 && !busy && (
+              <div className="mt-2 note-warning !font-normal flex flex-col sm:flex-row sm:items-center gap-2">
+                <p className="flex-1 text-sm">
+                  <span className="font-semibold">{missingDialogue} {missingDialogue === 1 ? 'replik verkar sakna' : 'repliker verkar sakna'} talstreck.</span>{' '}
+                  Punktlistor från Word eller Pages försvinner när texten klistras in.
+                </p>
+                <button type="button" onClick={() => update({ rawText: restoreDialogueMarkers(draft.rawText).text })} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-900 text-white text-xs font-semibold hover:bg-amber-950">
+                  <Icon name="format_list_bulleted" size={15} /> Lägg till talstreck
+                </button>
+              </div>
+            )}
             <p className="text-xs text-ink/45 mt-1.5">
               {words > 0 ? `${words.toLocaleString('sv-SE')} ord` : 'Ett stycke per rad. Repliker kan börja med – eller -.'}
               {structured && ' · Texten har bokverktygets sidformat och delas upp efter SIDA-markeringarna.'}
