@@ -49,17 +49,17 @@ export default function LoginModal({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand to-magic flex items-center justify-center text-white shadow-glow">
+          <div className="w-12 h-12 rounded-2xl bg-ink flex items-center justify-center text-white shadow-soft">
             <Icon name={mode === 'login' ? 'lock_open' : 'person_add'} filled size={24} />
           </div>
           <button onClick={onClose} className="btn-icon" title="Stäng">
             <Icon name="close" size={22} />
           </button>
         </div>
-        <h2 className="text-2xl font-heading font-bold text-gray-800 mb-1">
+        <h2 className="text-2xl font-heading font-semibold text-ink mb-1">
           {mode === 'login' ? 'Välkommen tillbaka!' : 'Skapa konto'}
         </h2>
-        <p className="text-sm text-gray-500 mb-5">
+        <p className="text-sm text-ink/55 mb-5">
           {mode === 'login'
             ? 'Logga in för att spara dina böcker i molnet och nå dem från alla enheter.'
             : 'Skapa ett gratis konto så att dina böcker och figurer sparas säkert.'}
@@ -67,7 +67,7 @@ export default function LoginModal({ onClose }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-post</label>
+            <label className="block text-sm font-medium text-ink/80 mb-1">E-post</label>
             <input
               type="email"
               required
@@ -78,7 +78,7 @@ export default function LoginModal({ onClose }: Props) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Lösenord</label>
+            <label className="block text-sm font-medium text-ink/80 mb-1">Lösenord</label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -93,7 +93,7 @@ export default function LoginModal({ onClose }: Props) {
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
                 title={showPassword ? 'Dölj lösenord' : 'Visa lösenord'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 btn-icon !w-8 !h-8 !text-gray-400 hover:!text-gray-600"
+                className="absolute right-2 top-1/2 -translate-y-1/2 btn-icon !w-8 !h-8 !text-ink/40 hover:!text-ink/65"
               >
                 <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={19} />
               </button>
@@ -112,7 +112,7 @@ export default function LoginModal({ onClose }: Props) {
           </button>
         </form>
 
-        <div className="mt-4 text-center text-sm text-gray-500">
+        <div className="mt-4 text-center text-sm text-ink/55">
           {mode === 'login' ? (
             <>Har du inget konto?{' '}
               <button onClick={() => { setMode('signup'); setError(''); setInfo(''); }} className="text-brand font-semibold hover:underline">

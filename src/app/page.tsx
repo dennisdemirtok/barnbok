@@ -183,11 +183,11 @@ export default function Home() {
     setStep('library');
   };
 
-  const steps: { key: Step; label: string; num: number; icon: string }[] = [
-    { key: 'import', label: 'Importera', num: 1, icon: 'upload_file' },
-    { key: 'characters', label: 'Karaktarer', num: 2, icon: 'diversity_3' },
-    { key: 'generate', label: 'Generera', num: 3, icon: 'auto_fix_high' },
-    { key: 'review', label: 'Granska', num: 4, icon: 'menu_book' },
+  const steps: { key: Step; label: string; icon: string }[] = [
+    { key: 'import', label: 'Berättelsen', icon: 'edit_note' },
+    { key: 'characters', label: 'Karaktärer', icon: 'diversity_3' },
+    { key: 'generate', label: 'Illustrera', icon: 'palette' },
+    { key: 'review', label: 'Färdig bok', icon: 'auto_stories' },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === step);
@@ -196,149 +196,111 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div
-              className="flex items-center gap-3 cursor-pointer group"
+      <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-md border-b border-line">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">
+          <button onClick={handleBackToLibrary} className="flex items-center gap-2.5 min-w-0 group" title="Till startsidan">
+            <span className="w-9 h-9 shrink-0 rounded-xl bg-ink text-white flex items-center justify-center group-hover:bg-brand transition-colors">
+              <Icon name="auto_stories" filled size={20} />
+            </span>
+            <span className="font-heading text-lg font-semibold text-ink tracking-tight truncate">Bokverktyget</span>
+          </button>
+
+          {/* Pågående bok - bara på bredare skärmar */}
+          {book && showSteps && (
+            <p className="hidden lg:block flex-1 text-center text-sm text-ink/55 truncate px-4">
+              <span className="text-ink/35">Arbetar med</span> <span className="font-medium text-ink/80">{book.title}</span>
+            </p>
+          )}
+
+          <nav className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <button
               onClick={handleBackToLibrary}
+              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-colors ${
+                step === 'library' ? 'bg-ink/[0.06] text-ink' : 'text-ink/65 hover:text-ink hover:bg-ink/[0.04]'
+              }`}
             >
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand to-magic
-                              flex items-center justify-center shadow-glow
-                              group-hover:scale-105 group-hover:rotate-3 transition-transform">
-                <Icon name="auto_stories" filled size={24} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-extrabold brand-text leading-none">Bokverktyget</h1>
-                <p className="hidden sm:block text-xs text-gray-400 mt-0.5">Skapa barnböcker med AI</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => setStep('bookstore')}
-                title="Bokhandel"
-                className={`inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-sm font-heading font-semibold
-                           rounded-full transition-colors ${
-                             step === 'bookstore'
-                               ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                               : 'text-brand border border-brand/25 hover:bg-brand/5'
-                           }`}
-              >
-                <Icon name="storefront" filled size={18} />
-                <span className="hidden sm:inline">Bokhandel</span>
-              </button>
-              <button
-                onClick={() => setShowRefManager(true)}
-                title="Referensdata"
-                className="hidden md:inline-flex items-center gap-1.5 px-4 py-1.5 text-sm text-brand font-heading font-semibold border border-brand/25
-                           rounded-full hover:bg-brand/5 transition-colors"
-              >
-                <Icon name="photo_library" filled size={18} /> Referensdata
-              </button>
-              {!authLoading && (
-                user ? (
-                  <div className="flex items-center gap-2">
-                    <Icon name="account_circle" filled size={26} className="text-brand/70" />
-                    <span className="hidden lg:inline text-sm text-gray-500 max-w-[140px] truncate" title={user.email}>
-                      {user.email}
-                    </span>
-                    <button
-                      onClick={signOut}
-                      className="px-3 sm:px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
-                                 rounded-full hover:bg-gray-50 transition-colors"
-                    >
-                      Logga ut
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowLogin(true)}
-                    className="btn-primary !px-4 sm:!px-5 !py-2 text-sm whitespace-nowrap"
+              <Icon name="collections_bookmark" size={18} /> Mina böcker
+            </button>
+            <button
+              onClick={() => setStep('bookstore')}
+              title="Bokhandeln"
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-full text-sm font-medium transition-colors ${
+                step === 'bookstore' ? 'bg-ink/[0.06] text-ink' : 'text-ink/65 hover:text-ink hover:bg-ink/[0.04]'
+              }`}
+            >
+              <Icon name="storefront" size={18} /> <span className="hidden sm:inline">Bokhandeln</span>
+            </button>
+            <button
+              onClick={() => setShowRefManager(true)}
+              title="Referensdata"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-full text-sm font-medium text-ink/65 hover:text-ink hover:bg-ink/[0.04] transition-colors"
+            >
+              <Icon name="photo_library" size={18} /> <span className="hidden md:inline">Referenser</span>
+            </button>
+            {!authLoading && (
+              user ? (
+                <div className="flex items-center gap-1">
+                  <span
+                    className="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center text-sm font-semibold uppercase"
+                    title={user.email}
                   >
-                    Logga in
+                    {user.email?.charAt(0) || '?'}
+                  </span>
+                  <button onClick={signOut} className="btn-icon" title="Logga ut">
+                    <Icon name="logout" size={19} />
                   </button>
-                )
-              )}
-              {book && step !== 'library' && (
-                <>
-                  <div className="hidden xl:block text-right">
-                    <p className="font-semibold text-gray-700 max-w-[200px] truncate">{book.title}</p>
-                    {book.subtitle && <p className="text-sm text-gray-500">{book.subtitle}</p>}
-                  </div>
-                  <button
-                    onClick={handleBackToLibrary}
-                    title="Till biblioteket"
-                    className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200
-                               rounded-full hover:bg-gray-50 transition-colors"
-                  >
-                    <Icon name="collections_bookmark" size={17} />
-                    <span className="hidden sm:inline">Bibliotek</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+                </div>
+              ) : (
+                <button onClick={() => setShowLogin(true)} className="btn-primary !px-3.5 sm:!px-4 !py-2 text-sm whitespace-nowrap sm:ml-1">
+                  Logga in
+                </button>
+              )
+            )}
+          </nav>
         </div>
       </header>
 
-      {/* Step indicator */}
+      {/* Stegindikator */}
       {showSteps && (
-        <div className="bg-white/70 backdrop-blur-md border-b border-white/60">
-          <div className="max-w-3xl mx-auto px-6 py-4">
-            {/* Mobil: aktuellt steg i klartext */}
-            <p className="sm:hidden text-center text-xs font-heading font-bold text-brand mb-3">
-              Steg {currentStepIndex + 1} av {steps.length}: {steps[currentStepIndex]?.label}
-            </p>
-            <div className="flex items-center">
+        <div className="border-b border-line bg-white/60">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6">
+            <ol className="flex items-center gap-1 sm:gap-2 py-3 overflow-x-auto no-scrollbar">
               {steps.map((s, idx) => {
                 const isCurrent = s.key === step;
                 const isDone = idx < currentStepIndex;
                 const clickable = idx <= currentStepIndex && !!book;
                 return (
-                  <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                  <li key={s.key} className="flex items-center gap-1 sm:gap-2 shrink-0 flex-1 last:flex-none">
                     <button
                       onClick={() => clickable && setStep(s.key)}
                       disabled={!clickable}
-                      className="group flex items-center gap-2.5 disabled:cursor-default"
+                      className={`flex items-center gap-2 rounded-full pl-1 pr-3 py-1 transition-colors disabled:cursor-default ${
+                        isCurrent ? 'bg-ink text-white' : isDone ? 'text-ink hover:bg-ink/5' : 'text-ink/40'
+                      }`}
                     >
-                      <span className={`relative w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all duration-300 ${
-                        isCurrent
-                          ? 'bg-gradient-to-br from-brand to-magic text-white shadow-glow ring-4 ring-brand/15'
-                          : isDone
-                          ? 'bg-emerald-500 text-white group-hover:scale-110'
-                          : 'bg-gray-200 text-gray-400'
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+                        isCurrent ? 'bg-white/15' : isDone ? 'bg-emerald-600 text-white' : 'bg-ink/[0.06]'
                       }`}>
-                        {isDone
-                          ? <Icon name="check" size={20} />
-                          : <Icon name={s.icon} filled={isCurrent} size={19} />}
+                        {isDone ? <Icon name="check" size={15} /> : idx + 1}
                       </span>
-                      <span className={`hidden sm:block text-sm font-heading font-semibold transition-colors ${
-                        isCurrent ? 'text-brand' : isDone ? 'text-emerald-600' : 'text-gray-400'
-                      }`}>
-                        {s.label}
-                      </span>
+                      <span className={`text-sm font-medium whitespace-nowrap ${isCurrent ? '' : 'hidden sm:inline'}`}>{s.label}</span>
                     </button>
-                    {idx < steps.length - 1 && (
-                      <div className="flex-1 h-1 mx-3 rounded-full bg-gray-200/80 overflow-hidden">
-                        <div className={`h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ${
-                          isDone ? 'w-full' : 'w-0'
-                        }`} />
-                      </div>
-                    )}
-                  </div>
+                    {idx < steps.length - 1 && <span className={`h-px flex-1 min-w-3 ${isDone ? 'bg-emerald-600/40' : 'bg-line'}`} />}
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
         </div>
       )}
 
       {/* Main content - key på step ger mjuk intoning vid stegbyte */}
-      <div key={step} className="max-w-7xl mx-auto px-4 sm:px-6 py-8 animate-fade-up">
+      <div key={step} className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 animate-fade-up">
         {step === 'library' && (
           <BookLibrary
             onLoadBook={handleLoadBook}
             onNewBook={handleNewBook}
+            onStyleTest={() => { handleNewBook(); setImportMode('styleTest'); }}
             onReuseBook={handleReuseBook}
           />
         )}
@@ -366,37 +328,28 @@ export default function Home() {
 
         {step === 'characters' && book && (
           <>
-            {/* Format selector for cloned/reused books */}
+            {/* Återanvänd bok: välj format innan nya bilder skapas */}
             {isClonedBook && (
-              <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span className="font-semibold text-yellow-800">Ateranvand bok</span>
+              <div className="mb-8 card-glass hover:!shadow-soft p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-start gap-3 flex-1">
+                  <span className="w-10 h-10 shrink-0 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <Icon name="content_copy" size={20} />
+                  </span>
+                  <div>
+                    <p className="font-semibold text-ink">Kopia av en tidigare bok</p>
+                    <p className="text-sm text-ink/60">Karaktärer och text behålls. Välj bokformat innan du skapar nya bilder.</p>
+                  </div>
                 </div>
-                <p className="text-sm text-yellow-700 mb-3">
-                  Karaktarer och text fran originalboken behalles. Du kan byta bildformat innan du genererar nya bilder.
-                </p>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Bokformat
-                </label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { value: 'bildbok-text-pa-bild' as BookFormat, label: 'Text pa bild (Handbok-stil)' },
-                    { value: 'bildbok-separat-text' as BookFormat, label: 'Separat text (Luna-stil)' },
+                    { value: 'bildbok-separat-text' as BookFormat, label: 'Bilderbok' },
                     { value: 'kapitelbok' as BookFormat, label: 'Kapitelbok' },
-                    { value: 'larobok' as BookFormat, label: 'Larobok' },
+                    { value: 'bildbok-text-pa-bild' as BookFormat, label: 'Serieformat' },
                   ].map((fmt) => (
                     <button
                       key={fmt.value}
                       onClick={() => setBook({ ...book, bookFormat: fmt.value })}
-                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                        book.bookFormat === fmt.value
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                      }`}
+                      className={book.bookFormat === fmt.value ? 'chip-on' : 'chip'}
                     >
                       {fmt.label}
                     </button>

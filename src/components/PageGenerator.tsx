@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { BookProject, Spread } from '@/lib/types';
 import Icon from './Icon';
+import StepHeader from './StepHeader';
+import { resolveBookShape } from '@/lib/book-layout';
 
 const BATCH_SIZE = 3; // Generate 3 images in parallel
 
@@ -35,6 +37,8 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 
   const canProceedToReview = completedSpreads > 0 && !isGenerating && pendingCount === 0;
   const allDone = completedSpreads === totalSpreads;
+  // Helsidesbilder visas stående i ett tätare rutnät, uppslag liggande
+  const portrait = resolveBookShape(book) === 'page';
 
   // Rough time estimate: ~45s per batch of 3 (generation + quality check + possible auto-fix)
   const remainingSpreads = pendingCount + generatingCount;
@@ -194,60 +198,50 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
-            <Icon name="counter_3" filled size={16} /> Steg 3
-          </span>
-          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
-            Nu illustreras din bok
-          </h2>
-          <p className="mt-1.5 text-gray-500 max-w-2xl">
-            {totalSpreads} uppslag genereras med dina godkända karaktärer – varje bild kvalitetskontrolleras automatiskt.
-          </p>
-        </div>
-        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
-          <Icon name="arrow_back" size={18} /> Tillbaka
-        </button>
-      </div>
+      <StepHeader
+        eyebrow="Steg 3 av 4 · Illustrera"
+        title="Nu illustreras din bok"
+        description={`${totalSpreads} bilder skapas med dina godkända karaktärer, och varje bild kvalitetskontrolleras automatiskt.`}
+        onBack={onBack}
+      />
 
       {/* Progress-panel */}
       <div className="glass rounded-4xl p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
-              allDone ? 'bg-emerald-500 text-white shadow-glow' : 'bg-gradient-to-br from-brand to-magic text-white shadow-glow'
+              allDone ? 'bg-emerald-500 text-white shadow-soft' : 'bg-ink text-white shadow-soft'
             }`}>
               {isGenerating
                 ? <span className="spinner !w-6 !h-6" />
                 : <Icon name={allDone ? 'celebration' : 'auto_fix_high'} filled size={26} />}
             </div>
             <div>
-              <p className="font-heading font-bold text-gray-800">
+              <p className="font-heading font-semibold text-ink">
                 {allDone
                   ? 'Alla uppslag är klara! 🎉'
                   : isGenerating
-                  ? `Genererar ${generatingCount} bilder parallellt...`
+                  ? `Genererar ${generatingCount} ${generatingCount === 1 ? 'bild' : 'bilder'} parallellt...`
                   : 'Redo att generera'}
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-ink/55">
                 {completedSpreads} av {totalSpreads} uppslag klara
                 {isGenerating && remainingSpreads > 0 && ` · ~${estimatedMinutes} min kvar`}
               </p>
             </div>
           </div>
-          <span className="text-2xl font-heading font-bold text-brand">{Math.round(progress)}%</span>
+          <span className="text-2xl font-heading font-semibold text-brand">{Math.round(progress)}%</span>
         </div>
 
-        <div className="bg-gray-200/70 rounded-full h-3 overflow-hidden">
+        <div className="bg-ink/10 rounded-full h-3 overflow-hidden">
           <div
-            className="bg-gradient-to-r from-trust via-brand to-magic animate-shimmer h-full rounded-full transition-all duration-500 ease-out"
+            className="bg-brand animate-shimmer h-full rounded-full transition-all duration-500 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
 
         {/* Statuschips */}
-        <div className="flex flex-wrap gap-2 text-xs font-heading font-semibold">
+        <div className="flex flex-wrap gap-2 text-xs font-semibold">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700">
             <Icon name="check_circle" filled size={15} /> {completedSpreads} klara
           </span>
@@ -257,7 +251,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
             </span>
           )}
           {pendingCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ink/[0.05] text-ink/55">
               <Icon name="schedule" size={15} /> {pendingCount} väntar
             </span>
           )}
@@ -269,7 +263,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         </div>
 
         {/* Controls */}
-        <div className="flex flex-wrap gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 pt-1">
           {!isGenerating ? (
             <>
               <button
@@ -312,22 +306,21 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
       {error && <div className="note-error">{error}</div>}
 
       {/* Spread grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className={`grid gap-3 sm:gap-4 ${portrait ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
         {spreads.map((spread) => (
           <div
             key={spread.id}
             className={`card-glass overflow-hidden ${
               spread.status === 'generating' ? 'ring-2 ring-brand/50' :
-              spread.status === 'done' ? 'ring-2 ring-emerald-300' :
               spread.status === 'error' ? 'ring-2 ring-red-300' :
               ''
             }`}
           >
-            <div className="bg-gray-100/70 aspect-[3/2] flex items-center justify-center">
+            <div className={`bg-paper flex items-center justify-center ${portrait ? 'aspect-[3/4]' : 'aspect-[3/2]'}`}>
               {spread.status === 'generating' ? (
                 <div className="text-center text-brand">
                   <span className="spinner !w-8 !h-8 mb-2" />
-                  <p className="text-sm text-gray-500">Genererar &amp; kvalitetskontrollerar...</p>
+                  <p className="text-xs sm:text-sm text-ink/55 px-2">Målar och kontrollerar...</p>
                 </div>
               ) : spread.generatedImage ? (
                 <img
@@ -338,11 +331,11 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               ) : spread.status === 'error' ? (
                 <div className="text-center p-4">
                   <Icon name="broken_image" size={28} className="text-red-300 mb-1" />
-                  <p className="text-xs text-gray-500 mb-2">{spread.error}</p>
+                  <p className="text-xs text-ink/55 mb-2">{spread.error}</p>
                   {!isGenerating && (
                     <button
                       onClick={() => retrySingle(spread.id)}
-                      className="px-3 py-1 bg-sunset text-white text-xs rounded-full font-medium
+                      className="px-3 py-1 bg-brand text-white text-xs rounded-full font-medium
                                  hover:opacity-90 transition-opacity"
                     >
                       Försök igen
@@ -350,7 +343,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                   )}
                 </div>
               ) : (
-                <div className="text-center text-gray-400">
+                <div className="text-center text-ink/40">
                   <Icon name="hourglass_empty" size={26} className="mb-1" />
                   <p className="text-sm">Väntar...</p>
                 </div>
@@ -358,17 +351,17 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
             </div>
 
             <div className="p-3">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-sm text-gray-700">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-sm text-ink/80 truncate">
                   {spread.pages === 'omslag' ? 'Omslag' :
                    spread.pages === 'slutsida' ? 'Slutsida' :
                    `Sida ${spread.pages}`}
                 </span>
-                <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full font-medium ${
                   spread.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
                   spread.status === 'generating' ? 'bg-brand/10 text-brand' :
                   spread.status === 'error' ? 'bg-red-100 text-red-600' :
-                  'bg-gray-100 text-gray-500'
+                  'bg-ink/[0.05] text-ink/55'
                 }`}>
                   {spread.status === 'done' ? 'Klar' :
                    spread.status === 'generating' ? 'Genererar' :
@@ -376,7 +369,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                 </span>
               </div>
               {spread.chapter && (
-                <p className="text-xs text-gray-500 mt-1">{spread.chapter}</p>
+                <p className="text-xs text-ink/55 mt-1">{spread.chapter}</p>
               )}
               {spread.status === 'done' && spread.qualityCheck && (
                 <p className={`text-xs mt-1 ${

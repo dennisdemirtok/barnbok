@@ -6,6 +6,7 @@ import type { StyleTestPlan } from '@/lib/claude';
 import { STYLE_PRESETS, getStylePreset } from '@/lib/styles';
 import { saveStyleTest, loadStyleTest, clearStyleTest } from '@/lib/storage';
 import Icon from './Icon';
+import StepHeader from './StepHeader';
 
 interface Props {
   onContinue: (book: BookProject) => void;
@@ -312,24 +313,14 @@ export default function StyleTester({ onContinue, onBack }: Props) {
   const estimatedMinutes = Math.max(1, Math.round((plannedImages / CONCURRENCY) * SECONDS_PER_IMAGE / 60));
 
   const header = (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
-          <Icon name="palette" filled size={16} /> Steg 1 · Stilprovning
-        </span>
-        <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
-          {state.plan ? effectiveTitle : 'Prova stilar på början av din bok'}
-        </h2>
-        <p className="mt-1.5 text-gray-500 max-w-2xl">
-          {state.plan
-            ? 'Varje rad är en stil, varje kolumn en sida. Jämför och välj den väg du vill gå vidare med.'
-            : 'Klistra in en start och ett första kapitel. Vi skapar ett omslag och testbilder för samma sidor i flera stilar – innan du gör hela boken.'}
-        </p>
-      </div>
-      <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
-        <Icon name="arrow_back" size={18} /> Tillbaka
-      </button>
-    </div>
+    <StepHeader
+      eyebrow="Steg 1 av 4 · Stilprovning"
+      title={state.plan ? effectiveTitle : 'Prova stilar på början av din bok'}
+      description={state.plan
+        ? 'Varje rad är en stil och varje kolumn en sida. Jämför och välj den väg boken ska ta.'
+        : 'Klistra in en start och ett första kapitel. Du får ett omslag och testsidor i flera stilar – innan du gör hela boken.'}
+      onBack={onBack}
+    />
   );
 
   if (!loaded) {
@@ -349,12 +340,12 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       <div className="space-y-6">
         {header}
 
-        <div className="grid lg:grid-cols-5 gap-6">
+        <div className="grid lg:grid-cols-5 gap-6 items-start">
           {/* Text */}
-          <div className="lg:col-span-3 card-glass p-5 sm:p-6 space-y-4 hover:!shadow-glow">
+          <div className="lg:col-span-3 card-glass p-5 sm:p-6 space-y-4 hover:!shadow-soft">
             <div>
-              <label className="block text-sm font-heading font-semibold text-gray-700 mb-2">
-                Titel <span className="text-gray-400 font-normal">(valfritt – annars föreslår AI:n en)</span>
+              <label className="block text-sm font-semibold text-ink/80 mb-2">
+                Titel <span className="text-ink/40 font-normal">(valfritt – annars föreslår AI:n en)</span>
               </label>
               <input
                 type="text"
@@ -365,16 +356,16 @@ export default function StyleTester({ onContinue, onBack }: Props) {
               />
             </div>
             <div>
-              <label className="block text-sm font-heading font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-ink/80 mb-2">
                 Början av boken
               </label>
               <textarea
                 value={state.rawText}
                 onChange={e => setState(prev => ({ ...prev, rawText: e.target.value }))}
                 placeholder={'Klistra in prolog och kapitel 1 här...\n\n– Vänta på mig! ropar Otis och kippar efter andan.\n\nHan ligger en bra bit efter sin storasyster...'}
-                className="field h-[26rem] text-sm leading-relaxed resize-y"
+                className="field h-[22rem] lg:h-[30rem] text-sm leading-relaxed resize-y"
               />
-              <p className="text-xs text-gray-400 mt-1.5">
+              <p className="text-xs text-ink/40 mt-1.5">
                 {wordCount > 0
                   ? `${wordCount.toLocaleString('sv-SE')} ord · ${state.rawText.length.toLocaleString('sv-SE')} tecken`
                   : 'Texten används ordagrant – AI:n delar bara upp den i scener och skriver bildbeskrivningar.'}
@@ -384,10 +375,10 @@ export default function StyleTester({ onContinue, onBack }: Props) {
 
           {/* Inställningar */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="card-glass p-5 sm:p-6 space-y-5 hover:!shadow-glow">
+            <div className="card-glass p-5 sm:p-6 space-y-5 hover:!shadow-soft">
               <div>
-                <label className="block text-sm font-heading font-semibold text-gray-700 mb-2">
-                  Antal testsidor <span className="text-gray-400 font-normal">+ omslag</span>
+                <label className="block text-sm font-semibold text-ink/80 mb-2">
+                  Antal testsidor <span className="text-ink/40 font-normal">+ omslag</span>
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {[2, 3, 4, 5].map(n => (
@@ -404,7 +395,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-heading font-semibold text-gray-700">Stilar att jämföra</label>
+                  <label className="text-sm font-semibold text-ink/80">Stilar att jämföra</label>
                   <button
                     onClick={() => setState(prev => ({
                       ...prev,
@@ -412,7 +403,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                         ? DEFAULT_STYLES
                         : STYLE_PRESETS.map(s => s.id),
                     }))}
-                    className="text-xs font-heading font-semibold text-brand/70 hover:text-brand"
+                    className="text-xs font-semibold text-brand/70 hover:text-brand"
                   >
                     {state.selectedStyles.length === STYLE_PRESETS.length ? 'Standardval' : 'Välj alla'}
                   </button>
@@ -426,18 +417,18 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                         onClick={() => toggleStyle(style.id)}
                         className={`flex items-start gap-2.5 p-2.5 rounded-2xl text-left text-sm transition-all ${
                           on
-                            ? 'bg-white ring-2 ring-brand shadow-glow'
-                            : 'bg-white/60 ring-1 ring-gray-200 hover:ring-brand/40'
+                            ? 'bg-white ring-2 ring-ink shadow-soft'
+                            : 'bg-paper/60 ring-1 ring-line hover:ring-ink/25 hover:bg-white'
                         }`}
                       >
                         <span className={`w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
                           {on && <Icon name="check" size={18} />}
                         </span>
                         <span className="min-w-0">
-                          <span className={`block font-heading font-semibold leading-tight ${on ? 'text-gray-800' : 'text-gray-500'}`}>
+                          <span className={`block font-heading font-semibold leading-tight ${on ? 'text-ink' : 'text-ink/70'}`}>
                             {style.label}
                           </span>
-                          <span className="block text-[11px] leading-snug text-gray-500 mt-0.5">
+                          <span className="block text-[11px] leading-snug text-ink/55 mt-0.5">
                             {style.concept} · {style.shape === 'spread' ? 'uppslagsbilder' : 'helsidesbilder'}
                           </span>
                         </span>
@@ -451,14 +442,14 @@ export default function StyleTester({ onContinue, onBack }: Props) {
 
             <div className="glass rounded-4xl p-5 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-br from-brand to-magic flex items-center justify-center text-white shadow-glow">
+                <div className="w-11 h-11 shrink-0 rounded-2xl bg-ink flex items-center justify-center text-white shadow-soft">
                   <Icon name="photo_library" filled size={22} />
                 </div>
                 <div className="text-sm">
-                  <p className="font-heading font-bold text-gray-800">
+                  <p className="font-heading font-semibold text-ink">
                     {plannedImages} testbilder
                   </p>
-                  <p className="text-gray-500">
+                  <p className="text-ink/55">
                     {state.numScenes + 1} sidor × {state.selectedStyles.length} stilar · ca {estimatedMinutes} min
                   </p>
                 </div>
@@ -476,7 +467,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                   : <><Icon name="auto_awesome" filled size={20} /> Skapa testbilder</>}
               </button>
               {planning && (
-                <p className="text-xs text-gray-500 text-center">
+                <p className="text-xs text-ink/55 text-center">
                   Claude delar upp texten i scener och beskriver bildstarka ögonblick. Tar ungefär en minut.
                 </p>
               )}
@@ -503,20 +494,20 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       <div className="glass rounded-4xl p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-white shadow-glow ${
-              doneCount === totalCells ? 'bg-emerald-500' : 'bg-gradient-to-br from-brand to-magic'
+            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-white shadow-soft ${
+              doneCount === totalCells ? 'bg-emerald-500' : 'bg-ink'
             }`}>
               {running
                 ? <span className="spinner !w-6 !h-6" />
                 : <Icon name={doneCount === totalCells ? 'celebration' : 'palette'} filled size={26} />}
             </div>
             <div>
-              <p className="font-heading font-bold text-gray-800">
+              <p className="font-heading font-semibold text-ink">
                 {doneCount === totalCells
                   ? 'Alla testbilder klara – välj en stil!'
-                  : running ? 'Skapar testbilder...' : `${missingCount} bilder återstår`}
+                  : running ? 'Skapar testbilder...' : `${missingCount} ${missingCount === 1 ? 'bild' : 'bilder'} återstår`}
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-ink/55">
                 {doneCount} av {totalCells} bilder
                 {errorCount > 0 && <span className="text-red-500"> · {errorCount} misslyckades</span>}
                 {running && missingCount > 0 && ` · ca ${Math.max(1, Math.round((missingCount / CONCURRENCY) * SECONDS_PER_IMAGE / 60))} min kvar`}
@@ -548,16 +539,16 @@ export default function StyleTester({ onContinue, onBack }: Props) {
           </div>
         </div>
 
-        <div className="bg-gray-200/70 rounded-full h-2.5 overflow-hidden">
+        <div className="bg-ink/10 rounded-full h-2.5 overflow-hidden">
           <div
-            className="bg-gradient-to-r from-trust via-brand to-magic h-full rounded-full transition-all duration-500"
+            className="bg-brand h-full rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
 
         {/* Lägg till/ta bort stilar i efterhand */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-heading font-semibold text-gray-500 mr-1">Stilar:</span>
+          <span className="text-xs font-semibold text-ink/55 mr-1">Stilar:</span>
           {STYLE_PRESETS.map(style => {
             const on = state.selectedStyles.includes(style.id);
             return (
@@ -577,7 +568,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
         {/* Karaktärer */}
         {plan.characters.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-heading font-semibold text-gray-500 mr-1">Karaktärer:</span>
+            <span className="text-xs font-semibold text-ink/55 mr-1">Karaktärer:</span>
             {plan.characters.map(c => (
               <span key={c.name} title={c.appearance} className="magic-chip !text-xs cursor-help">
                 <Icon name={c.role === 'main' ? 'star' : 'person'} filled size={13} />
@@ -592,10 +583,10 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       {showScenes && (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 animate-fade-up">
           {plan.scenes.map((scene, i) => (
-            <div key={i} className="card-glass p-4 hover:!shadow-glow">
-              <p className="text-xs font-heading font-bold text-brand/60 uppercase tracking-wide">Sida {i + 1}</p>
-              <h4 className="font-heading font-bold text-gray-800 mb-2">{scene.label}</h4>
-              <p className="text-sm text-gray-600 whitespace-pre-line max-h-48 overflow-y-auto pr-1">{scene.text}</p>
+            <div key={i} className="card-glass p-4 hover:!shadow-soft">
+              <p className="text-xs font-semibold text-brand/60 uppercase tracking-wide">Sida {i + 1}</p>
+              <h4 className="font-heading font-semibold text-ink mb-2">{scene.label}</h4>
+              <p className="text-sm text-ink/65 whitespace-pre-line max-h-48 overflow-y-auto pr-1">{scene.text}</p>
             </div>
           ))}
         </div>
@@ -603,7 +594,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
 
       {errorCount > 0 && !running && (
         <div className="note-warning">
-          {errorCount} bilder kunde inte skapas. Klicka &quot;Generera saknade&quot; eller försök igen på enskilda bilder.
+          {errorCount} {errorCount === 1 ? 'bild' : 'bilder'} kunde inte skapas. Klicka &quot;Generera saknade&quot; eller försök igen på enskilda bilder.
         </div>
       )}
 
@@ -612,13 +603,13 @@ export default function StyleTester({ onContinue, onBack }: Props) {
         {activeStyles.map(style => {
           const rowDone = pages.filter(p => state.cells[cellKey(p.id, style.id)]?.status === 'done').length;
           return (
-            <div key={style.id} className="card-glass p-4 sm:p-5 hover:!shadow-glow animate-fade-up">
+            <div key={style.id} className="card-glass p-4 sm:p-5 hover:!shadow-soft animate-fade-up">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-3">
-                  <span className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${style.swatch} shadow-glow`} />
+                  <span className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${style.swatch} shadow-soft`} />
                   <div>
-                    <h3 className="font-heading font-bold text-gray-800 leading-tight">{style.label}</h3>
-                    <p className="text-xs text-gray-500">
+                    <h3 className="font-heading font-semibold text-ink leading-tight">{style.label}</h3>
+                    <p className="text-xs text-ink/55">
                       {rowDone} av {pages.length} bilder klara
                       {' · '}{style.concept}
                     </p>
@@ -633,7 +624,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                 </button>
               </div>
 
-              <div className="overflow-x-auto -mx-1 px-1 pb-1">
+              <div className="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-1 pb-1">
                 <div
                   className="grid gap-3"
                   // Omslaget är alltid stående; sidorna följer stilens bildform
@@ -648,7 +639,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                     const cell = state.cells[key];
                     return (
                       <div key={key} className="min-w-0">
-                        <div className={`${page.id !== 'cover' && style.shape === 'spread' ? 'aspect-[3/2]' : 'aspect-[3/4]'} relative rounded-2xl overflow-hidden bg-brand/5 ring-1 ring-brand/10 group`}>
+                        <div className={`${page.id !== 'cover' && style.shape === 'spread' ? 'aspect-[3/2]' : 'aspect-[3/4]'} relative rounded-2xl overflow-hidden bg-paper ring-1 ring-line group`}>
                           {cell?.status === 'done' && cell.image ? (
                             <>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -662,7 +653,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                                 <button
                                   onClick={() => runQueue([key])}
                                   title="Skapa en ny version av bilden"
-                                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 text-brand shadow-glow
+                                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white text-brand shadow-soft
                                              flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
                                   <Icon name="refresh" size={17} />
@@ -672,29 +663,29 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                           ) : cell?.status === 'generating' ? (
                             <div className="skeleton !rounded-none w-full h-full flex flex-col items-center justify-center text-brand">
                               <span className="spinner !w-7 !h-7 relative z-10" />
-                              <span className="text-xs text-gray-500 mt-2 relative z-10">Målar...</span>
+                              <span className="text-xs text-ink/55 mt-2 relative z-10">Målar...</span>
                             </div>
                           ) : cell?.status === 'error' ? (
                             <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center">
                               <Icon name="broken_image" size={26} className="text-red-300" />
-                              <p className="text-[11px] text-gray-500 mt-1 line-clamp-3">{cell.error}</p>
+                              <p className="text-[11px] text-ink/55 mt-1 line-clamp-3">{cell.error}</p>
                               {!running && (
                                 <button
                                   onClick={() => runQueue([key])}
-                                  className="mt-2 px-3 py-1 bg-sunset text-white text-xs rounded-full font-medium hover:opacity-90"
+                                  className="mt-2 px-3 py-1 bg-brand text-white text-xs rounded-full font-medium hover:opacity-90"
                                 >
                                   Försök igen
                                 </button>
                               )}
                             </div>
                           ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                            <div className="w-full h-full flex flex-col items-center justify-center text-ink/40">
                               <Icon name="hourglass_empty" size={24} />
                               <span className="text-xs mt-1">I kö</span>
                             </div>
                           )}
                         </div>
-                        <p className="mt-1.5 text-xs font-heading font-semibold text-gray-600 truncate" title={page.label}>
+                        <p className="mt-1.5 text-xs font-semibold text-ink/65 truncate" title={page.label}>
                           {page.id === 'cover' ? 'Omslag' : page.label}
                         </p>
                       </div>
@@ -711,14 +702,14 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       {confirmStyle && (
         <div className="fixed inset-0 !m-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setConfirmStyle(null)}>
           <div className="glass-strong rounded-4xl w-full max-w-md p-7 animate-pop" onClick={e => e.stopPropagation()}>
-            <span className={`block w-12 h-12 rounded-2xl bg-gradient-to-br ${getStylePreset(confirmStyle)?.swatch} shadow-glow mb-4`} />
-            <h3 className="text-2xl font-heading font-bold text-gray-800 mb-2">
+            <span className={`block w-12 h-12 rounded-2xl bg-gradient-to-br ${getStylePreset(confirmStyle)?.swatch} shadow-soft mb-4`} />
+            <h3 className="text-2xl font-heading font-semibold text-ink mb-2">
               Gå vidare med {getStylePreset(confirmStyle)?.label}?
             </h3>
-            <p className="text-sm text-gray-500 mb-2">
+            <p className="text-sm text-ink/55 mb-2">
               Boken skapas med {plan.characters.length} karaktärer och {pages.length} sidor (omslag + {plan.scenes.length} sidor) från din text.
             </p>
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-ink/55 mb-6">
               Nästa steg är karaktärerna. Sidbilderna skapas sedan om med godkända karaktärsreferenser, så att figurerna ser likadana ut på varje sida. Din stilprovning finns kvar om du vill komma tillbaka.
             </p>
             <div className="flex gap-3">
@@ -736,7 +727,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
         <div className="fixed inset-0 !m-0 bg-black/85 backdrop-blur-sm z-50 flex flex-col animate-pop" onClick={() => setLightboxKey(null)}>
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 text-white" onClick={e => e.stopPropagation()}>
             <div className="min-w-0">
-              <p className="font-heading font-bold truncate">
+              <p className="font-heading font-semibold truncate">
                 {pages.find(p => p.id === lbPageId)?.label} · {getStylePreset(lbStyleId)?.label}
               </p>
               <p className="text-xs text-white/60">Pilar ← → för att bläddra · Esc för att stänga</p>

@@ -75,10 +75,10 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
     <div className="fixed inset-0 !m-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="glass-strong rounded-4xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 glass-strong rounded-t-4xl border-b border-white/60 p-4 flex items-center justify-between z-10">
-          <h3 className="text-lg font-heading font-bold text-gray-800">
+        <div className="sticky top-0 glass-strong rounded-t-4xl border-b border-line p-4 flex items-center justify-between z-10">
+          <h3 className="text-lg font-heading font-semibold text-ink">
             Redigera {spread.pages === 'omslag' ? 'Omslag' : `Sida ${spread.pages}`}
-            {spread.chapter && <span className="text-sm text-gray-500 ml-2">({spread.chapter})</span>}
+            {spread.chapter && <span className="text-sm text-ink/55 ml-2">({spread.chapter})</span>}
           </h3>
           <div className="flex gap-2">
             <button
@@ -89,7 +89,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
             </button>
             <button
               onClick={onClose}
-              className="px-3 py-2 text-gray-400 hover:text-gray-700 transition-colors"
+              className="px-3 py-2 text-ink/40 hover:text-ink/80 transition-colors"
             >
               Stäng
             </button>
@@ -99,7 +99,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
         <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Image */}
           <div>
-            <h4 className="font-heading font-semibold text-gray-700 mb-2">Bild</h4>
+            <h4 className="font-heading font-semibold text-ink/80 mb-2">Bild</h4>
             <div className="bg-white/50 rounded-2xl overflow-hidden mb-4">
               {isRegenerating ? (
                 <div className="flex items-center justify-center h-64">
@@ -108,7 +108,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    <p className="text-gray-500">Regenererar bild...</p>
+                    <p className="text-ink/55">Regenererar bild...</p>
                   </div>
                 </div>
               ) : previewImage ? (
@@ -118,7 +118,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
                   className="w-full object-contain"
                 />
               ) : (
-                <div className="flex items-center justify-center h-64 text-gray-400">
+                <div className="flex items-center justify-center h-64 text-ink/40">
                   Ingen bild
                 </div>
               )}
@@ -126,8 +126,8 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
 
             {/* Quick edit instructions */}
             <div className="space-y-3">
-              <h4 className="font-heading font-semibold text-gray-700">Snabbredigering</h4>
-              <p className="text-xs text-gray-500">
+              <h4 className="font-heading font-semibold text-ink/80">Snabbredigering</h4>
+              <p className="text-xs text-ink/55">
                 Beskriv vad du vill ändra utan att ändra karaktärerna.
                 T.ex. &quot;Gör det mer dramatiskt&quot; eller &quot;Ändra bakgrunden till natt&quot;
               </p>
@@ -157,10 +157,10 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
           <div className="space-y-4">
             {/* Text blocks */}
             <div>
-              <h4 className="font-heading font-semibold text-gray-700 mb-2">Sidtext</h4>
+              <h4 className="font-heading font-semibold text-ink/80 mb-2">Sidtext</h4>
               {editedSpread.textBlocks.map((block, idx) => (
                 <div key={idx} className="mb-3">
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-ink/55 mb-1 block">
                     {block.position}
                   </label>
                   <textarea
@@ -174,7 +174,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
 
             {/* Image prompt */}
             <div>
-              <h4 className="font-heading font-semibold text-gray-700 mb-2">Bildprompt</h4>
+              <h4 className="font-heading font-semibold text-ink/80 mb-2">Bildprompt</h4>
               <textarea
                 value={editedSpread.imagePrompt}
                 onChange={(e) => updateImagePrompt(e.target.value)}

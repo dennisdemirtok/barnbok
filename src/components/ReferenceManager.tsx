@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Icon from './Icon';
 import {
   saveReferenceText,
   getReferenceTexts,
@@ -148,27 +149,27 @@ export default function ReferenceManager({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 !m-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 !m-0 bg-ink/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-3xl shadow-lift max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-pop">
         {/* Header */}
-        <div className="p-5 border-b flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-800">Referensdatabas</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl"
-          >
-            &times;
+        <div className="px-5 py-4 border-b border-line flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-heading font-semibold text-ink">Referensdatabas</h2>
+            <p className="text-xs text-ink/50">Texter, bilder och stilprofiler från riktiga böcker</p>
+          </div>
+          <button onClick={onClose} className="btn-icon" title="Stäng" aria-label="Stäng">
+            <Icon name="close" size={22} />
           </button>
         </div>
 
         {/* Series selector */}
-        <div className="px-5 py-3 border-b bg-gray-50">
-          <label className="text-sm font-medium text-gray-700 mb-1 block">Bokserie:</label>
-          <div className="flex gap-2">
+        <div className="px-5 py-3 border-b border-line bg-paper">
+          <label className="text-xs font-semibold text-ink/60 mb-1.5 block">Bokserie</label>
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
               value={bookSeries}
               onChange={e => setBookSeries(e.target.value)}
-              className="flex-1 px-3 py-2 border rounded-lg text-sm"
+              className="field !px-3 !py-2.5 text-sm sm:flex-1"
             >
               {BOOK_SERIES_OPTIONS.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -179,22 +180,22 @@ export default function ReferenceManager({ onClose }: Props) {
                 value={customSeries}
                 onChange={e => setCustomSeries(e.target.value)}
                 placeholder="Namn på bokserie..."
-                className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                className="field !px-3 !py-2.5 text-sm sm:flex-1"
               />
             )}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b">
+        <div className="flex border-b border-line px-2">
           {(['texts', 'images', 'profiles'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-ink border-b-2 border-ink'
+                  : 'text-ink/50 hover:text-ink/80 border-b-2 border-transparent'
               }`}
             >
               {tab === 'texts' ? `Texter (${savedTexts.length})` :
@@ -207,9 +208,7 @@ export default function ReferenceManager({ onClose }: Props) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
           {message && (
-            <div className={`mb-4 p-2 rounded-lg text-sm text-center ${
-              message.includes('sparad') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-            }`}>
+            <div className={`mb-4 ${message.includes('sparad') ? 'note-success' : 'note-error'}`}>
               {message}
             </div>
           )}
@@ -217,26 +216,26 @@ export default function ReferenceManager({ onClose }: Props) {
           {/* ─── TEXTS TAB ─── */}
           {activeTab === 'texts' && (
             <div className="space-y-4">
-              <div className="p-4 bg-blue-50 rounded-lg space-y-3">
-                <h3 className="font-semibold text-sm text-blue-800">Lägg till referenstext</h3>
+              <div className="p-4 bg-paper border border-line rounded-2xl space-y-3">
+                <h3 className="font-heading font-semibold text-ink">Lägg till referenstext</h3>
                 <input
                   value={bookTitle}
                   onChange={e => setBookTitle(e.target.value)}
                   placeholder="Boktitel (valfritt)"
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  className="field !px-3 !py-2.5 text-sm"
                 />
                 <textarea
                   value={textSample}
                   onChange={e => setTextSample(e.target.value)}
                   placeholder="Klistra in textexempel från boken..."
                   rows={5}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  className="field !px-3 !py-2.5 text-sm"
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <select
                     value={textType}
                     onChange={e => setTextType(e.target.value)}
-                    className="px-3 py-2 border rounded-lg text-sm"
+                    className="field !px-3 !py-2.5 text-sm sm:!w-auto"
                   >
                     <option value="narrative">Berättande</option>
                     <option value="dialogue">Dialog</option>
@@ -248,14 +247,13 @@ export default function ReferenceManager({ onClose }: Props) {
                     value={styleNotes}
                     onChange={e => setStyleNotes(e.target.value)}
                     placeholder="Stilanteckningar (valfritt)"
-                    className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                    className="field !px-3 !py-2.5 text-sm sm:flex-1"
                   />
                 </div>
                 <button
                   onClick={handleSaveText}
                   disabled={saving || !textSample.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm
-                             hover:bg-blue-700 disabled:bg-gray-400"
+                  className="btn-primary !py-2.5 text-sm"
                 >
                   {saving ? 'Sparar...' : 'Spara text'}
                 </button>
@@ -264,16 +262,16 @@ export default function ReferenceManager({ onClose }: Props) {
               {/* Saved texts list */}
               <div className="space-y-2">
                 {savedTexts.map(t => (
-                  <div key={t.id} className="p-3 border rounded-lg text-sm">
+                  <div key={t.id} className="p-3 border border-line rounded-2xl text-sm">
                     <div className="flex justify-between mb-1">
                       <span className="font-medium">{t.book_title || 'Utan titel'}</span>
-                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                      <span className="text-xs text-ink/40 bg-ink/[0.05] px-2 py-0.5 rounded">
                         {t.text_type}
                       </span>
                     </div>
-                    <p className="text-gray-600 text-xs line-clamp-3">{t.text_sample}</p>
+                    <p className="text-ink/65 text-xs line-clamp-3">{t.text_sample}</p>
                     {t.style_notes && (
-                      <p className="text-xs text-blue-600 mt-1">Stil: {t.style_notes}</p>
+                      <p className="text-xs text-ink/50 mt-1">Stil: {t.style_notes}</p>
                     )}
                   </div>
                 ))}
@@ -284,9 +282,9 @@ export default function ReferenceManager({ onClose }: Props) {
           {/* ─── IMAGES TAB ─── */}
           {activeTab === 'images' && (
             <div className="space-y-4">
-              <div className="p-4 bg-purple-50 rounded-lg space-y-3">
-                <h3 className="font-semibold text-sm text-purple-800">Ladda upp referensbild</h3>
-                <p className="text-xs text-purple-600">
+              <div className="p-4 bg-paper border border-line rounded-2xl space-y-3">
+                <h3 className="font-heading font-semibold text-ink">Ladda upp referensbild</h3>
+                <p className="text-xs text-ink/55">
                   Ta skärmbilder från riktiga böcker för att lära systemet stilen.
                 </p>
                 <input
@@ -299,27 +297,26 @@ export default function ReferenceManager({ onClose }: Props) {
                   value={imageDescription}
                   onChange={e => setImageDescription(e.target.value)}
                   placeholder="Beskrivning av bilden..."
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  className="field !px-3 !py-2.5 text-sm"
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     value={imageStyleNotes}
                     onChange={e => setImageStyleNotes(e.target.value)}
                     placeholder="Stilanteckningar..."
-                    className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                    className="field !px-3 !py-2.5 text-sm sm:flex-1"
                   />
                   <input
                     value={layoutType}
                     onChange={e => setLayoutType(e.target.value)}
                     placeholder="Layouttyp..."
-                    className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                    className="field !px-3 !py-2.5 text-sm sm:flex-1"
                   />
                 </div>
                 <button
                   onClick={handleSaveImage}
                   disabled={saving || !imageFile}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm
-                             hover:bg-purple-700 disabled:bg-gray-400"
+                  className="btn-primary !py-2.5 text-sm"
                 >
                   {saving ? 'Laddar upp...' : 'Spara bild'}
                 </button>
@@ -328,16 +325,16 @@ export default function ReferenceManager({ onClose }: Props) {
               {/* Saved images grid */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {savedImages.map(img => (
-                  <div key={img.id} className="border rounded-lg overflow-hidden">
+                  <div key={img.id} className="border border-line rounded-2xl overflow-hidden">
                     <img
                       src={img.image_url}
                       alt={img.description || 'Referensbild'}
                       className="w-full aspect-[4/3] object-cover"
                     />
                     <div className="p-2 text-xs">
-                      <p className="text-gray-700 truncate">{img.description || 'Ingen beskrivning'}</p>
+                      <p className="text-ink/80 truncate">{img.description || 'Ingen beskrivning'}</p>
                       {img.style_notes && (
-                        <p className="text-purple-600 truncate">{img.style_notes}</p>
+                        <p className="text-ink/50 truncate">{img.style_notes}</p>
                       )}
                     </div>
                   </div>
@@ -349,49 +346,48 @@ export default function ReferenceManager({ onClose }: Props) {
           {/* ─── STYLE PROFILE TAB ─── */}
           {activeTab === 'profiles' && (
             <div className="space-y-4">
-              <div className="p-4 bg-green-50 rounded-lg space-y-3">
-                <h3 className="font-semibold text-sm text-green-800">
+              <div className="p-4 bg-paper border border-line rounded-2xl space-y-3">
+                <h3 className="font-heading font-semibold text-ink">
                   Stilprofil för {BOOK_SERIES_OPTIONS.find(o => o.value === bookSeries)?.label || currentSeries}
                 </h3>
-                <p className="text-xs text-green-600">
+                <p className="text-xs text-ink/55">
                   Sammanfatta den typiska stilen för denna bokserie. Används som
                   grund när systemet genererar nya böcker.
                 </p>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Textstil</label>
+                  <label className="text-xs font-medium text-ink/65">Textstil</label>
                   <textarea
                     value={profileTextStyle}
                     onChange={e => setProfileTextStyle(e.target.value)}
                     placeholder="Beskriv textstilen: t.ex. 'Korta meningar, mycket dialog, homoristisk ton, ordlekar...'"
                     rows={3}
-                    className="w-full px-3 py-2 border rounded-lg text-sm mt-1"
+                    className="field !px-3 !py-2.5 text-sm mt-1"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Bildstil</label>
+                  <label className="text-xs font-medium text-ink/65">Bildstil</label>
                   <textarea
                     value={profileImageStyle}
                     onChange={e => setProfileImageStyle(e.target.value)}
                     placeholder="Beskriv bildstilen: t.ex. 'Comic/manga-stil, starka konturer, livfulla färger, pratbubblor...'"
                     rows={3}
-                    className="w-full px-3 py-2 border rounded-lg text-sm mt-1"
+                    className="field !px-3 !py-2.5 text-sm mt-1"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Övrigt</label>
+                  <label className="text-xs font-medium text-ink/65">Övrigt</label>
                   <textarea
                     value={profileNotes}
                     onChange={e => setProfileNotes(e.target.value)}
                     placeholder="Andra anteckningar om serien..."
                     rows={2}
-                    className="w-full px-3 py-2 border rounded-lg text-sm mt-1"
+                    className="field !px-3 !py-2.5 text-sm mt-1"
                   />
                 </div>
                 <button
                   onClick={handleSaveProfile}
                   disabled={saving}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm
-                             hover:bg-green-700 disabled:bg-gray-400"
+                  className="btn-primary !py-2.5 text-sm"
                 >
                   {saving ? 'Sparar...' : 'Spara stilprofil'}
                 </button>

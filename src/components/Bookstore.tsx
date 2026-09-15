@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookProject, Spread } from '@/lib/types';
+import { BookProject } from '@/lib/types';
 import { listPublicBooks, loadPublicBook, PublicBookSummary } from '@/lib/supabase-db';
+import BookReader from './BookReader';
 import Icon from './Icon';
+import StepHeader from './StepHeader';
 
 interface Props {
   onBack: () => void;
@@ -12,19 +14,24 @@ interface Props {
 }
 
 const FORMAT_LABEL: Record<string, string> = {
-  'bildbok-text-pa-bild': 'Bildbok',
-  'bildbok-separat-text': 'Bildbok',
+  'bildbok-text-pa-bild': 'Serieformat',
+  'bildbok-separat-text': 'Bilderbok',
   'kapitelbok': 'Kapitelbok',
   'larobok': 'Lärobok',
 };
+
+type SortKey = 'nyast' | 'titel';
 
 export default function Bookstore({ onBack, initialBookId }: Props) {
   const [books, setBooks] = useState<PublicBookSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [format, setFormat] = useState<string>('alla');
+  const [sort, setSort] = useState<SortKey>('nyast');
   const [reading, setReading] = useState<BookProject | null>(null);
-  const [loadingRead, setLoadingRead] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [openError, setOpenError] = useState('');
 
   useEffect(() => {
     listPublicBooks()
@@ -33,23 +40,24 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Öppna delad bok direkt när sidan laddas via en delningslänk
   useEffect(() => {
     if (initialBookId) openBook(initialBookId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialBookId]);
 
   const openBook = async (id: string) => {
-    setLoadingRead(true);
+    setOpeningId(id);
+    setOpenError('');
     try {
       const book = await loadPublicBook(id);
-      if (book) {
-        setReading(book);
-        // Visa delningslänken i adressfältet så den kan kopieras direkt
-        window.history.replaceState(null, '', `${window.location.pathname}?bok=${id}`);
-      }
+      if (!book) throw new Error('Boken kunde inte hittas. Den kan ha tagits bort eller avpublicerats.');
+      setReading(book);
+      window.history.replaceState(null, '', `${window.location.pathname}?bok=${id}`);
+      window.scrollTo({ top: 0 });
+    } catch (err) {
+      setOpenError(err instanceof Error ? err.message : 'Kunde inte öppna boken');
     } finally {
-      setLoadingRead(false);
+      setOpeningId(null);
     }
   };
 
@@ -65,148 +73,151 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
         await navigator.share({ title, url });
         return;
       } catch {
-        // Användaren avbröt delningen - fall tillbaka på kopiering
+        // Avbruten delning - kopiera i stället
       }
     }
     try {
       await navigator.clipboard.writeText(url);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2500);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     } catch {
       window.prompt('Kopiera länken:', url);
     }
   };
 
-  const filtered = books.filter(b =>
-    !query ||
-    b.title.toLowerCase().includes(query.toLowerCase()) ||
-    (b.authorName || '').toLowerCase().includes(query.toLowerCase())
-  );
-
   // ── Läsare ──
   if (reading) {
-    const spreads = (reading.spreads as (Spread & { imageUrl?: string })[])
-      .filter(s => s.imageUrl);
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-heading font-bold text-gray-800">{reading.title}</h2>
-            <p className="text-sm text-gray-500">{spreads.length} uppslag</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => shareBook(reading.id, reading.title)}
-              className="btn-primary"
-            >
-              <Icon name={copiedId === reading.id ? 'check' : 'share'} size={18} />
-              {copiedId === reading.id ? 'Länk kopierad!' : 'Dela boken'}
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div className="min-w-0">
+            <button onClick={closeReader} className="inline-flex items-center gap-1 -ml-1 px-1 text-sm font-medium text-ink/55 hover:text-ink transition-colors">
+              <Icon name="arrow_back" size={18} /> Bokhandeln
             </button>
-            <button onClick={closeReader} className="btn-ghost">← Tillbaka till bokhandeln</button>
+            <h2 className="mt-2 text-3xl sm:text-4xl font-heading font-semibold text-ink truncate">{reading.title}</h2>
+            {reading.author && <p className="mt-1 text-ink/55">av {reading.author}</p>}
           </div>
+          <button onClick={() => shareBook(reading.id, reading.title)} className="btn-primary shrink-0">
+            <Icon name={copied ? 'check' : 'ios_share'} size={19} />
+            {copied ? 'Länken är kopierad' : 'Dela boken'}
+          </button>
         </div>
-        <div className="space-y-6 max-w-3xl mx-auto">
-          {spreads.map((s) => (
-            <div key={s.id} className="card-glass overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={s.imageUrl} alt={`Uppslag ${s.pages}`} className="w-full h-auto" />
-            </div>
-          ))}
-          {spreads.length === 0 && (
-            <p className="text-center text-gray-400 py-10">Den här boken har inga bilder att visa.</p>
-          )}
+        <div className="card-glass hover:!shadow-soft px-2 py-4 sm:p-8 -mx-2 sm:mx-0">
+          <BookReader book={reading} />
         </div>
       </div>
     );
   }
 
+  const formats = Array.from(new Set(books.map(b => b.bookFormat).filter(Boolean))) as string[];
+  const filtered = books
+    .filter(b =>
+      (format === 'alla' || b.bookFormat === format) &&
+      (!query ||
+        b.title.toLowerCase().includes(query.toLowerCase()) ||
+        (b.authorName || '').toLowerCase().includes(query.toLowerCase()))
+    )
+    .sort((a, b) => sort === 'titel'
+      ? a.title.localeCompare(b.title, 'sv')
+      : new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
+
   return (
     <div className="space-y-8">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-4xl px-6 sm:px-12 py-10 text-white
-                          bg-gradient-to-br from-trust via-brand to-magic shadow-glow-lg">
-        <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/15 blur-3xl" />
-        <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold">Bokhandeln</h1>
-            <p className="mt-2 text-white/85 text-lg">Upptäck och läs böcker som andra har skapat – helt gratis.</p>
-          </div>
-          <button onClick={onBack} className="px-5 py-2.5 rounded-full bg-white/15 backdrop-blur
-                     ring-1 ring-white/30 font-heading font-semibold hover:bg-white/25 transition-colors">
-            ← Till mitt bibliotek
-          </button>
-        </div>
-      </section>
+      <StepHeader
+        eyebrow="Bokhandeln"
+        title="Böcker från skaparna"
+        description="Läs gratis, bläddra som i en riktig bok och dela med en länk."
+        onBack={onBack}
+        backLabel="Mina böcker"
+        actions={!loading && <span className="text-sm text-ink/45">{books.length} {books.length === 1 ? 'bok' : 'böcker'}</span>}
+      />
 
-      {/* Sök */}
-      <div className="max-w-md">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Sök på titel eller skapare..."
-          className="field"
-        />
+      {/* Sök och filter */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Icon name="search" size={20} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink/40" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Sök titel eller skapare"
+            className="field !pl-11"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+          {['alla', ...formats].map(f => (
+            <button key={f} onClick={() => setFormat(f)} className={`${format === f ? 'chip-on' : 'chip'} shrink-0`}>
+              {f === 'alla' ? 'Alla' : FORMAT_LABEL[f] || f}
+            </button>
+          ))}
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value as SortKey)}
+            className="chip shrink-0 !pr-3 cursor-pointer"
+            aria-label="Sortera"
+          >
+            <option value="nyast">Nyast</option>
+            <option value="titel">Titel A–Ö</option>
+          </select>
+        </div>
       </div>
 
+      {openError && <div className="note-error">{openError}</div>}
+
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[0, 1, 2].map(i => <div key={i} className="skeleton h-64 rounded-4xl" />)}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
+          {[0, 1, 2, 3, 4].map(i => <div key={i} className="skeleton aspect-[3/4] rounded-2xl" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 glass rounded-4xl border-dashed border-2 border-brand/20">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center">
-            <Icon name="storefront" filled size={32} className="text-brand" />
-          </div>
-          <h3 className="text-lg font-heading font-semibold text-gray-700 mb-1">
-            {books.length === 0 ? 'Inga publicerade böcker än' : 'Inga träffar'}
+        <div className="rounded-3xl border border-dashed border-ink/20 bg-white/60 px-6 py-14 text-center">
+          <Icon name="storefront" size={32} className="text-ink/30" />
+          <h3 className="mt-3 text-xl font-heading font-semibold text-ink">
+            {books.length === 0 ? 'Inga böcker ännu' : 'Inga träffar'}
           </h3>
-          <p className="text-gray-400">
-            {books.length === 0 ? 'Bli först att publicera en bok från granska-steget!' : 'Prova en annan sökning.'}
+          <p className="mt-1 text-ink/55">
+            {books.length === 0 ? 'Böcker som sparas i molnet dyker upp här.' : 'Prova en annan sökning eller ett annat filter.'}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((b) => (
-            <div
-              key={b.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => !loadingRead && openBook(b.id)}
-              onKeyDown={(e) => e.key === 'Enter' && !loadingRead && openBook(b.id)}
-              className={`card-glass overflow-hidden text-left hover:-translate-y-1 group cursor-pointer ${
-                loadingRead ? 'opacity-60 pointer-events-none' : ''
-              }`}
-            >
-              <div className="aspect-[3/2] bg-brand/5 relative overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-5 gap-y-8">
+          {filtered.map(b => (
+            <div key={b.id} className="group">
+              <button
+                onClick={() => openBook(b.id)}
+                disabled={!!openingId}
+                className="relative block w-full aspect-[3/4] rounded-2xl overflow-hidden bg-white border border-line shadow-soft
+                           group-hover:shadow-lift group-hover:-translate-y-1 transition-all duration-200"
+                title={`Läs ${b.title}`}
+              >
                 {b.coverUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={b.coverUrl} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
-                  <div className="flex items-center justify-center h-full text-brand/30">
-                    <Icon name="menu_book" size={48} />
+                  <div className="absolute inset-0 flex flex-col justify-between p-4 bg-gradient-to-b from-paper to-white text-left">
+                    <Icon name="auto_stories" size={26} className="text-ink/25" />
+                    <span className="font-heading text-lg font-semibold text-ink/80 leading-tight line-clamp-4 break-words hyphens-auto">{b.title}</span>
                   </div>
                 )}
-                <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-white/90 backdrop-blur text-xs font-bold text-brand shadow-glow">
-                  {FORMAT_LABEL[b.bookFormat || ''] || 'Bok'}
-                </span>
-              </div>
-              <div className="p-4 flex items-start justify-between gap-2">
+                <span className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-black/15 to-transparent" />
+                {openingId === b.id && (
+                  <span className="absolute inset-0 bg-white/70 flex items-center justify-center text-ink">
+                    <span className="spinner !w-7 !h-7" />
+                  </span>
+                )}
+              </button>
+              <div className="mt-3 flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="font-heading font-bold text-gray-800 group-hover:text-brand transition-colors">{b.title}</h3>
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    {b.authorName ? `av ${b.authorName}` : 'Anonym skapare'} · {b.numSpreads} uppslag
+                  <h3 className="font-heading font-semibold text-ink leading-snug truncate" title={b.title}>{b.title}</h3>
+                  <p className="text-xs text-ink/50 mt-0.5 truncate">
+                    {b.authorName ? `${b.authorName} · ` : ''}{FORMAT_LABEL[b.bookFormat || ''] || 'Bok'}
                   </p>
                 </div>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    shareBook(b.id, b.title);
-                  }}
-                  title={copiedId === b.id ? 'Länk kopierad!' : 'Dela boken - kopiera länk'}
-                  className="shrink-0 p-2 rounded-full text-brand/60 hover:text-brand hover:bg-brand/10 transition-colors"
+                  onClick={() => shareBook(b.id, b.title)}
+                  title="Dela boken"
+                  className="btn-icon !w-8 !h-8 shrink-0 -mr-1.5"
                 >
-                  <Icon name={copiedId === b.id ? 'check' : 'share'} size={18} />
+                  <Icon name="ios_share" size={17} />
                 </button>
               </div>
             </div>

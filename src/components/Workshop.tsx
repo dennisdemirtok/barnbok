@@ -43,7 +43,7 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!selected || !draft) {
-    return <p className="text-center text-gray-400 py-10">Inga uppslag att redigera.</p>;
+    return <p className="text-center text-ink/40 py-10">Inga uppslag att redigera.</p>;
   }
 
   const doneCount = book.spreads.filter(s => s.generatedImage).length;
@@ -102,15 +102,15 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
   return (
     <div className="space-y-5">
       {/* Uppslags-flikar */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
         {book.spreads.map((s) => (
           <button
             key={s.id}
             onClick={() => setSelectedId(s.id)}
-            className={`shrink-0 px-4 py-2 rounded-full text-sm font-heading font-semibold transition-all ${
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
               s.id === selectedId
-                ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                : 'glass text-gray-600 hover:text-brand'
+                ? 'bg-ink text-white shadow-soft'
+                : 'glass text-ink/65 hover:text-brand'
             }`}
           >
             {spreadLabel(s)}
@@ -119,36 +119,36 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
         {/* Vänster: text + AI-förslag */}
         <div className="glass rounded-4xl p-5 space-y-4">
           <div>
-            <h3 className="font-heading font-bold text-lg text-gray-800">{spreadLabel(selected)}</h3>
-            {selected.chapter && <p className="text-sm text-gray-500">{selected.chapter}</p>}
+            <h3 className="font-heading font-semibold text-lg text-ink">{spreadLabel(selected)}</h3>
+            {selected.chapter && <p className="text-sm text-ink/55">{selected.chapter}</p>}
           </div>
 
           <div className="space-y-3">
-            <h4 className="font-heading font-semibold text-gray-700 text-sm">Text</h4>
+            <h4 className=" font-semibold text-ink/80 text-sm">Text</h4>
             {draft.textBlocks.length === 0 && (
-              <p className="text-sm text-gray-400 italic">Det här uppslaget har ingen text.</p>
+              <p className="text-sm text-ink/40 italic">Det här uppslaget har ingen text.</p>
             )}
             {draft.textBlocks.map((block, idx) => (
               <textarea
                 key={idx}
                 value={block.text}
                 onChange={(e) => updateText(idx, e.target.value)}
-                className="field h-24 text-sm resize-y"
+                className="field h-40 text-sm leading-relaxed resize-y"
               />
             ))}
           </div>
 
           <div className="space-y-2">
-            <h4 className="font-heading font-semibold text-gray-700 text-sm flex items-center gap-1.5">
-              <Icon name="auto_awesome" filled size={18} className="text-magic" /> AI-förslag
+            <h4 className=" font-semibold text-ink/80 text-sm flex items-center gap-1.5">
+              <Icon name="auto_awesome" filled size={18} className="text-brand" /> AI-förslag
             </h4>
             <div className="flex flex-wrap gap-2">
               {AI_SUGGESTIONS.map((s) => (
-                <button key={s} onClick={() => addSuggestion(s)} className="magic-chip hover:ring-brand/40 transition-all">
+                <button key={s} onClick={() => addSuggestion(s)} className="magic-chip hover:ring-ink/20 transition-all">
                   {s}
                 </button>
               ))}
@@ -169,36 +169,33 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
           </div>
 
           {flash && <p className="text-sm text-emerald-600 font-medium">{flash}</p>}
-          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">{error}</div>}
+          {error && <div className="note-error">{error}</div>}
         </div>
 
         {/* Höger: stor bild + förlopp */}
-        <div className="glass rounded-4xl p-5 flex flex-col">
-          <div className="flex-1 rounded-2xl overflow-hidden bg-white/40 flex items-center justify-center min-h-[300px]">
+        <div className="glass rounded-4xl p-3 sm:p-5 flex flex-col order-first lg:order-last lg:sticky lg:top-24">
+          <div className="flex-1 rounded-2xl overflow-hidden bg-paper flex items-center justify-center min-h-[240px]">
             {regenerating ? (
               <div className="text-center">
-                <svg className="animate-spin h-10 w-10 text-brand mx-auto mb-3" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                <p className="text-gray-500">Genererar &amp; kvalitetskontrollerar...</p>
+                <span className="spinner !w-9 !h-9 text-brand mb-3" />
+                <p className="text-ink/55">Genererar &amp; kvalitetskontrollerar...</p>
               </div>
             ) : draft.generatedImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={`data:image/png;base64,${draft.generatedImage}`} alt={spreadLabel(selected)} className="w-full h-auto" />
             ) : (
-              <p className="text-gray-400">Ingen bild än – tryck "Regenerera bild"</p>
+              <p className="text-ink/40 text-center px-4">Ingen bild än – tryck &quot;Regenerera bild&quot;</p>
             )}
           </div>
 
           {/* Bokförlopp */}
           <div className="mt-4">
-            <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <div className="flex justify-between text-xs text-ink/55 mb-1">
               <span className="font-heading font-semibold">Bokförlopp</span>
               <span>{doneCount} / {book.spreads.length} bilder · {progress}%</span>
             </div>
             <div className="h-2.5 rounded-full bg-brand/10 overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-trust via-brand to-magic transition-all duration-500"
+              <div className="h-full rounded-full bg-brand transition-all duration-500"
                    style={{ width: `${progress}%` }} />
             </div>
           </div>

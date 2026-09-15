@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { SavedText, BookFormat } from '@/lib/types';
 import { listSavedTexts, deleteSavedText } from '@/lib/storage';
+import Icon from './Icon';
+import StepHeader from './StepHeader';
 
 const FORMAT_LABELS: Record<BookFormat, string> = {
   'bildbok-text-pa-bild': 'Text på bild',
@@ -50,29 +52,21 @@ export default function SavedTextPicker({ onTextSelected, onBack }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="text-gray-500">Laddar sparade texter...</div>
+        <div className="text-ink/55 inline-flex items-center gap-2"><span className="spinner" /> Laddar sparade texter...</div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Sparade texter</h2>
-          <p className="text-gray-600">
-            {texts.length > 0
-              ? `Du har ${texts.length} sparad${texts.length > 1 ? 'e' : ''} text${texts.length > 1 ? 'er' : ''}.`
-              : 'Inga sparade texter än. Skapa en bok och spara texten för att börja.'}
-          </p>
-        </div>
-        <button
-          onClick={onBack}
-          className="px-4 py-2 text-gray-500 hover:text-gray-700"
-        >
-          Tillbaka
-        </button>
-      </div>
+      <StepHeader
+        eyebrow="Steg 1 av 4 · Sparade texter"
+        title="Välj en sparad text"
+        description={texts.length > 0
+          ? `Du har ${texts.length} sparad${texts.length > 1 ? 'e' : ''} text${texts.length > 1 ? 'er' : ''}. Välj en för att skapa en ny bok av den.`
+          : undefined}
+        onBack={onBack}
+      />
 
       {texts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -80,36 +74,35 @@ export default function SavedTextPicker({ onTextSelected, onBack }: Props) {
             <div
               key={text.id}
               onClick={() => onTextSelected(text)}
-              className="border-2 border-gray-200 rounded-xl p-4 hover:border-green-400
-                         hover:shadow-lg transition-all cursor-pointer group"
+              className="card-glass p-5 hover:-translate-y-0.5 cursor-pointer group"
             >
               <div className="flex items-start justify-between mb-2">
-                <h3 className="font-bold text-gray-800 group-hover:text-green-600 transition-colors">
+                <h3 className="font-heading font-semibold text-ink leading-snug">
                   {text.title}
                 </h3>
                 {text.bookFormat && (
-                  <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full shrink-0 ml-2">
+                  <span className="magic-chip shrink-0 ml-2">
                     {FORMAT_LABELS[text.bookFormat] || text.bookFormat}
                   </span>
                 )}
               </div>
 
-              <div className="flex gap-3 text-xs text-gray-400 mb-3">
+              <div className="flex gap-3 text-xs text-ink/40 mb-3">
                 <span>{text.characterCount} karaktärer</span>
                 <span>{text.spreadCount} uppslag</span>
               </div>
 
-              <p className="text-xs text-gray-500 line-clamp-2 mb-3">
+              <p className="text-xs text-ink/55 line-clamp-2 mb-3">
                 {text.rawText.substring(0, 150)}...
               </p>
 
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-ink/40">
                   {new Date(text.savedAt).toLocaleDateString('sv-SE')}
                 </span>
                 <button
                   onClick={(e) => handleDelete(e, text.id, text.title)}
-                  className="text-xs text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="text-xs font-medium text-red-500 hover:text-red-700 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                 >
                   Ta bort
                 </button>
@@ -118,10 +111,10 @@ export default function SavedTextPicker({ onTextSelected, onBack }: Props) {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 bg-gray-50 rounded-xl">
-          <div className="text-5xl mb-4">📝</div>
-          <h3 className="text-lg font-semibold text-gray-500 mb-2">Inga sparade texter</h3>
-          <p className="text-gray-400">
+        <div className="rounded-3xl border border-dashed border-ink/20 bg-white/60 px-6 py-14 text-center">
+          <Icon name="description" size={32} className="text-ink/30" />
+          <h3 className="mt-3 text-xl font-heading font-semibold text-ink">Inga sparade texter</h3>
+          <p className="mt-1 text-ink/55 max-w-sm mx-auto">
             När du skapar eller importerar en bok kan du spara texten för att återanvända den.
           </p>
         </div>

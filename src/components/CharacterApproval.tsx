@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Character, SavedCharacter } from '@/lib/types';
 import Icon from './Icon';
+import StepHeader from './StepHeader';
 import { saveCharacter, listSavedCharacters, deleteSavedCharacter } from '@/lib/storage';
 
 interface Props {
@@ -248,43 +249,33 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
-            <Icon name="counter_2" filled size={16} /> Steg 2
-          </span>
-          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
-            Väck dina karaktärer till liv
-          </h2>
-          <p className="mt-1.5 text-gray-500 max-w-2xl">
-            Finjustera detaljer, generera konsekventa referensbilder och godkänn varje karaktär innan boken illustreras.
-          </p>
-        </div>
-        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
-          <Icon name="arrow_back" size={18} /> Tillbaka
-        </button>
-      </div>
+      <StepHeader
+        eyebrow="Steg 2 av 4 · Karaktärer"
+        title="Väck dina karaktärer till liv"
+        description="Skapa en referensbild per karaktär och godkänn dem. Referenserna håller figurerna likadana på varje sida i boken."
+        onBack={onBack}
+      />
 
       {/* Progress summary */}
       <div className="glass rounded-3xl p-4 flex items-center gap-4">
         <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
-          allApproved ? 'bg-emerald-500 text-white shadow-glow' : 'bg-brand/10 text-brand'
+          allApproved ? 'bg-emerald-500 text-white shadow-soft' : 'bg-brand/10 text-brand'
         }`}>
           <Icon name={allApproved ? 'verified' : 'groups'} filled size={26} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-sm font-heading font-semibold text-gray-700">
+            <p className="text-sm font-semibold text-ink/80">
               {allApproved
                 ? 'Alla karaktärer godkända – redo att generera sidor!'
                 : `${approvedCount} av ${chars.length} karaktärer godkända`}
             </p>
-            <span className="text-xs font-heading font-bold text-brand">{approvalPct}%</span>
+            <span className="text-xs font-semibold text-brand">{approvalPct}%</span>
           </div>
-          <div className="h-2 rounded-full bg-gray-200/80 overflow-hidden">
+          <div className="h-2 rounded-full bg-ink/10 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
-                allApproved ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-brand to-magic'
+                allApproved ? 'bg-emerald-600' : 'bg-ink'
               }`}
               style={{ width: `${approvalPct}%` }}
             />
@@ -302,7 +293,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
           {isGenerating ? (
             <>
               <span className="spinner !w-4 !h-4" />
-              {`Genererar ${generatingIds.size} bilder... (~30 sek/bild)`}
+              {`Genererar ${generatingIds.size} ${generatingIds.size === 1 ? 'bild' : 'bilder'}... (~30 sek/bild)`}
             </>
           ) : (
             <><Icon name="auto_fix_high" filled size={20} /> Generera alla karaktärer</>
@@ -311,7 +302,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         {isGenerating && (
           <button
             onClick={stopGeneration}
-            className="inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-full bg-red-600 text-white font-heading font-bold shadow-glow hover:bg-red-700 hover:-translate-y-0.5 transition-all"
+            className="inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-full bg-red-600 text-white font-semibold shadow-soft hover:bg-red-700 hover:-translate-y-0.5 transition-all"
           >
             <Icon name="stop_circle" filled size={20} /> Stoppa
           </button>
@@ -338,7 +329,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
       {showRegistry && (
         <div className="glass rounded-4xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-heading font-bold brand-text text-lg">Sparade karaktärer</h3>
+            <h3 className="font-heading font-semibold brand-text text-lg">Sparade karaktärer</h3>
             <button
               onClick={() => setShowRegistry(false)}
               className="text-brand/60 hover:text-brand text-sm font-semibold transition-colors"
@@ -356,7 +347,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
               {savedChars.map(saved => (
                 <div key={saved.id} className="card-glass rounded-2xl overflow-hidden">
                   {/* Thumbnail */}
-                  <div className="bg-brand/5 h-32 flex items-center justify-center">
+                  <div className="bg-paper h-32 flex items-center justify-center">
                     {saved.referenceImage ? (
                       <img
                         src={`data:image/png;base64,${saved.referenceImage}`}
@@ -364,34 +355,34 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                         className="w-full h-full object-contain"
                       />
                     ) : (
-                      <span className="text-gray-400 text-sm">Ingen bild</span>
+                      <span className="text-ink/40 text-sm">Ingen bild</span>
                     )}
                   </div>
                   <div className="p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <h4 className="font-heading font-bold text-gray-800 text-sm">
+                      <h4 className=" font-semibold text-ink text-sm">
                         {saved.name}
                         {saved.heroName && (
-                          <span className="text-magic ml-1 font-normal">({saved.heroName})</span>
+                          <span className="text-brand ml-1 font-normal">({saved.heroName})</span>
                         )}
                       </h4>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        saved.role === 'main' ? 'bg-brand/10 text-brand ring-1 ring-brand/15' :
+                        saved.role === 'main' ? 'bg-brand/10 text-brand ring-1 ring-line' :
                         saved.role === 'villain' ? 'bg-red-100 text-red-700' :
-                        'bg-magic/10 text-magic ring-1 ring-magic/15'
+                        'bg-magic/10 text-brand ring-1 ring-magic/15'
                       }`}>
                         {saved.role === 'main' ? 'Huvud' : saved.role === 'villain' ? 'Skurk' : 'Bi'}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 line-clamp-2 mb-2">{saved.appearance}</p>
+                    <p className="text-xs text-ink/55 line-clamp-2 mb-2">{saved.appearance}</p>
                     {saved.fromBookTitle && (
-                      <p className="text-xs text-gray-400 mb-2">Från: {saved.fromBookTitle}</p>
+                      <p className="text-xs text-ink/40 mb-2">Från: {saved.fromBookTitle}</p>
                     )}
                     <div className="flex gap-1">
                       <button
                         onClick={() => handleImportFromRegistry(saved)}
-                        className="flex-1 px-3 py-1.5 bg-gradient-to-r from-brand to-magic text-white text-xs rounded-full
-                                   shadow-glow hover:shadow-glow-lg transition-all font-heading font-bold"
+                        className="flex-1 px-3 py-1.5 bg-ink text-white text-xs rounded-full
+                                   shadow-soft hover:shadow-lift transition-all font-semibold"
                       >
                         Använd i boken
                       </button>
@@ -425,7 +416,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
               key={char.id}
               className={`card-glass overflow-hidden ${
                 char.approved
-                  ? 'ring-2 ring-emerald-400/70 shadow-glow-lg'
+                  ? 'ring-2 ring-emerald-400/70 shadow-lift'
                   : ''
               }`}
             >
@@ -440,14 +431,14 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                             type="text"
                             value={char.name}
                             onChange={(e) => updateCharField(char.id, 'name', e.target.value)}
-                            className="field flex-1 py-2 text-lg font-heading font-bold"
+                            className="field flex-1 py-2 text-lg font-heading font-semibold"
                             placeholder="Namn"
                           />
                           <input
                             type="text"
                             value={char.heroName || ''}
                             onChange={(e) => updateCharField(char.id, 'heroName', e.target.value)}
-                            className="field w-32 py-2 text-sm text-magic"
+                            className="field w-32 py-2 text-sm text-brand"
                             placeholder="Hjältenamn"
                           />
                         </div>
@@ -472,20 +463,20 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                       </div>
                     ) : (
                       <>
-                        <h3 className="text-lg font-heading font-bold text-gray-800">
+                        <h3 className="text-lg font-heading font-semibold text-ink">
                           {char.name}
                           {char.heroName && (
-                            <span className="text-magic ml-2">({char.heroName})</span>
+                            <span className="text-brand ml-2">({char.heroName})</span>
                           )}
                         </h3>
                         <div className="flex items-center gap-2">
                           {char.age && (
-                            <span className="text-sm text-gray-500">{char.age}</span>
+                            <span className="text-sm text-ink/55">{char.age}</span>
                           )}
                           <span className={`text-xs px-3 py-1 rounded-full font-medium ${
-                            char.role === 'main' ? 'bg-brand/10 text-brand ring-1 ring-brand/15' :
+                            char.role === 'main' ? 'bg-brand/10 text-brand ring-1 ring-line' :
                             char.role === 'villain' ? 'bg-red-100 text-red-700' :
-                            'bg-magic/10 text-magic ring-1 ring-magic/15'
+                            'bg-magic/10 text-brand ring-1 ring-magic/15'
                           }`}>
                             {char.role === 'main' ? 'Huvudkaraktär' :
                              char.role === 'villain' ? 'Skurk' : 'Bikaraktär'}
@@ -496,10 +487,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   </div>
                   <button
                     onClick={() => setEditingId(isEditing ? null : char.id)}
-                    className={`px-4 py-1.5 text-xs rounded-full font-heading font-semibold transition-all ${
+                    className={`px-4 py-1.5 text-xs rounded-full font-semibold transition-all ${
                       isEditing
-                        ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                        : 'text-brand border border-brand/30 bg-white/60 hover:bg-white hover:border-brand/50'
+                        ? 'bg-ink text-white shadow-soft'
+                        : 'text-ink border border-line bg-white hover:border-ink/30'
                     }`}
                   >
                     {isEditing ? 'Klar' : 'Redigera'}
@@ -512,7 +503,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                 {isEditing ? (
                   <div className="space-y-2">
                     <div>
-                      <label className="text-xs text-brand/70 font-heading font-semibold">Utseende</label>
+                      <label className="text-xs text-brand/70 font-semibold">Utseende</label>
                       <textarea
                         value={char.appearance}
                         onChange={(e) => updateCharField(char.id, 'appearance', e.target.value)}
@@ -520,7 +511,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-brand/70 font-heading font-semibold">Vanliga kläder</label>
+                      <label className="text-xs text-brand/70 font-semibold">Vanliga kläder</label>
                       <input
                         type="text"
                         value={char.normalClothes || ''}
@@ -530,7 +521,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-brand/70 font-heading font-semibold">Superhjältedräkt</label>
+                      <label className="text-xs text-brand/70 font-semibold">Superhjältedräkt</label>
                       <input
                         type="text"
                         value={char.heroCostume || ''}
@@ -540,7 +531,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-brand/70 font-heading font-semibold">Personlighet</label>
+                      <label className="text-xs text-brand/70 font-semibold">Personlighet</label>
                       <input
                         type="text"
                         value={char.personality || ''}
@@ -550,7 +541,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-brand/70 font-heading font-semibold">Kraft/förmåga</label>
+                      <label className="text-xs text-brand/70 font-semibold">Kraft/förmåga</label>
                       <input
                         type="text"
                         value={char.power || ''}
@@ -562,7 +553,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   </div>
                 ) : (
                   <>
-                    <p className="text-sm text-gray-600 line-clamp-3">
+                    <p className="text-sm text-ink/65 line-clamp-3">
                       {char.appearance}
                     </p>
                     {(char.personality || char.power) && (
@@ -576,12 +567,12 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
               </div>
 
               {/* Character image */}
-              <div className="mx-4 mb-3 bg-brand/5 rounded-2xl overflow-hidden" style={{ minHeight: '200px' }}>
+              <div className="mx-4 mb-3 bg-paper rounded-2xl overflow-hidden" style={{ minHeight: '200px' }}>
                 {generatingIds.has(char.id) ? (
                   <div className="flex items-center justify-center h-48">
                     <div className="text-center text-brand">
                       <span className="spinner !w-8 !h-8 mb-2" />
-                      <p className="text-sm text-gray-500">Genererar...</p>
+                      <p className="text-sm text-ink/55">Genererar...</p>
                     </div>
                   </div>
                 ) : char.referenceImage ? (
@@ -591,7 +582,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                     className="w-full object-contain max-h-80"
                   />
                 ) : (
-                  <div className="flex items-center justify-center h-48 text-gray-400">
+                  <div className="flex items-center justify-center h-48 text-ink/40">
                     Ingen bild genererad än
                   </div>
                 )}
@@ -611,10 +602,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                 {/* Map from saved character button */}
                 <button
                   onClick={() => setMappingCharId(mappingCharId === char.id ? null : char.id)}
-                  className={`px-4 py-2 text-sm rounded-full transition-all flex items-center gap-1.5 font-heading font-semibold ${
+                  className={`px-4 py-2 text-sm rounded-full transition-all flex items-center gap-1.5 font-semibold ${
                     mappingCharId === char.id
-                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                      : 'text-brand border border-brand/30 bg-white/60 hover:bg-white hover:border-brand/50'
+                      ? 'bg-ink text-white shadow-soft'
+                      : 'text-ink border border-line bg-white hover:border-ink/30'
                   }`}
                   title="Välj sparad karaktär från registret"
                 >
@@ -626,9 +617,9 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                   <>
                     <button
                       onClick={() => toggleApproval(char.id)}
-                      className={`flex-1 px-4 py-2 text-sm rounded-full font-heading font-bold transition-all inline-flex items-center justify-center gap-1.5 ${
+                      className={`flex-1 px-4 py-2 text-sm rounded-full font-semibold transition-all inline-flex items-center justify-center gap-1.5 ${
                         char.approved
-                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5'
+                          ? 'bg-emerald-600 text-white shadow-soft hover:shadow-lift hover:-translate-y-0.5'
                           : 'text-emerald-700 border border-emerald-300 bg-emerald-50/60 hover:bg-emerald-50'
                       }`}
                     >
@@ -653,7 +644,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
               {/* Inline saved character picker */}
               {mappingCharId === char.id && (
                 <div className="mx-4 mb-4 p-4 glass rounded-2xl">
-                  <p className="text-sm font-heading font-semibold text-brand mb-2">
+                  <p className="text-sm font-semibold text-brand mb-2">
                     Välj sparad karaktär för {char.name}:
                   </p>
                   {savedChars.filter(sc => sc.referenceImage).length > 0 ? (
@@ -662,18 +653,18 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
                         <button
                           key={saved.id}
                           onClick={() => handleMapFromRegistry(char.id, saved)}
-                          className="border-2 border-white/60 bg-white/60 rounded-2xl overflow-hidden hover:border-brand/40 hover:shadow-glow
+                          className="border-2 border-line bg-white rounded-2xl overflow-hidden hover:border-brand/40 hover:shadow-soft
                                      transition-all text-left"
                         >
                           <img
                             src={`data:image/png;base64,${saved.referenceImage}`}
                             alt={saved.name}
-                            className="w-full h-20 object-contain bg-brand/5"
+                            className="w-full h-20 object-contain bg-paper"
                           />
                           <div className="p-1.5">
-                            <p className="text-xs font-medium text-gray-800 truncate">{saved.name}</p>
+                            <p className="text-xs font-medium text-ink truncate">{saved.name}</p>
                             {saved.fromBookTitle && (
-                              <p className="text-[10px] text-gray-400 truncate">{saved.fromBookTitle}</p>
+                              <p className="text-[10px] text-ink/40 truncate">{saved.fromBookTitle}</p>
                             )}
                           </div>
                         </button>

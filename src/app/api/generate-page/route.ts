@@ -45,7 +45,7 @@ async function handleSingle(body: {
 
   if (!spread || !characters) {
     return NextResponse.json(
-      { error: 'Siddata eller karaktarer saknas' },
+      { error: 'Siddata eller karaktärer saknas' },
       { status: 400 }
     );
   }
@@ -81,7 +81,7 @@ async function handleBatch(body: {
 
   if (!spreads || spreads.length === 0 || !characters) {
     return NextResponse.json(
-      { error: 'Siddata eller karaktarer saknas' },
+      { error: 'Siddata eller karaktärer saknas' },
       { status: 400 }
     );
   }

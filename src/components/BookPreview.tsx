@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { BookProject, Spread } from '@/lib/types';
 import Icon from './Icon';
+import StepHeader from './StepHeader';
 import { saveBook } from '@/lib/storage';
 import { exportBookToPDF } from '@/lib/pdf-export';
 import { setBookPublished, getBookPublishState } from '@/lib/supabase-db';
@@ -180,33 +181,23 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
-            <Icon name="counter_4" filled size={16} /> Steg 4
-          </span>
-          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
-            Granska &amp; dela din bok
-          </h2>
-          <p className="mt-1.5 text-gray-500 max-w-2xl">
-            Klicka på ett uppslag för att redigera text eller regenerera bilden. Spara, ladda ner eller dela när du är nöjd.
-          </p>
-        </div>
-        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
-          <Icon name="arrow_back" size={18} /> Tillbaka
-        </button>
-      </div>
+      <StepHeader
+        eyebrow="Steg 4 av 4 · Färdig bok"
+        title="Din bok är klar att läsas"
+        description="Bläddra i den satta boken precis som den blir i PDF:en. Redigera text eller bilder, spara och dela när du är nöjd."
+        onBack={onBack}
+      />
 
       {/* Book info + Action buttons */}
       <div className="glass rounded-4xl p-5 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-brand to-magic flex items-center justify-center text-white shadow-glow">
+            <div className="w-12 h-12 shrink-0 rounded-2xl bg-ink flex items-center justify-center text-white shadow-soft">
               <Icon name="menu_book" filled size={26} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-xl font-heading font-bold text-gray-800 truncate">{book.title}</h3>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-gray-500">
+              <h3 className="text-xl font-heading font-semibold text-ink truncate">{book.title}</h3>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink/55">
                 <span>{book.spreads.length} uppslag</span>
                 <span>{book.characters.length} karaktärer</span>
                 <span>{book.spreads.filter(s => s.status === 'done').length} bilder klara</span>
@@ -252,7 +243,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
           <button
             onClick={handlePublishToggle}
             disabled={publishing}
-            className={`btn-ghost !py-2 text-sm ${isPublic ? '!text-gray-500' : ''}`}
+            className={`btn-ghost !py-2 text-sm ${isPublic ? '!text-ink/55' : ''}`}
           >
             {publishing ? <span className="spinner !w-4 !h-4" /> : <Icon name={isPublic ? 'visibility_off' : 'storefront'} size={18} />}
             {publishing ? 'Vänta...' : isPublic ? 'Avpublicera' : 'Publicera'}
@@ -273,7 +264,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
         {/* Character check results summary */}
         {Object.keys(checkResults).length > 0 && (
           <div className="mt-3 p-4 rounded-2xl glass">
-            <h4 className="font-heading font-semibold text-sm mb-2">Karaktärskontroll:</h4>
+            <h4 className=" font-semibold text-sm mb-2">Karaktärskontroll:</h4>
             {(() => {
               const passed = Object.values(checkResults).filter(r => r.passed).length;
               const failed = Object.values(checkResults).filter(r => !r.passed).length;
@@ -302,7 +293,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       </div>
 
       {/* Vyer */}
-      <div className="inline-flex items-center gap-1 p-1 glass rounded-full max-w-full overflow-x-auto">
+      <div className="grid grid-cols-3 sm:inline-grid sm:w-auto gap-1 p-1 glass rounded-full">
         {([
           { key: 'book', label: 'Läs boken', icon: 'auto_stories' },
           { key: 'workshop', label: 'Redigera', icon: 'edit_note' },
@@ -311,8 +302,8 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
           <button
             key={v.key}
             onClick={() => setViewMode(v.key)}
-            className={`shrink-0 px-4 py-2 rounded-full text-sm font-heading font-semibold transition-all inline-flex items-center gap-1.5 ${
-              viewMode === v.key ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow' : 'text-gray-600 hover:text-brand'
+            className={`px-2 sm:px-4 py-2 rounded-full text-[13px] sm:text-sm font-semibold whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5 ${
+              viewMode === v.key ? 'bg-ink text-white shadow-soft' : 'text-ink/65 hover:text-ink'
             }`}
           >
             <Icon name={v.icon} filled={viewMode === v.key} size={18} />{v.label}
@@ -322,7 +313,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
 
       {/* ─── Den satta boken - exakt som PDF:en ─── */}
       {viewMode === 'book' && (
-        <div className="card-glass hover:!shadow-glow p-4 sm:p-8">
+        <div className="card-glass hover:!shadow-soft px-2 py-4 sm:p-8 -mx-2 sm:mx-0">
           <BookReader book={book} />
         </div>
       )}
@@ -341,7 +332,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
               onClick={() => setSelectedSpread(spread)}
               className="card-glass overflow-hidden text-left hover:-translate-y-1 transition-all group"
             >
-              <div className="bg-brand/5 aspect-[3/4] relative overflow-hidden">
+              <div className="bg-paper aspect-[3/4] relative overflow-hidden">
                 {spread.generatedImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -350,18 +341,18 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                  <div className="flex flex-col items-center justify-center h-full text-ink/40">
                     <Icon name="image_not_supported" size={28} />
                     <span className="text-xs mt-1">Ingen bild</span>
                   </div>
                 )}
-                <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/95 text-brand text-xs font-heading font-bold shadow-glow opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/95 text-brand text-xs font-semibold shadow-soft opacity-0 group-hover:opacity-100 transition-opacity">
                   <Icon name="edit" size={14} /> Redigera
                 </span>
               </div>
               <div className="px-3 py-2.5">
-                <p className="font-heading font-semibold text-sm text-gray-700 truncate">{spreadName(spread)}</p>
-                {spread.chapter && <p className="text-xs text-gray-400 truncate">{spread.chapter}</p>}
+                <p className=" font-semibold text-sm text-ink/80 truncate">{spreadName(spread)}</p>
+                {spread.chapter && <p className="text-xs text-ink/40 truncate">{spread.chapter}</p>}
               </div>
             </button>
           ))}

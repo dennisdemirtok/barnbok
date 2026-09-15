@@ -696,9 +696,9 @@ function buildComicBook(pb: PageBuilder, spreads: Spread[], sizes: ImageSizes, t
 // ════════════════════════════════════════════════════════
 
 export function resolveBookShape(book: BookProject): IllustrationShape {
+  // Samma regel som bildgenereringen (gemini.resolveIllustrationShape) - annars kan
+  // layouten vänta sig helsidor medan bilderna genererats som uppslag
   if (book.illustrationShape) return book.illustrationShape;
-  const preset = getStylePreset(book.stylePresetId);
-  if (preset) return preset.shape;
   return book.bookFormat === 'bildbok-separat-text' || book.bookFormat === 'kapitelbok' ? 'page' : 'spread';
 }
 

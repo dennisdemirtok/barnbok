@@ -177,7 +177,7 @@ export default function BookReader({ book, showDownload = true }: ReaderProps) {
   };
 
   // Sidstorlek: ryms i bredd och i ungefär skärmhöjden
-  const maxH = typeof window !== 'undefined' ? Math.max(360, window.innerHeight - 240) : 700;
+  const maxH = typeof window !== 'undefined' ? Math.max(360, window.innerHeight - 320) : 700;
   const pageW = Math.floor(Math.min(
     twoUp ? (containerW - 8) / 2 : containerW,
     maxH * (PAGE_W / PAGE_H),
@@ -229,7 +229,7 @@ export default function BookReader({ book, showDownload = true }: ReaderProps) {
 
       {layout && (
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <button onClick={() => go(-1)} disabled={index === 0} className="btn-icon !w-11 !h-11 bg-white shadow-glow disabled:opacity-40" title="Föregående">
+          <button onClick={() => go(-1)} disabled={index === 0} className="btn-icon !w-11 !h-11 bg-white shadow-soft border border-line disabled:opacity-40" title="Föregående">
             <Icon name="chevron_left" size={26} />
           </button>
           <div className="min-w-[9rem] text-center">
@@ -238,7 +238,7 @@ export default function BookReader({ book, showDownload = true }: ReaderProps) {
               {layout.pages.length} sidor · {layout.mode === 'chapter' ? 'kapitelbok' : layout.mode === 'picture' ? 'bilderbok' : 'serieformat'}
             </p>
           </div>
-          <button onClick={() => go(1)} disabled={index >= count - 1} className="btn-icon !w-11 !h-11 bg-white shadow-glow disabled:opacity-40" title="Nästa">
+          <button onClick={() => go(1)} disabled={index >= count - 1} className="btn-icon !w-11 !h-11 bg-white shadow-soft border border-line disabled:opacity-40" title="Nästa">
             <Icon name="chevron_right" size={26} />
           </button>
           {showDownload && (

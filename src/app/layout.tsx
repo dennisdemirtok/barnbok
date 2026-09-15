@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
-import { Quicksand, Be_Vietnam_Pro } from 'next/font/google'
+import { Fraunces, Be_Vietnam_Pro } from 'next/font/google'
 import './globals.css'
 import Providers from './providers'
 
-const quicksand = Quicksand({
+const fraunces = Fraunces({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['500', '600', '700'],
   variable: '--font-heading',
   display: 'swap',
 })
@@ -28,14 +28,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="sv" className={`${quicksand.variable} ${beVietnamPro.variable}`}>
+    <html lang="sv" className={`${fraunces.variable} ${beVietnamPro.variable}`}>
       <head>
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
         />
       </head>
-      <body className="min-h-screen">
+      <body className="min-h-screen bg-paper text-ink">
         <Providers>{children}</Providers>
       </body>
     </html>

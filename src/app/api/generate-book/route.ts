@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const config: BookConfig = await request.json();
 
     if (!config.title) {
-      return NextResponse.json({ error: 'Titel kravs' }, { status: 400 });
+      return NextResponse.json({ error: 'Titel krävs' }, { status: 400 });
     }
 
     // Vald stil: art direction + analys av riktiga böcker + författarens egna önskemål

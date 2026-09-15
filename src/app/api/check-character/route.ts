@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     if (!generatedImage || !characters || characters.length === 0) {
       return NextResponse.json(
-        { error: 'Bild och karaktarer kravs' },
+        { error: 'Bild och karaktärer krävs' },
         { status: 400 }
       );
     }

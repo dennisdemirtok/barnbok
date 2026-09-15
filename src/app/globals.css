@@ -10,43 +10,37 @@
 @font-face { font-family: 'Book Nunito'; src: url('/fonts/nunito-800.ttf') format('truetype'); font-weight: 800; font-style: normal; font-display: swap; }
 
 :root {
-  --font-heading: 'Quicksand', sans-serif;
+  --font-heading: 'Fraunces', Georgia, serif;
   --font-body: 'Be Vietnam Pro', sans-serif;
 }
 
 body {
   font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #191c1d;
-  /* Level 1: mjuk bakgrund med stora färgglada blobbar (Stitch "Tonal Layers") */
-  background-color: #f8f9fa;
-  background-image:
-    radial-gradient(at 8% 0%, rgba(124, 58, 237, 0.10) 0px, transparent 45%),
-    radial-gradient(at 95% 5%, rgba(217, 70, 239, 0.08) 0px, transparent 42%),
-    radial-gradient(at 50% 100%, rgba(37, 99, 235, 0.06) 0px, transparent 55%);
-  background-attachment: fixed;
+  color: #1f1b16;
+  /* Varm papperston - lugn bakgrund som låter böckernas bilder ta plats */
+  background-color: #f7f4ef;
   -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading), sans-serif;
-  letter-spacing: -0.01em;
+  font-family: var(--font-heading), Georgia, serif;
+  letter-spacing: -0.015em;
+  font-optical-sizing: auto;
 }
 
-/* Markerad text i varumärkets färg */
 ::selection {
-  background: rgba(124, 58, 237, 0.18);
+  background: rgba(91, 63, 217, 0.18);
 }
 
 /* Tydliga fokusringar för tangentbordsnavigering (a11y) */
 :focus-visible {
-  outline: 2px solid #7C3AED;
+  outline: 2px solid #5b3fd9;
   outline-offset: 2px;
   border-radius: 6px;
 }
 
-/* Sliders i varumärkesfärg */
 input[type='range'] {
-  accent-color: #7C3AED;
+  accent-color: #5b3fd9;
 }
 
 /* Material Symbols Rounded - enhetlig ikonografi */
@@ -76,122 +70,127 @@ input[type='range'] {
   .reveal { opacity: 1; transform: none; transition: none; }
 }
 
-/* Mjuk, lila-tonad scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(124, 58, 237, 0.25);
+  background: rgba(31, 27, 22, 0.18);
   border-radius: 99px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.4); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(31, 27, 22, 0.32); background-clip: padding-box; }
 
 @layer components {
-  /* Varumärkets gradient-text */
+  /* Logotext */
   .brand-text {
-    @apply bg-gradient-to-r from-brand via-magic to-trust bg-clip-text text-transparent;
+    @apply text-ink;
   }
 
-  /* Level 2: glas-panel med backdrop-blur och tunn vit kant */
+  /* Ytor: solida, med tunn kant - inga glaseffekter */
   .glass {
-    @apply bg-white/70 backdrop-blur-md border border-white/60 shadow-glow;
+    @apply bg-white border border-line shadow-soft;
   }
   .glass-strong {
-    @apply bg-white/85 backdrop-blur-xl border border-white/70 shadow-glow;
+    @apply bg-white border border-line shadow-lift;
   }
 
-  /* Primär knapp: lila→rosa gradient, pillerform, lyft på hover */
+  /* Primär knapp: bläck */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
-           bg-gradient-to-r from-brand to-magic text-white font-heading font-bold
-           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]
-           transition-all duration-200 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full
+           bg-ink text-white font-semibold text-[15px]
+           hover:bg-ink/85 active:scale-[0.98]
+           transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
   }
 
-  /* Handlingsknapp: sunset-accent (skapa/publicera) */
+  /* Handlingsknapp: accentfärg (skapa, fortsätt, dela) */
   .btn-action {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
-           bg-gradient-to-r from-sunset to-magic text-white font-heading font-bold
-           shadow-glow hover:shadow-glow-lg hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full
+           bg-brand text-white font-semibold text-[15px]
+           hover:bg-brand-dark active:scale-[0.98]
+           transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
   }
 
-  /* Sekundär: glas med lila kant */
+  /* Sekundär: vit med kant */
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full
-           text-brand font-heading font-semibold border border-brand/30 bg-white/60
-           hover:bg-white hover:border-brand/50 active:scale-[0.97] backdrop-blur transition-all duration-200;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full
+           text-ink font-medium bg-white border border-line
+           hover:bg-paper hover:border-ink/25 active:scale-[0.98]
+           transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
   }
 
-  /* Kort: glas, rundat, glöd på hover */
+  /* Kort */
   .card-glass {
-    @apply bg-white/75 backdrop-blur-md border border-white/60 rounded-4xl shadow-glow
-           hover:shadow-glow-lg transition-all;
+    @apply bg-white border border-line rounded-3xl shadow-soft
+           hover:shadow-lift transition-all duration-200;
   }
 
-  /* Magic-chip: AI-taggar/teman med svag shimmer */
+  /* Neutral tagg */
   .magic-chip {
-    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
-           bg-gradient-to-r from-brand/10 to-magic/10 text-brand ring-1 ring-brand/15;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium
+           bg-paper text-ink/70 border border-line;
   }
 
-  /* Inputfält: mjukt, rundat, lila glöd vid fokus */
   .field {
-    @apply w-full px-4 py-3 rounded-2xl bg-white/80 border border-gray-200
+    @apply w-full px-4 py-3 rounded-2xl bg-white border border-line text-ink placeholder:text-ink/35
            focus:border-brand focus:ring-4 focus:ring-brand/15 outline-none transition-all;
   }
 
-  /* Farlig handling: röd pillerknapp */
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
-           bg-red-500 text-white font-heading font-bold shadow-lg shadow-red-500/25
-           hover:bg-red-600 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]
-           transition-all duration-200 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full
+           bg-red-600 text-white font-semibold text-[15px]
+           hover:bg-red-700 active:scale-[0.98] transition-all duration-150 disabled:opacity-40;
   }
 
-  /* Rund ikonknapp (delningar, små actions) */
   .btn-icon {
     @apply inline-flex items-center justify-center w-9 h-9 rounded-full
-           text-brand/60 hover:text-brand hover:bg-brand/10 active:scale-95 transition-all;
+           text-ink/55 hover:text-ink hover:bg-ink/5 active:scale-95 transition-all;
   }
 
-  /* Snurrande laddningsindikator - ersätter alla inline-SVG-spinners */
   .spinner {
     @apply inline-block w-5 h-5 rounded-full border-2 border-current border-t-transparent animate-spin;
   }
 
-  /* Skeleton: skimrande platshållare medan innehåll laddas */
   .skeleton {
-    @apply relative overflow-hidden rounded-2xl bg-brand/5;
+    @apply relative overflow-hidden rounded-2xl bg-ink/[0.05];
   }
   .skeleton::after {
     content: '';
     @apply absolute inset-0;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
     animation: skeleton-sweep 1.6s ease-in-out infinite;
   }
 
-  /* Valbara chips (taggar, format, åldrar): av- och på-läge */
+  /* Valbara chips: av- och på-läge */
   .chip {
     @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium
-           bg-gradient-to-r from-brand/10 to-magic/10 text-brand ring-1 ring-brand/15
-           hover:ring-brand/35 active:scale-[0.97] transition-all;
+           bg-white text-ink/75 border border-line hover:border-ink/30 active:scale-[0.98] transition-all;
   }
   .chip-on {
     @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium
-           bg-gradient-to-r from-brand to-magic text-white shadow-glow
-           active:scale-[0.97] transition-all;
+           bg-ink text-white border border-ink active:scale-[0.98] transition-all;
   }
 
-  /* Statusmeddelanden */
+  /* Horisontella rader (chips, flikar) scrollar utan synlig list */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Liten versal etikett ovanför rubriker */
+  .eyebrow {
+    @apply inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-brand;
+  }
+
   .note-success {
-    @apply p-3 rounded-2xl bg-emerald-50/90 ring-1 ring-emerald-200 text-emerald-700 text-sm font-medium;
+    @apply p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium;
   }
   .note-error {
-    @apply p-3 rounded-2xl bg-red-50/90 ring-1 ring-red-200 text-red-700 text-sm font-medium;
+    @apply p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium;
   }
   .note-warning {
-    @apply p-3 rounded-2xl bg-amber-50/90 ring-1 ring-amber-200 text-amber-800 text-sm font-medium;
+    @apply p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-medium;
   }
 }
 

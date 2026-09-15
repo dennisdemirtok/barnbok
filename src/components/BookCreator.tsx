@@ -5,6 +5,7 @@ import { BookProject } from '@/lib/types';
 import { BookConfig, TextDensity } from '@/lib/claude';
 import { STYLE_PRESETS } from '@/lib/styles';
 import Icon from './Icon';
+import StepHeader from './StepHeader';
 
 interface Props {
   onBookCreated: (book: BookProject, rawText: string) => void;
@@ -16,7 +17,7 @@ type BookFormat = BookConfig['bookFormat'];
 const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; icon: string; comingSoon?: boolean }[] = [
   {
     value: 'bildbok-text-pa-bild',
-    label: 'Bildbok med text pa bild',
+    label: 'Serieformat – text i bilderna',
     description: 'Likt "Handbok för Superhjältar" - helsides illustrationer med text integrerad i bilden. Kort text, mycket visuellt.',
     icon: 'wallpaper',
   },
@@ -35,21 +36,21 @@ const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; i
   {
     value: 'larobok',
     label: 'Lärobok / Aktivitetsbok',
-    description: 'Likt "Artan, Partan" - blandning av text, bilder och uppgifter. Pedagogiskt upplag.',
+    description: 'Likt "Ärtan Pärtan" – blandning av text, bilder och uppgifter. Pedagogiskt upplägg.',
     icon: 'school',
     comingSoon: true,
   },
 ];
 
 const PLOT_TAGS = [
-  'Aventyr', 'Drama', 'Komedi', 'Mysterium', 'Fantasy', 'Sci-fi',
-  'Vanskap', 'Skola', 'Familj', 'Djur', 'Natur', 'Sport',
+  'Äventyr', 'Drama', 'Komedi', 'Mysterium', 'Fantasy', 'Sci-fi',
+  'Vänskap', 'Skola', 'Familj', 'Djur', 'Natur', 'Sport',
   'Superhjältar', 'Magi', 'Rymden', 'Pirater', 'Dinosaurier',
 ];
 
 const SETTING_TAGS = [
   'Skola', 'Hemma', 'Skog', 'Stad', 'Strand', 'Berg',
-  'Rymden', 'Under vatten', 'Slott', 'Bondgard', 'Lekplats',
+  'Rymden', 'Under vatten', 'Slott', 'Bondgård', 'Lekplats',
 ];
 
 const AGE_OPTIONS = ['3-5 år', '6-8 år', '9-12 år', '12+ år'];
@@ -60,7 +61,7 @@ const PAGE_PRESETS = [
   { pages: 48, label: '48 sidor (längre bildbok)' },
   { pages: 64, label: '64 sidor (kort kapitelbok)' },
   { pages: 96, label: '96 sidor (kapitelbok)' },
-  { pages: 128, label: '128 sidor (lang kapitelbok)' },
+  { pages: 128, label: '128 sidor (lång kapitelbok)' },
 ];
 
 export default function BookCreator({ onBookCreated, onBack }: Props) {
@@ -199,36 +200,26 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-heading font-bold uppercase tracking-wide ring-1 ring-brand/15">
-            <Icon name="counter_1" filled size={16} /> Steg 1
-          </span>
-          <h2 className="mt-3 text-3xl font-heading font-bold text-gray-800">
-            Skapa ny bok med AI
-          </h2>
-          <p className="mt-1.5 text-gray-500">
-            {currentStep === 1
-              ? 'Grundinställningar – format, karaktärer och längd'
-              : 'Handling, miljö och bildstil'}
-          </p>
-        </div>
-        <button onClick={onBack} className="shrink-0 inline-flex items-center gap-1.5 text-brand/70 hover:text-brand font-heading font-semibold transition-colors">
-          <Icon name="arrow_back" size={18} /> Tillbaka
-        </button>
-      </div>
+      <StepHeader
+        eyebrow="Steg 1 av 4 · Berättelsen"
+        title="Skapa en ny bok med AI"
+        description={currentStep === 1
+          ? 'Börja med grunderna: format, målgrupp, karaktärer och längd.'
+          : 'Beskriv handling, miljö och välj stil – sedan skriver AI:n hela boken.'}
+        onBack={onBack}
+      />
 
       {/* Step indicator */}
       <div className="flex gap-2">
-        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 1 ? 'bg-gradient-to-r from-brand to-magic' : 'bg-brand/10'}`} />
-        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 2 ? 'bg-gradient-to-r from-brand to-magic' : 'bg-brand/10'}`} />
+        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 1 ? 'bg-ink' : 'bg-brand/10'}`} />
+        <div className={`flex-1 h-2 rounded-full transition-all ${currentStep >= 2 ? 'bg-ink' : 'bg-brand/10'}`} />
       </div>
 
       {currentStep === 1 ? (
         <div className="space-y-6">
           {/* Title */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-ink/80 mb-2">
               Titel *
             </label>
             <input
@@ -242,7 +233,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Book Format */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
+            <label className="block text-sm font-semibold text-ink/80 mb-3">
               Bokformat *
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -253,31 +244,30 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                   disabled={fmt.comingSoon}
                   className={`relative p-4 rounded-4xl text-left transition-all ${
                     fmt.comingSoon
-                      ? 'bg-gray-100/70 border border-gray-200 opacity-60 cursor-not-allowed'
+                      ? 'bg-ink/[0.05] border border-line opacity-60 cursor-not-allowed'
                       : bookFormat === fmt.value
-                      ? 'card-glass ring-2 ring-brand bg-gradient-to-br from-brand/10 to-magic/10'
+                      ? 'card-glass ring-2 ring-brand bg-brand/5'
                       : 'card-glass'
                   }`}
                 >
                   {fmt.comingSoon && (
-                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-gradient-to-r from-sunset to-amber-400 text-white
-                                     text-xs font-semibold rounded-full shadow-glow">
+                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-ink/[0.06] text-ink/55 text-xs font-semibold rounded-full">
                       Kommer snart
                     </span>
                   )}
                   <div className="flex items-center gap-2.5 mb-1.5">
                     <span className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ${
                       fmt.comingSoon
-                        ? 'bg-gray-200 text-gray-400'
+                        ? 'bg-ink/10 text-ink/40'
                         : bookFormat === fmt.value
-                        ? 'bg-gradient-to-br from-brand to-magic text-white shadow-glow'
-                        : 'bg-brand/10 text-brand'
+                        ? 'bg-ink text-white shadow-soft'
+                        : 'bg-paper border border-line text-ink'
                     }`}>
                       <Icon name={fmt.icon} filled size={20} />
                     </span>
-                    <span className={`font-heading font-semibold ${fmt.comingSoon ? 'text-gray-500' : 'text-brand'}`}>{fmt.label}</span>
+                    <span className={`font-heading font-semibold ${fmt.comingSoon ? 'text-ink/55' : 'text-ink'}`}>{fmt.label}</span>
                   </div>
-                  <p className="text-xs text-gray-500">{fmt.description}</p>
+                  <p className="text-xs text-ink/55">{fmt.description}</p>
                 </button>
               ))}
             </div>
@@ -286,7 +276,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           {/* Subject (for larobok) */}
           {bookFormat === 'larobok' && (
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-ink/80 mb-2">
                 Ämne
               </label>
               <input
@@ -301,7 +291,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Target Age */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-ink/80 mb-2">
               Målgrupp *
             </label>
             <div className="flex flex-wrap gap-2">
@@ -309,11 +299,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={age}
                   onClick={() => setTargetAge(age)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    targetAge === age
-                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                      : 'glass text-brand hover:shadow-glow'
-                  }`}
+                  className={targetAge === age ? 'chip-on' : 'chip'}
                 >
                   {age}
                 </button>
@@ -323,7 +309,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Text Density */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-ink/80 mb-2">
               Textmängd per sida
             </label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -333,17 +319,17 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                   onClick={() => setTextDensity(opt.value)}
                   className={`p-3 rounded-2xl text-center transition-all ${
                     textDensity === opt.value
-                      ? 'card-glass ring-2 ring-brand bg-gradient-to-br from-brand/10 to-magic/10'
+                      ? 'card-glass ring-2 ring-brand bg-brand/5'
                       : 'card-glass'
                   }`}
                 >
-                  <div className="font-heading font-semibold text-sm text-brand">{opt.label}</div>
-                  <div className="text-xs text-gray-500">{opt.desc}</div>
-                  <div className="text-xs text-magic mt-1">{opt.words}</div>
+                  <div className="font-semibold text-sm text-ink">{opt.label}</div>
+                  <div className="text-xs text-ink/55">{opt.desc}</div>
+                  <div className="text-xs text-ink/45 mt-1">{opt.words}</div>
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-ink/40 mt-2">
               Styr hur mycket text varje sida får. Anpassat efter valt bokformat ({FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}).
             </p>
           </div>
@@ -351,7 +337,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           {/* Characters */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-ink/80 mb-2">
                 Antal karaktärer
               </label>
               <div className="flex items-center gap-3">
@@ -363,13 +349,13 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                   onChange={(e) => setNumCharacters(parseInt(e.target.value))}
                   className="flex-1"
                 />
-                <span className="w-8 text-center font-heading font-bold text-brand text-lg">{numCharacters}</span>
+                <span className="w-8 text-center font-semibold text-ink text-lg">{numCharacters}</span>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-ink/80 mb-2">
                 Namn på karaktärerna
-                <span className="text-gray-400 font-normal ml-1">(valfritt)</span>
+                <span className="text-ink/40 font-normal ml-1">(valfritt)</span>
               </label>
               <input
                 type="text"
@@ -378,13 +364,13 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 placeholder="T.ex. Ella, Max, Saga (kommaseparerat)"
                 className="field py-2 text-sm"
               />
-              <p className="text-xs text-gray-400 mt-1">Lämna tomt för automatiska namn</p>
+              <p className="text-xs text-ink/40 mt-1">Lämna tomt för automatiska namn</p>
             </div>
           </div>
 
           {/* Pages */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-ink/80 mb-2">
               Antal sidor
             </label>
             <div className="flex flex-wrap gap-2 mb-3">
@@ -392,18 +378,14 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={preset.pages}
                   onClick={() => setNumPages(preset.pages)}
-                  className={`px-4 py-2 rounded-full text-sm transition-all ${
-                    numPages === preset.pages
-                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                      : 'glass text-brand hover:shadow-glow'
-                  }`}
+                  className={numPages === preset.pages ? 'chip-on' : 'chip'}
                 >
                   {preset.label}
                 </button>
               ))}
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500">Eget antal:</span>
+              <span className="text-sm text-ink/55">Eget antal:</span>
               <input
                 type="number"
                 min={8}
@@ -413,10 +395,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 onChange={(e) => setNumPages(parseInt(e.target.value) || 24)}
                 className="field w-20 px-3 py-2 text-center"
               />
-              <span className="text-sm text-gray-500">sidor</span>
+              <span className="text-sm text-ink/55">sidor</span>
             </div>
-            <div className="mt-2 glass rounded-2xl p-3">
-              <p className="text-sm text-gray-600">
+            <div className="mt-3 rounded-2xl bg-paper border border-line p-3">
+              <p className="text-sm text-ink/65">
                 <span className="font-medium">{contentSpreads()} uppslag + omslag + slutsida</span>
                 {' · '}
                 <span>~{estimatedWords().toLocaleString()} ord</span>
@@ -439,7 +421,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
         <div className="space-y-6">
           {/* Plot/Story */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-ink/80 mb-2">
               Handling / Tema
             </label>
             <div className="flex flex-wrap gap-2 mb-3">
@@ -447,11 +429,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={tag}
                   onClick={() => togglePlotTag(tag)}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                    selectedPlotTags.includes(tag)
-                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                      : 'magic-chip hover:shadow-glow'
-                  }`}
+                  className={selectedPlotTags.includes(tag) ? 'chip-on' : 'chip'}
                 >
                   {tag}
                 </button>
@@ -467,7 +445,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Setting */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-ink/80 mb-2">
               Miljö
             </label>
             <div className="flex flex-wrap gap-2 mb-3">
@@ -475,11 +453,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                 <button
                   key={tag}
                   onClick={() => toggleSettingTag(tag)}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                    selectedSettingTags.includes(tag)
-                      ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow'
-                      : 'magic-chip hover:shadow-glow'
-                  }`}
+                  className={selectedSettingTags.includes(tag) ? 'chip-on' : 'chip'}
                 >
                   {tag}
                 </button>
@@ -496,10 +470,10 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Image Style */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
+            <label className="block text-sm font-semibold text-ink/80 mb-1">
               Stil &amp; bokkoncept
             </label>
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="text-xs text-ink/55 mb-3">
               Stilen styr hur figurerna ritas, bildernas form och typografin i den färdiga boken.
               Osäker? Prova flera stilar på en textbit via &quot;Stilprovning&quot; i steg 1.
             </p>
@@ -511,22 +485,22 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
                     key={style.id}
                     onClick={() => setStylePresetId(style.id)}
                     className={`flex items-start gap-2.5 p-3 rounded-2xl text-left transition-all ${
-                      on ? 'bg-white ring-2 ring-brand shadow-glow' : 'bg-white/60 ring-1 ring-gray-200 hover:ring-brand/40'
+                      on ? 'bg-white ring-2 ring-brand shadow-soft' : 'bg-white ring-1 ring-line hover:ring-ink/20'
                     }`}
                   >
                     <span className={`w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
                       {on && <Icon name="check" size={18} />}
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-heading font-semibold text-gray-800 leading-tight">{style.label}</span>
-                      <span className="block text-xs text-gray-500 mt-0.5 leading-snug">{style.concept}</span>
+                      <span className="block text-sm font-semibold text-ink leading-tight">{style.label}</span>
+                      <span className="block text-xs text-ink/55 mt-0.5 leading-snug">{style.concept}</span>
                     </span>
                   </button>
                 );
               })}
             </div>
-            <label className="block text-xs font-semibold text-gray-600 mt-4 mb-1.5">
-              Egna önskemål om bilderna <span className="font-normal text-gray-400">(valfritt)</span>
+            <label className="block text-xs font-semibold text-ink/65 mt-4 mb-1.5">
+              Egna önskemål om bilderna <span className="font-normal text-ink/40">(valfritt)</span>
             </label>
             <textarea
               value={imageStyle}
@@ -537,9 +511,9 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
           </div>
 
           {/* Summary */}
-          <div className="glass-strong rounded-4xl p-4">
-            <h4 className="font-heading font-semibold text-brand mb-2">Sammanfattning</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
+          <div className="rounded-3xl bg-paper border border-line p-5">
+            <h4 className="font-heading text-lg font-semibold text-ink mb-3">Sammanfattning</h4>
+            <div className="grid grid-cols-2 gap-2 text-sm text-ink/80">
               <div><span className="font-medium">Titel:</span> {title}</div>
               <div><span className="font-medium">Format:</span> {FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}</div>
               <div><span className="font-medium">Stil:</span> {STYLE_PRESETS.find(st => st.id === stylePresetId)?.label}</div>
@@ -552,14 +526,14 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Error */}
           {error && (
-            <div className="glass rounded-2xl p-4 border-red-200 bg-red-50/80 text-red-700">
+            <div className="note-error">
               {error}
             </div>
           )}
 
           {/* Progress */}
           {progress && (
-            <div className="glass rounded-2xl p-4 text-brand flex items-center gap-3">
+            <div className="rounded-2xl bg-brand/5 border border-brand/15 p-4 text-brand flex items-center gap-3">
               <span className="spinner" />
               {progress}
             </div>

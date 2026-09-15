@@ -3,46 +3,53 @@
 import { useState, useEffect } from 'react';
 import { BookProject } from '@/lib/types';
 import { listBooks, deleteBook } from '@/lib/storage';
+import { getStylePreset } from '@/lib/styles';
 import Icon from './Icon';
 import Reveal from './Reveal';
 
 interface Props {
   onLoadBook: (book: BookProject) => void;
   onNewBook: () => void;
+  onStyleTest: () => void;
   onReuseBook: (book: BookProject) => void;
 }
 
-export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Props) {
+const STATUS: Record<BookProject['status'], { text: string; className: string }> = {
+  importing: { text: 'Utkast', className: 'bg-white text-ink/70' },
+  characters: { text: 'Karaktärer', className: 'bg-amber-100 text-amber-800' },
+  generating: { text: 'Illustreras', className: 'bg-white text-brand' },
+  reviewing: { text: 'Klar att läsa', className: 'bg-emerald-100 text-emerald-800' },
+  done: { text: 'Färdig', className: 'bg-emerald-600 text-white' },
+};
+
+const STEPS = [
+  { title: 'Berättelsen', text: 'Skriv själv, klistra in ditt manus eller låt AI:n skriva utifrån din idé.', icon: 'edit_note' },
+  { title: 'Stil & karaktärer', text: 'Prova stilar på din text och godkänn figurer som följer med genom hela boken.', icon: 'palette' },
+  { title: 'Illustrationer', text: 'Varje sida målas i vald stil och kvalitetskontrolleras automatiskt.', icon: 'brush' },
+  { title: 'Färdig bok', text: 'Satt som en riktig bok – läs, ladda ner som tryckfärdig PDF eller dela.', icon: 'auto_stories' },
+];
+
+export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReuseBook }: Props) {
   const [books, setBooks] = useState<BookProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadSavedBooks();
+    listBooks()
+      .then(saved => {
+        saved.sort((a, b) =>
+          new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+        );
+        setBooks(saved);
+      })
+      .catch(err => console.error('Kunde inte ladda sparade böcker:', err))
+      .finally(() => setLoading(false));
   }, []);
 
-  const loadSavedBooks = async () => {
-    try {
-      const savedBooks = await listBooks();
-      // Sort by most recently updated
-      savedBooks.sort((a, b) => {
-        const aDate = (a as any).updatedAt || a.createdAt;
-        const bDate = (b as any).updatedAt || b.createdAt;
-        return new Date(bDate).getTime() - new Date(aDate).getTime();
-      });
-      setBooks(savedBooks);
-    } catch (err) {
-      console.error('Kunde inte ladda sparade böcker:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Two-step inline confirm instead of window.confirm (which blocks rendering)
+  // Tvåstegsbekräftelse i stället för window.confirm
   const handleDelete = async (id: string) => {
     if (confirmDeleteId !== id) {
       setConfirmDeleteId(id);
-      // Reset confirmation after a few seconds if the user doesn't follow through
       setTimeout(() => setConfirmDeleteId(prev => (prev === id ? null : prev)), 4000);
       return;
     }
@@ -55,300 +62,177 @@ export default function BookLibrary({ onLoadBook, onNewBook, onReuseBook }: Prop
     }
   };
 
-  const getBookStats = (book: BookProject) => {
-    const totalSpreads = book.spreads.length;
-    const generatedImages = book.spreads.filter(s => s.generatedImage).length;
-    const approvedChars = book.characters.filter(c => c.approved).length;
-    return { totalSpreads, generatedImages, approvedChars };
-  };
-
-  const getStatusLabel = (book: BookProject) => {
-    switch (book.status) {
-      case 'importing': return { text: 'Importerad', color: 'bg-gray-100 text-gray-600' };
-      case 'characters': return { text: 'Karaktärer', color: 'bg-purple-100 text-purple-600' };
-      case 'generating': return { text: 'Genererar', color: 'bg-blue-100 text-blue-600' };
-      case 'reviewing': return { text: 'Granskning', color: 'bg-green-100 text-green-600' };
-      case 'done': return { text: 'Klar', color: 'bg-green-200 text-green-700' };
-      default: return { text: 'Okänd', color: 'bg-gray-100 text-gray-600' };
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="space-y-8">
-        <div className="skeleton h-72 rounded-4xl" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {[0, 1, 2, 3].map(i => <div key={i} className="skeleton h-44 rounded-4xl" />)}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-8">
-      {/* Hero / landningssektion */}
-      <section className="relative overflow-hidden rounded-4xl px-6 sm:px-12 py-10 sm:py-14
-                          bg-gradient-to-br from-brand via-magic to-trust shadow-glow-lg text-white">
-        {/* Dekorativa blobbar (Level 1) */}
-        <div className="absolute -top-20 -right-10 w-72 h-72 rounded-full bg-white/15 blur-3xl" />
-        <div className="absolute -bottom-24 -left-10 w-80 h-80 rounded-full bg-sunset/20 blur-3xl" />
-        <div className="relative z-10 grid lg:grid-cols-2 gap-8 items-center">
-          {/* Text */}
-          <div>
-            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/15
-                             backdrop-blur text-sm font-medium ring-1 ring-white/25">
-              <Icon name="auto_awesome" filled size={16} className="text-sunset" /> AI-drivet magiskt skapande
-            </span>
-            <h1 className="mt-5 text-4xl sm:text-5xl font-bold leading-[1.08] tracking-tight">
-              Skapa din egen barnbok – på minuter
-            </h1>
-            <p className="mt-4 text-white/85 text-lg leading-relaxed max-w-lg">
-              Förvandla godnattsagan till ett riktigt äventyr. Berätta din idé, så skriver
-              och illustrerar AI:n en komplett bok med konsekventa karaktärer.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {['Handbok för Superhjältar', 'Mamma Mu', 'Luna'].map((s) => (
-                <span key={s} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full
-                                         bg-white/15 backdrop-blur text-sm font-medium ring-1 ring-white/25">
-                  <Icon name="auto_awesome" filled size={14} className="text-sunset" /> {s}
-                </span>
-              ))}
-            </div>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                onClick={onNewBook}
-                className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-brand
-                           font-heading font-bold text-lg shadow-xl shadow-black/10 hover:-translate-y-0.5
-                           hover:shadow-2xl active:translate-y-0 active:scale-[0.98] transition-all duration-200"
-              >
-                Börja skapa
-                <Icon name="arrow_forward" size={22} className="group-hover:translate-x-1 transition-transform" />
-              </button>
-              <a
-                href="#hur-magin-skapas"
-                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/10 backdrop-blur
-                           text-white font-heading font-semibold ring-1 ring-white/30 hover:bg-white/20 transition-colors"
-              >
-                <Icon name="play_circle" size={22} /> Se hur det går till
-              </a>
-            </div>
+    <div className="space-y-20 sm:space-y-24">
+      {/* ── Hero ── */}
+      <section className="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 lg:gap-16 items-center pt-2 sm:pt-6">
+        <div>
+          <p className="eyebrow">Barnböcker med AI</p>
+          <h1 className="mt-4 text-[2.6rem] leading-[1.05] sm:text-6xl font-heading font-semibold text-ink tracking-tight">
+            Från idé till färdig bok – i din egen stil.
+          </h1>
+          <p className="mt-5 text-lg text-ink/65 leading-relaxed max-w-xl">
+            Skriv eller klistra in berättelsen, välj bland stilar som bygger på riktiga barnböcker, och få en
+            illustrerad bok satt som i bokhandeln.
+          </p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3">
+            <button onClick={onNewBook} className="btn-primary !px-6 !py-3.5 text-base">
+              <Icon name="add" size={20} /> Skapa en bok
+            </button>
+            <button onClick={onStyleTest} className="btn-ghost !px-6 !py-3.5 text-base">
+              <Icon name="palette" size={20} /> Prova stilar på din text
+            </button>
           </div>
-          {/* Illustration med floating chips */}
-          <div className="relative hidden lg:flex justify-center items-center">
-            <div className="absolute inset-0 bg-white/10 blur-3xl rounded-full" />
-            <div className="relative w-full max-w-md animate-float">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/hero-book.png" alt="Magisk barnbok" className="w-full h-auto rounded-3xl drop-shadow-2xl" />
-              <div className="absolute top-3 -right-3 glass rounded-2xl px-3 py-2 flex items-center gap-2 text-gray-800">
-                <Icon name="star" filled size={20} className="text-sunset" />
-                <span className="font-heading font-bold text-sm">Magisk AI</span>
-              </div>
-              <div className="absolute bottom-6 -left-4 glass rounded-2xl px-3 py-2 flex items-center gap-2 text-gray-800">
-                <Icon name="palette" filled size={18} className="text-brand" />
-                <span className="font-heading font-bold text-sm">3 bokstilar att välja på</span>
-              </div>
-            </div>
+          <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-ink/55">
+            <span className="inline-flex items-center gap-1.5"><Icon name="check_circle" size={17} className="text-emerald-600" /> Tryckfärdig PDF</span>
+            <span className="inline-flex items-center gap-1.5"><Icon name="check_circle" size={17} className="text-emerald-600" /> Konsekventa karaktärer</span>
+            <span className="inline-flex items-center gap-1.5"><Icon name="check_circle" size={17} className="text-emerald-600" /> Dela med en länk</span>
+          </div>
+        </div>
+
+        <div className="relative mx-auto w-full max-w-md lg:max-w-none">
+          <div className="absolute -inset-6 sm:-inset-10 bg-brand/[0.07] rounded-[3rem] -rotate-3" />
+          <div className="relative rounded-[2rem] overflow-hidden border border-line shadow-lift bg-white rotate-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/hero-book.png" alt="En uppslagen, illustrerad barnbok" className="w-full h-auto" />
           </div>
         </div>
       </section>
 
-      {/* Hur magin skapas */}
-      <Reveal as="section">
-        <div id="hur-magin-skapas" className="scroll-mt-24 text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-heading font-bold text-gray-800">Hur magin skapas</h2>
-          <p className="text-gray-500 mt-2">Från en flyktig idé till en färdig bok på rekordtid.</p>
+      {/* ── Mina böcker ── */}
+      <section className="space-y-6" id="mina-bocker">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="eyebrow">Ditt bibliotek</p>
+            <h2 className="mt-2 text-3xl font-heading font-semibold text-ink">Mina böcker</h2>
+          </div>
+          {books.length > 0 && (
+            <button onClick={onNewBook} className="btn-ghost shrink-0">
+              <Icon name="add" size={19} /> Ny bok
+            </button>
+          )}
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {[
-            { t: 'Din idé', d: 'Berätta tema, karaktärer och stil', icon: 'lightbulb' },
-            { t: 'Karaktärer', d: 'AI skapar konsekventa figurer', icon: 'diversity_3' },
-            { t: 'Generering', d: 'Text och bilder vävs ihop', icon: 'auto_fix_high' },
-            { t: 'Klar bok', d: 'Läs, dela eller ladda ner', icon: 'menu_book' },
-          ].map((step, i) => (
-            <div key={step.t} className="glass rounded-4xl p-6 text-center hover:-translate-y-1 transition-all">
-              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-brand to-magic
-                              flex items-center justify-center text-white shadow-glow">
-                <Icon name={step.icon} filled size={28} />
-              </div>
-              <span className="text-xs font-heading font-bold text-brand/50">STEG {i + 1}</span>
-              <h3 className="font-heading font-bold text-gray-800 mt-0.5">{step.t}</h3>
-              <p className="text-sm text-gray-500 mt-1">{step.d}</p>
-            </div>
-          ))}
-        </div>
-      </Reveal>
 
-      {/* Dina böcker */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">Dina böcker</h2>
-          <p className="text-sm text-gray-500">
-            {books.length > 0
-              ? `Du har ${books.length} sparad${books.length > 1 ? 'e' : ''} bok${books.length > 1 ? 'er' : ''}.`
-              : 'Inga sparade böcker än.'}
-          </p>
-        </div>
-        {books.length > 0 && (
-          <button onClick={onNewBook} className="btn-primary">
-            <Icon name="add" size={20} /> Ny bok
-          </button>
-        )}
-      </div>
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
+            {[0, 1, 2, 3, 4].map(i => <div key={i} className="skeleton aspect-[3/4] rounded-2xl" />)}
+          </div>
+        ) : books.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-ink/20 bg-white/60 px-6 py-14 text-center">
+            <span className="w-14 h-14 mx-auto rounded-2xl bg-ink/[0.05] text-ink/60 flex items-center justify-center">
+              <Icon name="auto_stories" size={28} />
+            </span>
+            <h3 className="mt-4 text-xl font-heading font-semibold text-ink">Här hamnar dina böcker</h3>
+            <p className="mt-1 text-ink/55 max-w-sm mx-auto">Allt du skapar sparas automatiskt i webbläsaren, och i molnet när du sparar boken.</p>
+            <button onClick={onNewBook} className="btn-primary mt-6">
+              <Icon name="add" size={19} /> Skapa din första bok
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-5 gap-y-8">
+            {books.map(book => {
+              const cover = book.spreads.find(s => s.pages === 'omslag' && s.generatedImage)
+                || book.spreads.find(s => s.generatedImage);
+              const status = STATUS[book.status] || STATUS.importing;
+              const images = book.spreads.filter(s => s.generatedImage).length;
+              const style = getStylePreset(book.stylePresetId);
 
-      {books.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {books.map((book) => {
-            const stats = getBookStats(book);
-            const status = getStatusLabel(book);
-            // Find a spread with an image for thumbnail
-            const thumbnailSpread = book.spreads.find(s => s.generatedImage);
+              return (
+                <div key={book.id} className="group">
+                  <button
+                    onClick={() => onLoadBook(book)}
+                    className="relative block w-full aspect-[3/4] rounded-2xl overflow-hidden bg-white border border-line shadow-soft
+                               group-hover:shadow-lift group-hover:-translate-y-1 transition-all duration-200 text-left"
+                    title={`Öppna ${book.title}`}
+                  >
+                    {cover?.generatedImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`data:image/png;base64,${cover.generatedImage}`}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col justify-between p-4 bg-gradient-to-b from-paper to-white">
+                        <Icon name="auto_stories" size={26} className="text-ink/25" />
+                        <span className="font-heading text-lg font-semibold text-ink/80 leading-tight line-clamp-4 break-words hyphens-auto">{book.title}</span>
+                      </div>
+                    )}
+                    {/* Bokrygg */}
+                    <span className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-black/15 to-transparent" />
+                    <span className={`absolute bottom-2.5 left-3.5 px-2 py-0.5 rounded-full text-[11px] font-semibold shadow-soft ${status.className}`}>
+                      {status.text}
+                    </span>
+                  </button>
 
-            return (
-              <div
-                key={book.id}
-                className="card-glass overflow-hidden hover:-translate-y-1 cursor-pointer group"
-                onClick={() => onLoadBook(book)}
-              >
-                {/* Thumbnail */}
-                <div className="bg-gray-100 aspect-[3/2] relative overflow-hidden">
-                  {thumbnailSpread?.generatedImage ? (
-                    <img
-                      src={`data:image/png;base64,${thumbnailSpread.generatedImage}`}
-                      alt={book.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-brand/25">
-                      <Icon name="auto_stories" size={52} />
+                  <div className="mt-3 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-heading font-semibold text-ink leading-snug truncate" title={book.title}>{book.title}</h3>
+                      <p className="text-xs text-ink/50 mt-0.5 truncate">
+                        {style ? `${style.label} · ` : ''}{images} {images === 1 ? 'bild' : 'bilder'} · {new Date(book.updatedAt || book.createdAt).toLocaleDateString('sv-SE')}
+                      </p>
                     </div>
-                  )}
-                  {/* Öppna-overlay vid hover */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent
-                                  opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
-                    <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/95 text-brand
-                                     text-sm font-heading font-bold shadow-glow">
-                      <Icon name="menu_book" filled size={17} /> Öppna boken
-                    </span>
-                  </div>
-                  {/* Status badge */}
-                  <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
-                    {status.text}
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="p-4">
-                  <h3 className="font-heading font-bold text-gray-800 mb-1 group-hover:text-brand transition-colors">
-                    {book.title}
-                  </h3>
-                  {book.subtitle && (
-                    <p className="text-sm text-gray-500 mb-2">{book.subtitle}</p>
-                  )}
-                  <div className="flex gap-3 text-xs text-gray-400">
-                    <span>{stats.totalSpreads} uppslag</span>
-                    <span>{stats.generatedImages} bilder</span>
-                    <span>{book.characters.length} karaktärer</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-xs text-gray-400">
-                      {new Date((book as any).updatedAt || book.createdAt).toLocaleDateString('sv-SE')}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onReuseBook(book);
-                        }}
-                        title="Återanvänd - skapa en kopia med nya bilder"
-                        className="btn-icon !w-8 !h-8"
-                      >
+                    <div className="flex shrink-0 -mr-1.5">
+                      <button onClick={() => onReuseBook(book)} title="Skapa en kopia med nya bilder" className="btn-icon !w-8 !h-8">
                         <Icon name="content_copy" size={17} />
                       </button>
                       {confirmDeleteId === book.id ? (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(book.id);
-                          }}
-                          className="px-2.5 py-1 bg-red-600 text-white rounded-full text-xs font-semibold animate-pop"
+                          onClick={() => handleDelete(book.id)}
+                          className="px-2.5 h-8 rounded-full bg-red-600 text-white text-xs font-semibold animate-pop"
                         >
                           Ta bort?
                         </button>
                       ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(book.id);
-                          }}
-                          title="Ta bort boken"
-                          className="btn-icon !w-8 !h-8 !text-red-300 hover:!text-red-600 hover:!bg-red-50"
-                        >
+                        <button onClick={() => handleDelete(book.id)} title="Ta bort boken" className="btn-icon !w-8 !h-8 hover:!text-red-600 hover:!bg-red-50">
                           <Icon name="delete" size={17} />
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Så går det till ── */}
+      <Reveal as="section" className="space-y-8">
+        <div className="max-w-2xl">
+          <p className="eyebrow">Så går det till</p>
+          <h2 className="mt-2 text-3xl font-heading font-semibold text-ink">Fyra steg till en färdig bok</h2>
+        </div>
+        <ol className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {STEPS.map((s, i) => (
+            <li key={s.title} className="card-glass hover:!shadow-soft p-6">
+              <div className="flex items-center justify-between">
+                <span className="w-11 h-11 rounded-xl bg-paper border border-line text-ink flex items-center justify-center">
+                  <Icon name={s.icon} size={22} />
+                </span>
+                <span className="font-heading text-3xl font-semibold text-ink/15">{i + 1}</span>
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {books.length === 0 && (
-        <div className="text-center py-14 glass rounded-4xl border-dashed border-2 border-brand/20">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand/10 flex items-center justify-center text-brand">
-            <Icon name="auto_stories" size={32} />
-          </div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-1">Inga böcker än</h3>
-          <p className="text-gray-400 mb-6">Skapa din första bok med hjälp av knappen ovan ✨</p>
-          <button onClick={onNewBook} className="btn-primary mx-auto">
-            Skapa ny bok
-          </button>
-        </div>
-      )}
-
-      {/* Konverterings-CTA */}
-      <Reveal as="section" className="relative overflow-hidden rounded-4xl px-6 sm:px-12 py-16 text-center
-                          bg-gradient-to-br from-brand-dark via-brand to-magic text-white shadow-glow-lg mt-6">
-        <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full bg-magic/30 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-trust/30 blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-2xl mx-auto">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/25">
-            <Icon name="auto_stories" filled size={30} className="text-white" />
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-bold">Redo att skriva historia?</h2>
-          <p className="mt-3 text-white/85 text-lg">
-            Det tar bara några minuter att skapa den första versionen av din bok.
-          </p>
-          <button
-            onClick={onNewBook}
-            className="group mt-8 inline-flex items-center gap-2 px-8 py-4 rounded-full bg-white text-brand
-                       font-heading font-bold text-lg shadow-xl shadow-black/10 hover:-translate-y-0.5
-                       hover:shadow-2xl active:scale-[0.98] transition-all duration-200"
-          >
-            Skapa din bok nu
-            <Icon name="arrow_forward" size={22} className="group-hover:translate-x-1 transition-transform" />
-          </button>
-        </div>
+              <h3 className="mt-5 font-heading text-lg font-semibold text-ink">{s.title}</h3>
+              <p className="mt-1.5 text-sm text-ink/60 leading-relaxed">{s.text}</p>
+            </li>
+          ))}
+        </ol>
       </Reveal>
 
-      {/* Footer */}
-      <footer className="pt-8 pb-2">
-        <div className="border-t border-gray-200/70 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand to-magic flex items-center justify-center">
-              <Icon name="auto_stories" filled size={18} className="text-white" />
-            </div>
-            <span className="font-heading font-bold brand-text">Bokverktyget</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
-            <a href="#hur-magin-skapas" className="hover:text-brand transition-colors">Hur det fungerar</a>
-            <button onClick={onNewBook} className="hover:text-brand transition-colors">Skapa bok</button>
-            <span className="text-gray-300">·</span>
-            <span className="italic text-gray-400">Magic included ✨</span>
-          </div>
+      {/* ── Avslutning ── */}
+      <Reveal as="section" className="rounded-[2rem] bg-ink text-white px-6 py-12 sm:px-14 sm:py-16 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
+        <div className="max-w-xl">
+          <h2 className="text-3xl sm:text-4xl font-heading font-semibold leading-tight">Har du redan en berättelse?</h2>
+          <p className="mt-3 text-white/65 text-lg">Klistra in början och se den i sex olika stilar innan du bestämmer dig.</p>
         </div>
+        <button onClick={onStyleTest} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-white text-ink font-semibold hover:bg-paper transition-colors shrink-0">
+          Prova stilar <Icon name="arrow_forward" size={20} />
+        </button>
+      </Reveal>
+
+      <footer className="border-t border-line pt-6 pb-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-ink/45">
+        <span className="font-heading font-semibold text-ink/70">Bokverktyget</span>
+        <span>Illustrationer skapas med AI · Texten är din</span>
       </footer>
     </div>
   );
