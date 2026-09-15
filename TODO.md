@@ -30,6 +30,11 @@ Upptäckta under designgranskningen 2026-08-12. Sorterade efter uppskattat värd
 - [ ] Karaktärsbiblioteket sparas bara i webbläsaren - synka till molnet för inloggade.
 - [ ] Referensbilder för karaktärer sparas inte i molnet (visas som initialer i bokhandeln).
 
+## Slutför din bok
+- [ ] Synka projekt och sparade författarspråk till molnet för inloggade (idag bara i webbläsaren).
+- [ ] Exportera manus som Word/PDF direkt från arbetsytan.
+- [ ] Jämför två versioner av ett kapitel sida vid sida.
+
 ## Ljudbok
 - [ ] **Ljudbok med ElevenLabs** (kräver konto + API-nyckel `ELEVENLABS_API_KEY`): svensk röst per boktyp,
       uppläsning sida för sida (en ljudfil per sida i Supabase Storage), uppspelning i läsaren med
