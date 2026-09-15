@@ -5,6 +5,7 @@ import { Character, SavedCharacter } from '@/lib/types';
 import { saveCharacter, listSavedCharacters, deleteSavedCharacter } from '@/lib/storage';
 import { STYLE_PRESETS, composeStyleGuide, getStylePreset } from '@/lib/styles';
 import { CHARACTER_TEMPLATES, CharacterTemplate } from '@/lib/character-templates';
+import StyleThumb from './StyleThumb';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 
@@ -236,7 +237,7 @@ export default function CharacterStudio({ onBack }: Props) {
                     )}
                     {style && (
                       <span className="absolute top-2 left-2 inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-white/90 border border-line text-[11px] font-medium text-ink/70">
-                        <span className={`w-3 h-3 rounded-full bg-gradient-to-br ${style.swatch}`} />
+                        <StyleThumb styleId={style.id} size={16} />
                         <span className="max-w-[7rem] truncate">{style.label}</span>
                       </span>
                     )}
@@ -779,9 +780,7 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
                           on ? 'bg-white ring-2 ring-ink font-semibold text-ink' : 'bg-white ring-1 ring-line text-ink/70 hover:ring-ink/25'
                         }`}
                       >
-                        <span className={`w-6 h-6 shrink-0 rounded-lg bg-gradient-to-br ${st.swatch} flex items-center justify-center text-white`}>
-                          {on && <Icon name="check" size={14} />}
-                        </span>
+                        <StyleThumb styleId={st.id} size={32} selected={on} />
                         <span className="leading-tight line-clamp-2">{st.label}</span>
                       </button>
                     );

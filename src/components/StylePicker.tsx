@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { STYLE_PRESETS } from '@/lib/styles';
 import { BOOK_FONTS, bookFontFaceCss, fontCss } from '@/lib/book-fonts';
+import StyleThumb from './StyleThumb';
 import Icon from './Icon';
 
 interface Props {
@@ -33,9 +34,7 @@ export default function StylePicker({ value, onChange, columns = 3 }: Props) {
               on ? 'bg-white ring-2 ring-ink shadow-soft' : 'bg-white ring-1 ring-line hover:ring-ink/25'
             }`}
           >
-            <span className={`w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
-              {on && <Icon name="check" size={20} />}
-            </span>
+            <StyleThumb styleId={style.id} size={52} selected={on} />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold text-ink leading-tight">{style.label}</span>
               <span className="block text-xs text-ink/55 mt-0.5 leading-snug">{style.concept}</span>

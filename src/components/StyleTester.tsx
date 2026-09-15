@@ -5,6 +5,7 @@ import { BookProject, Spread } from '@/lib/types';
 import type { StyleTestPlan } from '@/lib/claude';
 import { STYLE_PRESETS, getStylePreset, composeStyleGuide } from '@/lib/styles';
 import { saveStyleTest, loadStyleTest, clearStyleTest } from '@/lib/storage';
+import StyleThumb from './StyleThumb';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
@@ -396,9 +397,7 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
                             : 'bg-paper/60 ring-1 ring-line hover:ring-ink/25 hover:bg-white'
                         }`}
                       >
-                        <span className={`w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
-                          {on && <Icon name="check" size={18} />}
-                        </span>
+                        <StyleThumb styleId={style.id} size={40} selected={on} />
                         <span className="min-w-0">
                           <span className={`block font-heading font-semibold leading-tight ${on ? 'text-ink' : 'text-ink/70'}`}>
                             {style.label}
@@ -602,7 +601,7 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
             <div key={style.id} className="card-glass p-4 sm:p-5 hover:!shadow-soft animate-fade-up">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-3">
-                  <span className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${style.swatch} shadow-soft`} />
+                  <StyleThumb styleId={style.id} size={44} className="shadow-soft" />
                   <div>
                     <h3 className="font-heading font-semibold text-ink leading-tight">{style.label}</h3>
                     <p className="text-xs text-ink/55">
@@ -698,7 +697,7 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
       {confirmStyle && (
         <div className="fixed inset-0 !m-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setConfirmStyle(null)}>
           <div className="glass-strong rounded-4xl w-full max-w-md p-7 animate-pop" onClick={e => e.stopPropagation()}>
-            <span className={`block w-12 h-12 rounded-2xl bg-gradient-to-br ${getStylePreset(confirmStyle)?.swatch} shadow-soft mb-4`} />
+            <StyleThumb styleId={confirmStyle} size={64} className="block shadow-soft mb-4" />
             <h3 className="text-2xl font-heading font-bold text-ink mb-2">
               Gå vidare med {getStylePreset(confirmStyle)?.label}?
             </h3>
