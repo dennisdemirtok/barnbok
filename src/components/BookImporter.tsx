@@ -10,6 +10,7 @@ import StyleTester from './StyleTester';
 import StylePicker from './StylePicker';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
+import { postJson } from '@/lib/fetch-json';
 
 export type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
 
@@ -203,20 +204,15 @@ export default function BookImporter({
             + (draft.imageWishes.trim() ? `\n\nADDITIONAL WISHES FROM THE AUTHOR: ${draft.imageWishes.trim()}` : ''),
         };
       } else {
-        const res = await fetch('/api/plan-book', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const { ok, data } = await postJson<{ book: BookProject }>('/api/plan-book', {
             rawText: draft.rawText,
             title: draft.title,
             author: draft.author,
             stylePresetId: preset.id,
             imageWishes: draft.imageWishes,
             targetAge: draft.targetAge,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Kunde inte skapa boken');
+          });
+        if (!ok) throw new Error(data.error || 'Kunde inte skapa boken');
         book = data.book;
       }
       onParsedBookChange(await attachSavedCharacters(book));

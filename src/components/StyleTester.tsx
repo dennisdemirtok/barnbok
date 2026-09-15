@@ -7,6 +7,7 @@ import { STYLE_PRESETS, getStylePreset, composeStyleGuide } from '@/lib/styles';
 import { saveStyleTest, loadStyleTest, clearStyleTest } from '@/lib/storage';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
+import { postJson } from '@/lib/fetch-json';
 
 interface Props {
   // Vald stil tas vidare till manussteget, där hela boken skapas
@@ -224,13 +225,10 @@ export default function StyleTester({ onChooseStyle, onBack, initial }: Props) {
     setError('');
     setPlanning(true);
     try {
-      const res = await fetch('/api/style-test/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawText: state.rawText, title: state.title }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Kunde inte analysera texten');
+      const { ok, data } = await postJson<{ plan: StyleTestPlan; styleGuides: Record<string, string> }>(
+        '/api/style-test/plan', { rawText: state.rawText, title: state.title }
+      );
+      if (!ok) throw new Error(data.error || 'Kunde inte analysera texten');
 
       const next: TestState = { ...stateRef.current, plan: data.plan, styleGuides: data.styleGuides, cells: {} };
       stateRef.current = next;
