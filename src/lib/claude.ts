@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { PROSE_QUALITY_RULES, variationBlock, sanitizeProse } from './writing';
 import { BookFormat } from './types';
 import type { BookConcept, StylePreset } from './styles';
 
@@ -22,7 +23,7 @@ export interface BookConfig {
   languageExamples?: string[]; // verkliga exempelmeningar (few-shot stilförebild)
 }
 
-function getClient() {
+export function getClient() {
   const apiKey = process.env.CLAUDE_API_KEY;
   if (!apiKey) throw new Error('CLAUDE_API_KEY saknas i .env.local');
   return new Anthropic({ apiKey });
@@ -39,7 +40,7 @@ let cachedModel: { id: string; fetchedAt: number } | null = null;
  * inte fastnar på en pensionerad modellversion. Resultatet cachas i 24h
  * och vid fel används FALLBACK_MODEL.
  */
-async function resolveLatestModel(client: Anthropic): Promise<string> {
+export async function resolveLatestModel(client: Anthropic): Promise<string> {
   if (cachedModel && Date.now() - cachedModel.fetchedAt < MODEL_CACHE_TTL_MS) {
     return cachedModel.id;
   }
@@ -278,7 +279,7 @@ async function createWithModelFallback(client: Anthropic, model: string, prompt:
   return withModelFallback(model, m => generate(client, m, prompt));
 }
 
-async function withModelFallback<T>(model: string, run: (model: string) => Promise<T>): Promise<T> {
+export async function withModelFallback<T>(model: string, run: (model: string) => Promise<T>): Promise<T> {
   try {
     return await run(model);
   } catch (err) {
@@ -669,10 +670,12 @@ ${seeds}
 
 Svara med:
 - title: kort, lockande svensk titel
-- plot: 2-4 meningar om vad boken handlar om - huvudperson med namn och ålder, vad hen vill eller måste lösa, vad som står i vägen och en antydan om vändningen (avslöja inte slutet). Handlingen ska räcka till bokens längd${isChapterBook ? ' och bära flera kapitel' : ' och vara enkel nog för en bilderbok'}.
+- plot: 2-3 korta, vanliga meningar (högst 60 ord) om vad boken handlar om: huvudperson med namn och ålder, vad hen vill eller måste lösa och vad som står i vägen. Avslöja inte slutet. Handlingen ska räcka till bokens längd${isChapterBook ? ' och bära flera kapitel' : ' och vara enkel nog för en bilderbok'}.
 - setting: en kort mening om miljön
 
-Undvik klyschor och det förutsägbara. Anpassa innehållet till målåldern.`;
+Skriv som en författare som berättar sin idé för en vän, inte som en säljtext. Inga tankstreck, inga långa bisatskedjor, inga klyschor. Anpassa innehållet till målåldern.
+
+${variationBlock({ names: true, opening: false })}`;
 
   return withModelFallback(model, async (m) => {
     const message = await client.messages.create({
@@ -691,7 +694,8 @@ Undvik klyschor och det förutsägbara. Anpassa innehållet till målåldern.`;
     if (!textBlock || textBlock.type !== 'text') {
       throw new Error('Inget svar från Claude');
     }
-    return JSON.parse(textBlock.text) as PlotSuggestion;
+    const plot = JSON.parse(textBlock.text) as PlotSuggestion;
+    return { title: sanitizeProse(plot.title), plot: sanitizeProse(plot.plot), setting: sanitizeProse(plot.setting) };
   });
 }
 
@@ -717,10 +721,9 @@ function proseRules(targetAge: string): string {
   return `SKRIVREGLER:
 1. Skriv levande, idiomatisk SVENSKA som passar ${targetAge}.
 2. Gör berättelsen engagerande och åldersanpassad med en tydlig dramaturgi: en huvudperson som vill något eller har ett problem, hinder som växer och ett avslut där huvudpersonen själv gör något avgörande.
-3. Visa hellre än berätta: konkreta detaljer man kan se, höra och känna. Känslor syns i handlingar och repliker.
-4. Variera meningsrytmen. Repliker ska låta som riktiga barn och vuxna pratar.
-5. Undvik stolpig, mekanisk eller "AI-aktig" text: inga klyschor ("plötsligt" om och om igen, "ett äventyr de aldrig skulle glömma"), inga uppräkningar av känslor, ingen pekpinne eller sammanfattande moral.
-6. Alla namngivna figurer ska vara konsekventa genom hela boken (namn, ålder, utseende, sätt att prata).`;
+3. Alla namngivna figurer ska vara konsekventa genom hela boken (namn, ålder, utseende, sätt att prata).
+
+${PROSE_QUALITY_RULES}`;
 }
 
 function manuscriptFormatRules(isChapterBook: boolean): string {
@@ -744,6 +747,7 @@ function normalizeManuscript(text: string): string {
       .replace(/\*\*|__/g, '')
       .replace(/^\s*[-—―]\s+/, '– ')
       .trimEnd())
+    .map(sanitizeProse)
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -808,7 +812,9 @@ UPPGIFT:
 
 ${manuscriptFormatRules(isChapterBook)}
 
-${proseRules(targetAge)}`;
+${proseRules(targetAge)}
+
+${variationBlock({ names: characterLines.length === 0, opening: true })}`;
 
   return withModelFallback(model, async (m) => {
     // Strömmar - tänkande + prosa kan ta en stund
@@ -998,7 +1004,7 @@ ${input.text}
       throw new Error('Inget svar från Claude');
     }
     const parsed = JSON.parse(textBlock.text) as { description?: string };
-    const description = (parsed.description || '').trim();
+    const description = sanitizeProse((parsed.description || '').trim());
     if (!description) throw new Error('Tom baksidestext');
     return description;
   });
@@ -1092,6 +1098,9 @@ Undvik klyschor, håll det barnvänligt och konsekvent.`;
       throw new Error('Inget svar från Claude');
     }
     const suggestion = JSON.parse(textBlock.text) as CharacterFields;
+    for (const k of Object.keys(suggestion) as (keyof CharacterFields)[]) {
+      if (typeof suggestion[k] === 'string') (suggestion as unknown as Record<string, string>)[k] = sanitizeProse(suggestion[k] as string);
+    }
     // Namn, ålder, roll och längre beskrivningar som författaren skrivit vinner alltid;
     // korta beskrivningar får AI:ns utvecklade version
     const out = suggestion as unknown as Record<string, string>;
