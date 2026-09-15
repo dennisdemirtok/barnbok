@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookProject, Spread } from '@/lib/types';
 import type { StyleTestPlan } from '@/lib/claude';
-import { STYLE_PRESETS, getStylePreset } from '@/lib/styles';
+import { STYLE_PRESETS, getStylePreset, composeStyleGuide } from '@/lib/styles';
 import { saveStyleTest, loadStyleTest, clearStyleTest } from '@/lib/storage';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
@@ -144,7 +144,8 @@ export default function StyleTester({ onContinue, onBack }: Props) {
     if (!s.plan) return;
     const [pageId, styleId] = key.split('|');
     const page = buildPages(s.plan, s.title.trim() || s.plan.title).find(p => p.id === pageId);
-    const styleGuide = s.styleGuides[styleId] || getStylePreset(styleId)?.artDirection;
+    const fallbackPreset = getStylePreset(styleId);
+    const styleGuide = s.styleGuides[styleId] || (fallbackPreset ? composeStyleGuide(fallbackPreset) : undefined);
     if (!page || !styleGuide) return;
 
     setCell(key, { status: 'generating' });
@@ -272,7 +273,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       })),
       // Bilderna görs om i steg 3 med godkända karaktärsreferenser för konsekventa figurer
       spreads: rows.map(r => ({ ...r.spread, id: crypto.randomUUID() })),
-      styleGuide: s.styleGuides[styleId] || preset?.artDirection || '',
+      styleGuide: s.styleGuides[styleId] || (preset ? composeStyleGuide(preset) : ''),
       status: 'characters',
       createdAt: new Date().toISOString(),
     };

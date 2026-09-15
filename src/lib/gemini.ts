@@ -296,7 +296,7 @@ export async function generatePageImage(
   // Build text section based on format - CLEAN position labels
   let textSection = '';
   if (isCover) {
-    textSection = `TEXT ON THE COVER: The ONLY text allowed on the cover is the book title in Swedish (given in the image description below), rendered as large decorative title lettering. No other words, labels or text anywhere on the image.`;
+    textSection = `TEXT ON THE COVER: The ONLY text allowed on the cover is the book title in Swedish (given in the image description below), rendered as large, clearly readable title lettering in the style given under COVER TITLE LETTERING in the style guide (if present) - it must look like this book series' own logo, not a generic decorative serif. No other words, labels or text anywhere on the image.`;
   } else if (includeTextOnImage) {
     const textEntries = spread.textBlocks.map((tb, idx) => {
       const placement = cleanPositionForPrompt(tb.position);

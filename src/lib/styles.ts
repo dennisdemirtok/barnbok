@@ -18,6 +18,8 @@ export interface StylePreset {
   series?: string;
   // Engelsk art direction till bildmodellen - avgör hela uttrycket
   artDirection: string;
+  // Hur titeln letras på omslaget (annars blir alla omslag samma dekorativa serif)
+  coverLettering: string;
   // spread = liggande uppslagsbild (32×21 cm), page = stående helsida (16×21 cm)
   shape: IllustrationShape;
   // Typografi i den satta boken
@@ -39,6 +41,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     shape: 'spread',
     fonts: { body: 'nunito', heading: 'nunito' },
     swatch: 'from-indigo-700 to-fuchsia-500',
+    coverLettering: 'Bold, chunky comic-book title logo with a thick dark outline, slight 3D extrusion and dynamic tilt, like a superhero comic masthead.',
     artDirection: `ART STYLE: Cinematic digital graphic-novel painting for a Swedish middle-grade adventure series.
 RENDERING: Crisp dark ink contours of varying weight, smooth painted gradient shading, glowing rim light, strong chiaroscuro. Night-time palette of deep indigo, teal and magenta cut by warm amber and yellow light sources (street lamps, flashlights, windows).
 CHARACTER DESIGN LANGUAGE: Slender, slightly elongated anime/manga-influenced proportions; angular faces with pointed chins; large almond-shaped eyes with bright specular highlights; small noses drawn as a simple line; expressive eyebrows; hair drawn in sharp spiky clumps with strong highlights; dynamic, tense poses.
@@ -53,6 +56,7 @@ ${NO_GENERIC}`,
     shape: 'page',
     fonts: { body: 'literata', heading: 'literata' },
     swatch: 'from-sky-800 to-teal-500',
+    coverLettering: 'Soft, rounded hand-lettered title in lowercase with gentle curves, small star or moon flourishes, calm and cosy - never all-caps serif.',
     artDirection: `ART STYLE: Soft, cozy 2D digital illustration for a Swedish early-reader chapter book.
 RENDERING: Thin COLORED outlines (never black), flat colors with gentle airbrushed shading, subtle grain texture. The illustration is a soft-edged VIGNETTE that fades gently into a pure white page - not a full-bleed rectangle.
 CHARACTER DESIGN LANGUAGE: Round, friendly faces with soft chubby cheeks and a rosy blush; oval eyes of moderate size with a single small highlight; tiny button nose; simple curved mouth; slightly large heads on small rounded bodies (about 4.5 heads tall); hair as soft simple shapes.
@@ -68,6 +72,7 @@ ${NO_GENERIC}`,
     shape: 'page',
     fonts: { body: 'literata', heading: 'nunito' },
     swatch: 'from-orange-500 to-red-600',
+    coverLettering: 'Wobbly, hand-drawn ink lettering with uneven bouncy letters of different sizes, like a humorous detective comic title - never elegant or serif.',
     artDirection: `ART STYLE: Humorous Scandinavian cartoon illustration for a funny crime-caper children's book.
 RENDERING: Loose, scratchy, energetic black ink line with visible pen texture; slightly messy hatching; bright but warm watercolor-like color washes that do not stay inside the lines; white paper showing through.
 CHARACTER DESIGN LANGUAGE: Strong CARICATURE - big bulbous or long pointed noses, small dot or bead eyes, oversized grins or grimaces, gangly long limbs or round stout bodies, big hands and feet, wild messy hair, exaggerated comic expressions and slapstick body language. Characters look quirky, never pretty or anime-like.
@@ -82,6 +87,7 @@ ${NO_GENERIC}`,
     shape: 'spread',
     fonts: { body: 'literata', heading: 'literata' },
     swatch: 'from-lime-600 to-amber-600',
+    coverLettering: 'Classic hand-painted brush lettering in warm dark brown, slightly irregular like it was painted with the same watercolour brush, simple and old-fashioned.',
     artDirection: `ART STYLE: Classic Scandinavian pen-and-ink and watercolor picture-book illustration.
 RENDERING: Fine, lively black ink line with delicate cross-hatching for shadows; transparent watercolor washes with visible paper texture and soft blooms; the scene sits as a vignette with soft irregular edges fading into warm white paper.
 CHARACTER DESIGN LANGUAGE: Gentle cartoon realism - small dot eyes, round or potato-shaped noses, rosy cheeks, slightly stocky and rounded bodies, rumpled clothes with ink folds, warm humorous expressions. No big glossy eyes.
@@ -96,6 +102,7 @@ ${NO_GENERIC}`,
     shape: 'spread',
     fonts: { body: 'nunito', heading: 'nunito' },
     swatch: 'from-blue-500 to-violet-500',
+    coverLettering: 'Glossy, dimensional animated-film title logo with soft bevel, warm glow and a playful swash, like a family movie poster.',
     artDirection: `ART STYLE: Modern 3D animated feature-film look (high-end CG render) as a picture-book illustration.
 RENDERING: Soft global illumination, subsurface scattering on skin, shallow depth of field, cinematic color grading, polished materials.
 CHARACTER DESIGN LANGUAGE: Stylized 3D characters - large heads, big expressive eyes, soft rounded simplified anatomy, appealing exaggerated expressions, stylized hair as sculpted shapes.
@@ -108,6 +115,7 @@ COMPOSITION: Cinematic framing with foreground, midground and background depth.`
     shape: 'page',
     fonts: { body: 'nunito', heading: 'nunito' },
     swatch: 'from-stone-400 to-stone-600',
+    coverLettering: 'Clean, modern geometric sans-serif title set in one flat colour, generous letter spacing, no ornaments or effects.',
     artDirection: `ART STYLE: Minimalist flat graphic illustration, like a modern design-led picture book.
 RENDERING: Flat vector shapes with NO outlines, a strictly limited palette of 3-4 colors plus off-white, subtle risograph grain texture.
 CHARACTER DESIGN LANGUAGE: Highly simplified geometric figures - dot eyes, no nose or a single line, simple shapes for hair and bodies, emotion shown through posture.
@@ -128,7 +136,8 @@ export function getStylePreset(id?: string): StylePreset | undefined {
 
 // Kombinera stilens art direction med analysen av riktiga böcker (om den finns)
 export function composeStyleGuide(preset: StylePreset, profileImageStyle?: string | null): string {
+  const base = `${preset.artDirection}\n\nCOVER TITLE LETTERING (only used when drawing the front cover): ${preset.coverLettering}`;
   return profileImageStyle
-    ? `${preset.artDirection}\n\nSUPPLEMENTARY NOTES from analysis of real books in this series (secondary to the art direction above):\n${profileImageStyle}`
-    : preset.artDirection;
+    ? `${base}\n\nSUPPLEMENTARY NOTES from analysis of real books in this series (secondary to the art direction above):\n${profileImageStyle}`
+    : base;
 }
