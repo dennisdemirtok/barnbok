@@ -24,7 +24,8 @@ export async function saveBookToCloud(book: BookProject): Promise<void> {
       book_format: book.bookFormat || 'bildbok-text-pa-bild',
       age_min: parseAgeMin(book.targetAge),
       age_max: parseAgeMax(book.targetAge),
-      theme: book.styleGuide,
+      // Stilval och bildform (styr sättningen) - JSON i theme-kolumnen, ingen migrering krävs
+      theme: JSON.stringify({ v: 1, stylePresetId: book.stylePresetId, illustrationShape: book.illustrationShape, author: book.author }),
       num_spreads: book.spreads.length,
       style: book.styleGuide,
       status: mapStatus(book.status),
@@ -182,10 +183,14 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     } as Spread & { imageUrl?: string };
   });
 
+  const meta = parseBookMeta(bookRow.theme);
   return {
     id: bookRow.id,
     title: bookRow.title,
     subtitle: '',
+    author: meta.author || bookRow.author_name || undefined,
+    stylePresetId: meta.stylePresetId,
+    illustrationShape: meta.illustrationShape,
     targetAge: `${bookRow.age_min}-${bookRow.age_max}`,
     bookFormat: bookRow.book_format,
     characters,
@@ -527,6 +532,16 @@ export async function getStyleProfile(bookSeries: string): Promise<any | null> {
 // ═══════════════════════════════════════════
 //  Helpers
 // ═══════════════════════════════════════════
+
+function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author'> {
+  if (typeof theme !== 'string' || !theme.startsWith('{')) return {};
+  try {
+    const meta = JSON.parse(theme);
+    return { stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author };
+  } catch {
+    return {};
+  }
+}
 
 function parseAgeMin(targetAge?: string): number {
   if (!targetAge) return 3;

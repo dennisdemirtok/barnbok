@@ -1,11 +1,18 @@
 export type BookFormat = 'bildbok-text-pa-bild' | 'bildbok-separat-text' | 'kapitelbok' | 'larobok';
 
+// spread = liggande uppslagsbild (32×21 cm), page = stående helsida (16×21 cm)
+export type IllustrationShape = 'spread' | 'page';
+
 export interface BookProject {
   id: string;
   title: string;
   subtitle?: string;
+  author?: string;
   targetAge?: string;
   bookFormat?: BookFormat;
+  // Vald stil (lib/styles.ts) - styr bildform och typografi i den satta boken
+  stylePresetId?: string;
+  illustrationShape?: IllustrationShape;
   characters: Character[];
   spreads: Spread[];
   styleGuide: string;

@@ -16,6 +16,7 @@ export interface BookConfig {
   subject?: string; // for larobok (e.g. "matematik")
   textDensity: TextDensity;
   styleSeries?: string; // referens till barnbok_style_profiles.book_series
+  stylePresetId?: string; // vald stil i lib/styles.ts
   textStyleNotes?: string; // skrivstil från analyserad referensbok
   languageExamples?: string[]; // verkliga exempelmeningar (few-shot stilförebild)
 }
@@ -195,7 +196,7 @@ ${formatDesc}
 
 ${formatTemplate}
 
-BILDSTIL: ${config.imageStyle}
+BILDSTIL (bara för stämningen - skriv INTE in ritstilen i bildpromptarna, den läggs på separat): ${config.imageStyle}
 
 KARAKTÄRER:
 ${characterInstructions}
@@ -254,7 +255,7 @@ VIKTIGA REGLER:
 ${config.bookFormat === 'kapitelbok' ? '5. Varje kapitel ska ha en KAPITEL-rubrik' : '5. Använd INTE kapitelrubriker - berättelsen ska flöda utan kapitelindelning. Skriv ALDRIG ordet KAPITEL någonstans i boken eller bildpromptarna.'}
 6. Sidnumrering: innehållet börjar på sida 6 (sida 1-5 är titelsida/copyright), sista uppslaget är sida ${lastContentPage - 1}-${lastContentPage} och SLUTSIDA är bokens sista sida (sida ${config.numPages}). Totalt ${config.numPages} sidor - överskrid ALDRIG sida ${config.numPages}.
 7. Gör berättelsen engagerande, åldersanpassad och med en tydlig dramaturgi
-8. Varje bildprompt ska vara detaljerad (minst 3-4 meningar) och inkludera stilen: ${config.imageStyle}
+8. Varje bildprompt ska vara detaljerad (minst 3-4 meningar) och beskriva motiv, komposition, miljö, ljus och stämning - men INTE ritstil, teknik eller hur ansikten ritas (stilen läggs på separat)
 9. Karaktärsbeskrivningarna ska vara tillräckligt detaljerade för att kunna generera konsekventa bilder
 10. ${config.bookFormat === 'bildbok-text-pa-bild' ? 'Inkludera i bildprompten var texten ska placeras (t.ex. "text box in upper left", "speech bubble")' : 'Bildprompten ska INTE inkludera text i bilden'}
 11. Bildpromptarna får ALDRIG be om rubriker, kapitelbanderoller, sidnummer eller annan text utöver berättelsetexten${config.bookFormat === 'bildbok-text-pa-bild' ? ' i textrutor/pratbubblor' : ''}`;

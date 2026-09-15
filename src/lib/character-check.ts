@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { Character, Spread, BookFormat } from './types';
-import { generatePageImage, regeneratePageImage, findCharactersInScene } from './gemini';
+import { generatePageImage, regeneratePageImage, findCharactersInScene, PageImageOptions } from './gemini';
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -116,9 +116,10 @@ export async function generatePageWithQualityCheck(
   spread: Spread,
   characters: Character[],
   styleGuide: string,
-  bookFormat?: BookFormat
+  bookFormat?: BookFormat,
+  options: PageImageOptions = {}
 ): Promise<QualityGenerationResult> {
-  let image = await generatePageImage(spread, characters, styleGuide, bookFormat);
+  let image = await generatePageImage(spread, characters, styleGuide, bookFormat, options);
 
   // Only check against the characters that actually belong in this scene -
   // checking against the full cast produces false "missing character" majors
@@ -140,7 +141,7 @@ export async function generatePageWithQualityCheck(
       const instructions = `A quality control review found these problems in the previous attempt. Fix ALL of them while keeping everything else the same:\n${issueList}`;
 
       console.log(`[Kvalitetsloop] Uppslag ${spread.pages}: ${majors.length} allvarliga fel - regenererar automatiskt`);
-      image = await regeneratePageImage(spread, characters, styleGuide, instructions, bookFormat);
+      image = await regeneratePageImage(spread, characters, styleGuide, instructions, bookFormat, options);
 
       try {
         check = await checkCharacterConsistency(image, charsInScene);

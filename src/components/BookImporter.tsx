@@ -25,8 +25,8 @@ interface Props {
 
 const FORMAT_CHOICES: { value: BookFormat; label: string; comingSoon?: boolean }[] = [
   { value: 'bildbok-text-pa-bild', label: 'Bildbok med text på bild (Handbok-stil)' },
-  { value: 'bildbok-separat-text', label: 'Bildbok med separat text (Luna-stil)', comingSoon: true },
-  { value: 'kapitelbok', label: 'Kapitelbok', comingSoon: true },
+  { value: 'bildbok-separat-text', label: 'Bildbok med separat text' },
+  { value: 'kapitelbok', label: 'Kapitelbok' },
   { value: 'larobok', label: 'Lärobok / Aktivitetsbok', comingSoon: true },
 ];
 

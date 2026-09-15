@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { regeneratePageImage } from '@/lib/gemini';
 import { generatePageWithQualityCheck } from '@/lib/character-check';
-import { Character, Spread, BookFormat } from '@/lib/types';
+import { Character, Spread, BookFormat, IllustrationShape } from '@/lib/types';
+
+// Den färdiga boken genereras i tryckupplösning
+const BOOK_IMAGE_SIZE = '2K' as const;
 
 // Generering + kvalitetskontroll + ev. auto-regenerering kan ta ett par minuter
 export const maxDuration = 300;
@@ -33,10 +36,12 @@ async function handleSingle(body: {
   characters: Character[];
   styleGuide: string;
   bookFormat?: BookFormat;
+  illustrationShape?: IllustrationShape;
   customInstructions?: string;
   isRegenerate?: boolean;
 }) {
-  const { spread, characters, styleGuide, bookFormat, customInstructions, isRegenerate } = body;
+  const { spread, characters, styleGuide, bookFormat, illustrationShape, customInstructions, isRegenerate } = body;
+  const options = { shape: illustrationShape, imageSize: BOOK_IMAGE_SIZE };
 
   if (!spread || !characters) {
     return NextResponse.json(
@@ -48,13 +53,13 @@ async function handleSingle(body: {
   if (isRegenerate && customInstructions) {
     // Manual regeneration with user instructions - no auto-loop, the user is in control
     const imageBase64 = await regeneratePageImage(
-      spread, characters, styleGuide || '', customInstructions, bookFormat
+      spread, characters, styleGuide || '', customInstructions, bookFormat, options
     );
     return NextResponse.json({ image: imageBase64 });
   }
 
   const result = await generatePageWithQualityCheck(
-    spread, characters, styleGuide || '', bookFormat
+    spread, characters, styleGuide || '', bookFormat, options
   );
   return NextResponse.json({
     image: result.image,
@@ -69,8 +74,10 @@ async function handleBatch(body: {
   characters: Character[];
   styleGuide: string;
   bookFormat?: BookFormat;
+  illustrationShape?: IllustrationShape;
 }) {
-  const { spreads, characters, styleGuide, bookFormat } = body;
+  const { spreads, characters, styleGuide, bookFormat, illustrationShape } = body;
+  const options = { shape: illustrationShape, imageSize: BOOK_IMAGE_SIZE };
 
   if (!spreads || spreads.length === 0 || !characters) {
     return NextResponse.json(
@@ -100,7 +107,7 @@ async function handleBatch(body: {
 
       try {
         const result = await generatePageWithQualityCheck(
-          spread, characters, styleGuide || '', bookFormat
+          spread, characters, styleGuide || '', bookFormat, options
         );
         return {
           id: spread.id,

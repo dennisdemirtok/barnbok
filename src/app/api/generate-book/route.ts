@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { generateBookContent, BookConfig } from '@/lib/claude';
 import { parseBookData } from '@/lib/parser';
 import { fetchStyleProfile, fetchLanguageExamples } from '@/lib/style-profiles';
+import { getStylePreset, composeStyleGuide } from '@/lib/styles';
 
-export const maxDuration = 120; // 2 minutes for long book generation
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
@@ -13,21 +14,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Titel kravs' }, { status: 400 });
     }
 
-    // Berika med stilprofil + språkexempel från referensböcker om en serie är vald
-    if (config.styleSeries) {
+    // Vald stil: art direction + analys av riktiga böcker + författarens egna önskemål
+    const preset = getStylePreset(config.stylePresetId);
+    const series = preset?.series || config.styleSeries;
+    const authorWishes = config.imageStyle?.trim();
+    let profileImageStyle: string | undefined;
+
+    if (series) {
       const [profile, examples] = await Promise.all([
-        fetchStyleProfile(config.styleSeries),
-        fetchLanguageExamples(config.styleSeries),
+        fetchStyleProfile(series),
+        fetchLanguageExamples(series),
       ]);
       if (profile) {
-        console.log(`[generate-book] Använder stilprofil "${config.styleSeries}"`);
-        if (profile.image_style) config.imageStyle = profile.image_style;
+        console.log(`[generate-book] Använder stilprofil "${series}"`);
+        profileImageStyle = profile.image_style;
         if (profile.text_style) config.textStyleNotes = profile.text_style;
       }
       if (examples.length > 0) {
         console.log(`[generate-book] ${examples.length} språkexempel som förebilder`);
         config.languageExamples = examples;
       }
+    }
+
+    // Claude får stilens koncept för stämningen - själva ritstilen läggs på i bildsteget
+    if (preset) {
+      config.imageStyle = `${preset.label} – ${preset.concept}${authorWishes ? `. Önskemål: ${authorWishes}` : ''}`;
     }
 
     // Generate book content with Claude
@@ -44,11 +55,17 @@ export async function POST(request: Request) {
     // Set the book format from the config
     book.bookFormat = config.bookFormat;
 
-    // Use the chosen (possibly profile-enriched) image style for ALL page
-    // generation - previously the parser's generic default overrode the
-    // user's choice so picked styles never reached the images
-    if (config.imageStyle) {
-      book.styleGuide = config.imageStyle;
+    // Stilen som ALL bildgenerering använder (parserns generiska standard får aldrig vinna)
+    if (preset) {
+      book.styleGuide = composeStyleGuide(preset, profileImageStyle)
+        + (authorWishes ? `\n\nADDITIONAL WISHES FROM THE AUTHOR: ${authorWishes}` : '');
+      book.stylePresetId = preset.id;
+      // Serie- och läroboksformat ritar text i bilden och behåller uppslagsform
+      if (config.bookFormat === 'bildbok-separat-text' || config.bookFormat === 'kapitelbok') {
+        book.illustrationShape = preset.shape;
+      }
+    } else if (authorWishes) {
+      book.styleGuide = authorWishes;
     }
 
     console.log(`[generate-book] Parsningsresultat: ${book.characters.length} karaktarer, ${book.spreads.length} uppslag`);

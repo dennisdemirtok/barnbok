@@ -1,18 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { Character, Spread, TextBlock, BookFormat } from '@/lib/types';
+import { Character, Spread, TextBlock, BookFormat, IllustrationShape } from '@/lib/types';
 
 interface Props {
   spread: Spread;
   characters: Character[];
   styleGuide: string;
   bookFormat?: BookFormat;
+  illustrationShape?: IllustrationShape;
   onSave: (updatedSpread: Spread) => void;
   onClose: () => void;
 }
 
-export default function PageEditor({ spread, characters, styleGuide, bookFormat, onSave, onClose }: Props) {
+export default function PageEditor({ spread, characters, styleGuide, bookFormat, illustrationShape, onSave, onClose }: Props) {
   const [editedSpread, setEditedSpread] = useState<Spread>({ ...spread });
   const [customInstructions, setCustomInstructions] = useState('');
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -42,6 +43,7 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
           characters,
           styleGuide,
           bookFormat,
+          illustrationShape,
           customInstructions: customInstructions || undefined,
           isRegenerate: true,
         }),

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import { Character, Spread, BookFormat } from './types';
+import { Character, Spread, BookFormat, IllustrationShape } from './types';
+import { textSideForSpread } from './styles';
 
 const MODEL = 'gemini-3.1-flash-image-preview';
 
@@ -161,73 +162,56 @@ This reference sheet will be used as the definitive guide for drawing this chara
   });
 }
 
-// Format-specific prompt instructions
-function getFormatImageInstructions(bookFormat?: BookFormat): string {
-  switch (bookFormat) {
-    case 'bildbok-text-pa-bild':
-      return `LAYOUT STYLE: Comic/manga panel layout (like "Handbok for Superhjaltar").
-- Create a PROFESSIONAL comic book page with multiple panels per spread
-- Use SPEECH BUBBLES for all dialogue text - white rounded bubbles with tail pointing to speaker
-- Use NARRATION BOXES (rectangular, slightly tinted) for descriptive/narrative text
-- Panel borders should be clean, with thick dark outlines
-- Arrange panels dynamically - mix large and small panels for visual variety
-- Characters should have large expressive manga-style eyes, thick outlines
-- Use vibrant, saturated colors with detailed backgrounds
-- The text in speech bubbles must use a clean, bold, comic-style font
-- Text must be large enough to read easily (suitable for children age 6-9)
-- EVERY piece of Swedish text MUST appear in an appropriate bubble or narration box
-- ALL text on the image MUST be in SWEDISH - use the exact Swedish text provided, never translate it, and NEVER write English words (no "CHAPTER", "THE END", "POW" etc.)
-- Do NOT draw chapter headings, chapter banners, or any title text - only the provided story text
-- NEVER draw an empty speech bubble or empty text box - every bubble and box must contain one of the provided Swedish texts. If no dialogue is provided, draw no speech bubbles at all.
-- Make it look like a REAL published comic book page - professional quality
-- DO NOT write any position labels, page numbers, or metadata on the image`;
+export interface PageImageOptions {
+  // Bildform - annars härleds den från bokformatet
+  shape?: IllustrationShape;
+  // 1K räcker för provningar, 2K för tryckkvalitet i den färdiga boken
+  imageSize?: '1K' | '2K';
+}
 
-    case 'bildbok-separat-text':
-      return `LAYOUT STYLE: Single-page illustration for a children's chapter book (like Swedish "Luna" books by Karin Lemon).
-- Create ONE illustration sized for a SINGLE book page (portrait orientation, approximately 14cm x 21cm)
-- The illustration will be placed on ONE page of a spread - the OTHER page will have printed text
-- DO NOT include any text, letters, words, or writing on the image - text is printed separately on the facing page
-- The illustration should NOT fill the entire image - leave some white/empty space around the edges
-- Clean line art style with soft digital coloring - similar to modern Scandinavian children's book illustration
-- Characters should have expressive faces with large eyes, clean outlines, soft shading
-- NOT watercolor or painterly - more like clean digital illustration with defined edges
-- Focus on ONE key moment or character interaction from the scene
-- Background can be simple or partially white - does not need to fill the entire space
-- Think of how illustrations look in chapter books: sometimes full-page, sometimes smaller with white space
-- Characters should feel warm and relatable, with natural proportions (not overly cartoonish)
-- Soft, muted color palette with gentle lighting
-- The illustration should complement the story text on the facing page
-- DO NOT write any labels, page numbers, position text, or metadata on the image`;
+// Bokformat med text i bilden (serietidning / lärobok) - allt annat sätts av layoutmotorn
+function textInImage(bookFormat?: BookFormat): boolean {
+  return bookFormat === 'bildbok-text-pa-bild' || bookFormat === 'larobok' || !bookFormat;
+}
 
-    case 'kapitelbok':
-      return `LAYOUT STYLE: Chapter book illustration.
-- Create a SINGLE, simpler illustration - more like a sketch or spot illustration
-- DO NOT include any text on the image - text is printed separately
-- Style can be more minimalistic - focus on one key moment or character pose
-- Use softer colors or even consider black and white with light shading
-- The illustration should enhance the text but the text carries the story
-- Simpler backgrounds, focus on character expressions and key story moments
-- Think of illustrations in books like Harry Potter or Bert-series
-- DO NOT write any labels, page numbers, or metadata on the image`;
+export function resolveIllustrationShape(bookFormat?: BookFormat, shape?: IllustrationShape): IllustrationShape {
+  if (shape) return shape;
+  return bookFormat === 'bildbok-separat-text' || bookFormat === 'kapitelbok' ? 'page' : 'spread';
+}
 
-    case 'larobok':
-      return `LAYOUT STYLE: Educational/activity book illustration.
-- Create clear, pedagogical illustrations
-- Can include labels, arrows, or visual elements that help explain concepts
-- Bright, clear colors with good contrast
-- Mix of character illustrations and informational graphics
-- Text labels on the image should be in clean, readable font
-- Organized layout that supports learning
-- DO NOT write page numbers or position metadata on the image`;
-
-    default:
-      return `LAYOUT STYLE: Children's book illustration with integrated text.
-- INCLUDE the Swedish text on the image in the correct positions
-- Place text in readable text boxes or speech bubbles with good contrast
-- Use a clear, readable font style suitable for children (age 6-9)
-- Use vibrant colors with thick outlines in manga/comic style
-- DO NOT write any position labels, page numbers, or metadata on the image`;
+// Layoutinstruktioner. VIKTIGT: inga stilord här (linjer, ögon, färger, teknik) -
+// stilen kommer enbart från STYLE GUIDE, annars blir alla stilar likadana.
+function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: IllustrationShape, spreadNumber: number): string {
+  if (bookFormat === 'bildbok-text-pa-bild') {
+    return `LAYOUT: Comic/graphic-novel spread with panels.
+- A professional comic spread with several panels of varied size
+- SPEECH BUBBLES for dialogue (tail pointing to the speaker) and NARRATION BOXES for narrative text
+- Every piece of provided Swedish text must appear in a bubble or box - exactly as written, never translated, never invented
+- Never draw empty bubbles or boxes; if there is no dialogue, draw no speech bubbles
+- Text must be large and legible for children aged 6-9
+- No chapter headings, titles, page numbers or labels`;
   }
+
+  if (bookFormat === 'larobok') {
+    return `LAYOUT: Educational/activity book spread.
+- Clear pedagogical illustrations; labels and arrows are allowed where they help explain
+- Organized layout that supports learning
+- No page numbers or metadata`;
+  }
+
+  if (shape === 'spread') {
+    const textSide = textSideForSpread(spreadNumber);
+    return `LAYOUT: One continuous DOUBLE-PAGE SPREAD illustration (landscape, 32×21 cm).
+- Absolutely NO text, letters, numbers or signage words anywhere in the image - the story text is typeset separately by the book designer
+- The vertical center line is the book's fold: never place a face or key detail exactly on the center line
+- Keep a calm, low-detail area (sky, wall, floor, soft background) across roughly the ${textSide.toUpperCase()} THIRD of the image, where the story text will be printed on top
+- Put the main action and characters in the other two thirds`;
+  }
+
+  return `LAYOUT: Single PAGE illustration (portrait, 16×21 cm) for a book where the text is typeset on its own pages.
+- Absolutely NO text, letters, numbers or signage words anywhere in the image
+- Focus on one key moment of the scene
+- Use the composition the art style calls for (e.g. soft vignette on white, or full page)`;
 }
 
 // Detect which characters from the list are mentioned in a spread's text/imagePrompt
@@ -253,7 +237,8 @@ export async function generatePageImage(
   spread: Spread,
   characters: Character[],
   styleGuide: string,
-  bookFormat?: BookFormat
+  bookFormat?: BookFormat,
+  options: PageImageOptions = {}
 ): Promise<string> {
   await rateLimitedDelay();
   const ai = getClient();
@@ -296,16 +281,17 @@ export async function generatePageImage(
 
   // Get format-specific instructions
   const isCover = spread.pages === 'omslag';
+  const shape = resolveIllustrationShape(bookFormat, options.shape);
   const formatInstructions = isCover
-    ? `LAYOUT STYLE: BOOK COVER (front cover of a children's book).
-- This is the book's front cover - make it eye-catching and inviting
-- The book title MUST appear as large, prominent, beautifully lettered SWEDISH title text near the top (the exact title is given in the image description below)
-- Apart from the title (and possibly an author line if specified), NO other text on the cover
-- Show the main character(s) in an appealing scene that captures the book's theme
-- Vibrant colors, strong composition, professional children's book cover quality
-- DO NOT write any position labels, page numbers, chapter headings, or metadata on the image`
-    : getFormatImageInstructions(bookFormat);
-  const includeTextOnImage = !isCover && (bookFormat === 'bildbok-text-pa-bild' || bookFormat === 'larobok' || !bookFormat);
+    ? `LAYOUT: FRONT COVER of a published children's book (portrait, 16×21 cm).
+- Eye-catching, inviting composition that captures the book's theme and mood
+- The book title MUST appear as large, beautifully lettered SWEDISH title text in the upper part, integrated with the artwork and lettered in a way that fits the art style (the exact title is given in the image description below)
+- Apart from the title, NO other text anywhere
+- Show the main character(s) in an appealing scene, leaving the title area uncluttered
+- Professional bookshop-quality cover
+- No labels, page numbers or metadata`
+    : getLayoutInstructions(bookFormat, shape, spread.spreadNumber);
+  const includeTextOnImage = !isCover && textInImage(bookFormat);
 
   // Build text section based on format - CLEAN position labels
   let textSection = '';
@@ -350,18 +336,21 @@ ${mainCharsInScene.length > 1 ? `There are ${mainCharsInScene.length} main chara
 ${supportingCharsInScene.length > 0 ? `Supporting characters: ${supportingCharsInScene.map(c => c.name).join(', ')} - include them as described in the scene, each appearing once.` : ''}`;
   }
 
-  // Determine image format based on book type
-  const isSinglePageFormat = bookFormat === 'bildbok-separat-text' || bookFormat === 'kapitelbok';
-  const imageSize = isSinglePageFormat
-    ? 'a single book page (portrait, approximately 14cm x 21cm)'
+  // Omslag och helsidor är stående, uppslag liggande
+  const isPortrait = isCover || shape === 'page';
+  const imageSize = isCover
+    ? 'the front cover of a children\'s book (portrait, 16cm x 21cm)'
+    : isPortrait
+    ? 'a single book page (portrait, 16cm x 21cm)'
     : 'a children\'s book spread (double page, 32cm x 21cm)';
 
   // Add the main prompt
   const mainPrompt = `Generate an illustration for ${imageSize}.
 
-${formatInstructions}
+STYLE GUIDE (this defines the entire look - rendering, line, color AND how faces and bodies are drawn):
+${styleGuide}
 
-STYLE GUIDE: ${styleGuide}
+${formatInstructions}
 
 ${textSection}
 
@@ -371,10 +360,10 @@ ${characterPresenceSection}
 
 CHARACTER CONSISTENCY:
 - Keep ALL characters looking EXACTLY like their reference images above
-- Maintain consistent art style throughout
-${isSinglePageFormat
-  ? '- The image should be a single-page illustration - portrait orientation, NOT a wide landscape spread'
-  : '- The image should be a full illustration suitable for a children\'s book spread'}
+- Draw everyone in the character design language of the STYLE GUIDE
+${isPortrait
+  ? '- The image must be a portrait illustration, NOT a wide landscape spread'
+  : '- The image must be a wide landscape double-page spread'}
 - Make sure character proportions, hair, clothing, and features match their reference sheets
 - Every character must look the SAME across all pages - same hair color, same clothing, same features
 - NEVER duplicate a character - each person appears EXACTLY ONCE in the image
@@ -389,6 +378,10 @@ ${isSinglePageFormat
       contents,
       config: {
         responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: {
+          aspectRatio: isPortrait ? '3:4' : '3:2',
+          imageSize: options.imageSize || '1K',
+        },
       },
     });
 
@@ -411,14 +404,15 @@ export async function regeneratePageImage(
   characters: Character[],
   styleGuide: string,
   customInstructions?: string,
-  bookFormat?: BookFormat
+  bookFormat?: BookFormat,
+  options: PageImageOptions = {}
 ): Promise<string> {
   if (customInstructions) {
     const modifiedSpread = {
       ...spread,
       imagePrompt: `${spread.imagePrompt}\n\nADDITIONAL INSTRUCTIONS: ${customInstructions}`,
     };
-    return generatePageImage(modifiedSpread, characters, styleGuide, bookFormat);
+    return generatePageImage(modifiedSpread, characters, styleGuide, bookFormat, options);
   }
-  return generatePageImage(spread, characters, styleGuide, bookFormat);
+  return generatePageImage(spread, characters, styleGuide, bookFormat, options);
 }

@@ -1,15 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BookProject, Spread, TextBlock } from '@/lib/types';
+import { BookProject, Spread } from '@/lib/types';
 import Icon from './Icon';
 import { saveBook } from '@/lib/storage';
 import { exportBookToPDF } from '@/lib/pdf-export';
-import { pickLunaLayout, LunaLayout } from '@/lib/luna-layouts';
 import { setBookPublished, getBookPublishState } from '@/lib/supabase-db';
 import { useAuth } from '@/lib/auth';
 import PageEditor from './PageEditor';
 import Workshop from './Workshop';
+import BookReader from './BookReader';
+
+const spreadName = (s: Spread) =>
+  s.pages === 'omslag' ? 'Omslag' : s.pages === 'slutsida' ? 'Slutsida' : `Sida ${s.pages}`;
 
 interface Props {
   book: BookProject;
@@ -20,7 +23,7 @@ interface Props {
 
 export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }: Props) {
   const [selectedSpread, setSelectedSpread] = useState<Spread | null>(null);
-  const [viewMode, setViewMode] = useState<'workshop' | 'grid' | 'book'>('workshop');
+  const [viewMode, setViewMode] = useState<'workshop' | 'grid' | 'book'>('book');
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -91,18 +94,6 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       setSharing(false);
     }
   };
-
-  const isSeparateTextFormat = book.bookFormat === 'bildbok-separat-text';
-
-  // Track which spreads are the FIRST of their chapter (to avoid repeating chapter headings)
-  const firstChapterSpreadIds = new Set<string>();
-  const seenChapters = new Set<string>();
-  for (const s of book.spreads) {
-    if (s.chapter && !seenChapters.has(s.chapter)) {
-      seenChapters.add(s.chapter);
-      firstChapterSpreadIds.add(s.id);
-    }
-  }
 
   const handleSaveSpread = (updatedSpread: Spread) => {
     onUpdateSpread(updatedSpread);
@@ -181,370 +172,6 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       }
     }
     setChecking(false);
-  };
-
-  // ── Helper: render image ──
-  const renderImage = (spread: Spread, className: string = 'w-full h-full object-contain') => {
-    if (spread.generatedImage) {
-      return (
-        <img
-          src={`data:image/png;base64,${spread.generatedImage}`}
-          alt={`Sida ${spread.pages}`}
-          className={className}
-        />
-      );
-    }
-    return <div className="flex items-center justify-center h-full text-gray-400">Ingen bild</div>;
-  };
-
-  // ── Helper: render text blocks ──
-  const renderText = (blocks: TextBlock[], truncate: boolean = false) => {
-    if (blocks.length === 0) {
-      return <p className="text-gray-400 italic text-center text-xs">Ingen text</p>;
-    }
-    return (
-      <div className="space-y-3">
-        {blocks.map((block, idx) => (
-          <p
-            key={idx}
-            className={
-              truncate
-                ? 'text-xs leading-relaxed text-gray-800 font-serif'
-                : 'text-sm md:text-base leading-relaxed text-gray-900 font-serif'
-            }
-          >
-            {truncate && block.text.length > 200 ? block.text.substring(0, 200) + '...' : block.text}
-          </p>
-        ))}
-      </div>
-    );
-  };
-
-  // ── Helper: page number ──
-  const pageNum = (num: string, side: 'left' | 'right') => (
-    <div className={`px-4 py-1.5 ${side === 'right' ? 'text-right' : 'text-left'}`}>
-      <span className="text-xs text-gray-400">{num}</span>
-    </div>
-  );
-
-  // ── Helper: parse page numbers ──
-  const parsePageNums = (pages: string) => {
-    const m = pages.match(/(\d+)(?:-(\d+))?/);
-    return { left: m ? m[1] : '', right: m?.[2] || '' };
-  };
-
-  // ── Helper: edit button overlay ──
-  const editBtn = (spread: Spread) => (
-    <div className="absolute top-3 right-3 z-10">
-      <button
-        onClick={(e) => { e.stopPropagation(); setSelectedSpread(spread); }}
-        className="px-4 py-1.5 bg-white/90 backdrop-blur-sm text-brand rounded-full
-                   text-sm font-semibold hover:bg-white transition-colors shadow-glow"
-      >
-        Redigera
-      </button>
-    </div>
-  );
-
-  // ════════════════════════════════════════════════════════
-  //  GRID VIEW: Luna layout thumbnails (compact cards)
-  // ════════════════════════════════════════════════════════
-  const renderGridLuna = (spread: Spread, layout: LunaLayout) => {
-    switch (layout) {
-      // ┌─────────┬─────────┐
-      // │  TEXT   │  IMAGE  │
-      // │  (45%) │  (55%)  │
-      // └─────────┴─────────┘
-      case 'text-left-img-right':
-        return (
-          <div className="flex aspect-[32/21]">
-            <div className="w-[45%] bg-white border-r border-gray-100 p-3 flex flex-col justify-center overflow-hidden">
-              {renderText(spread.textBlocks, true)}
-            </div>
-            <div className="w-[55%] bg-gray-50">
-              {renderImage(spread)}
-            </div>
-          </div>
-        );
-
-      // ┌─────────┬─────────┐
-      // │  IMAGE  │  TEXT   │
-      // │  (55%) │  (45%)  │
-      // └─────────┴─────────┘
-      case 'img-left-text-right':
-        return (
-          <div className="flex aspect-[32/21]">
-            <div className="w-[55%] bg-gray-50">
-              {renderImage(spread)}
-            </div>
-            <div className="w-[45%] bg-white border-l border-gray-100 p-3 flex flex-col justify-center overflow-hidden">
-              {renderText(spread.textBlocks, true)}
-            </div>
-          </div>
-        );
-
-      // ┌─────────┬─────────┐
-      // │         │  IMAGE  │
-      // │  TEXT   │  (3/4)  │
-      // │  (45%) ├─────────┤
-      // │         │  text   │
-      // └─────────┴─────────┘
-      case 'text-left-img-right-3q': {
-        const hasSecondary = spread.textBlocks.length > 1;
-        return (
-          <div className="flex aspect-[32/21]">
-            <div className="w-[45%] bg-white border-r border-gray-100 p-3 flex flex-col justify-center overflow-hidden">
-              {spread.chapter && (
-                <p className="text-[10px] font-semibold text-gray-400 text-center mb-1 uppercase tracking-wide">
-                  {spread.chapter}
-                </p>
-              )}
-              {renderText(hasSecondary ? spread.textBlocks.slice(0, -1) : spread.textBlocks, true)}
-            </div>
-            <div className="w-[55%] flex flex-col">
-              <div className="flex-[3] bg-gray-50">
-                {renderImage(spread)}
-              </div>
-              {hasSecondary && (
-                <div className="flex-1 bg-white border-t border-gray-100 p-2 overflow-hidden">
-                  <p className="text-[9px] leading-tight text-gray-600 font-serif line-clamp-3">
-                    {spread.textBlocks[spread.textBlocks.length - 1].text.substring(0, 120)}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      }
-
-      // ┌─────────┬─────────┐
-      // │  IMAGE  │         │
-      // │  (3/4)  │  TEXT   │
-      // ├─────────┤  (45%) │
-      // │  text   │         │
-      // └─────────┴─────────┘
-      case 'img-left-3q-text-right': {
-        const hasSnippet = spread.textBlocks.length > 0;
-        return (
-          <div className="flex aspect-[32/21]">
-            <div className="w-[55%] flex flex-col">
-              <div className="flex-[3] bg-gray-50">
-                {renderImage(spread)}
-              </div>
-              {hasSnippet && (
-                <div className="flex-1 bg-white border-t border-gray-100 p-2 overflow-hidden">
-                  <p className="text-[9px] leading-tight text-gray-600 font-serif line-clamp-3">
-                    {spread.textBlocks[0].text.substring(0, 120)}
-                  </p>
-                </div>
-              )}
-            </div>
-            <div className="w-[45%] bg-white border-l border-gray-100 p-3 flex flex-col justify-center overflow-hidden">
-              {renderText(spread.textBlocks.length > 1 ? spread.textBlocks.slice(1) : spread.textBlocks, true)}
-            </div>
-          </div>
-        );
-      }
-
-      // ┌────────┬──────┬────────┐
-      // │  TEXT  │ IMG  │  TEXT  │
-      // │ col 1  │(ctr) │ col 2  │
-      // └────────┴──────┴────────┘
-      case 'text-around-img-center': {
-        const allText = spread.textBlocks.map(b => b.text).join(' ');
-        const mid = Math.ceil(allText.length / 2);
-        const leftText = allText.substring(0, mid);
-        const rightText = allText.substring(mid);
-        return (
-          <div className="flex aspect-[32/21]">
-            <div className="w-[28%] bg-white p-2 flex flex-col justify-center overflow-hidden">
-              <p className="text-[9px] leading-tight text-gray-800 font-serif">
-                {leftText.substring(0, 180)}...
-              </p>
-            </div>
-            <div className="w-[44%] bg-gray-50 flex items-center justify-center p-2">
-              {renderImage(spread, 'max-w-full max-h-full object-contain')}
-            </div>
-            <div className="w-[28%] bg-white p-2 flex flex-col justify-center overflow-hidden">
-              <p className="text-[9px] leading-tight text-gray-800 font-serif">
-                {rightText.substring(0, 180)}...
-              </p>
-            </div>
-          </div>
-        );
-      }
-    }
-  };
-
-  // ════════════════════════════════════════════════════════
-  //  BOOK VIEW: Luna layout full-size spread rendering
-  // ════════════════════════════════════════════════════════
-  const renderBookLuna = (spread: Spread, layout: LunaLayout) => {
-    const nums = parsePageNums(spread.pages);
-
-    switch (layout) {
-      // Classic: text left, full image right
-      case 'text-left-img-right':
-        return (
-          <div className="relative flex bg-white" style={{ aspectRatio: '32/21' }}>
-            {editBtn(spread)}
-            <div className="w-[45%] border-r border-gray-100 flex flex-col">
-              <div className="flex-1 px-8 py-6 md:px-12 md:py-8 flex flex-col justify-center overflow-auto">
-                <div className="max-w-md mx-auto">
-                  {renderText(spread.textBlocks)}
-                </div>
-              </div>
-              {pageNum(nums.left, 'left')}
-            </div>
-            <div className="w-[55%] bg-gray-50 flex items-center justify-center">
-              {renderImage(spread)}
-            </div>
-          </div>
-        );
-
-      // Mirror: full image left, text right
-      case 'img-left-text-right':
-        return (
-          <div className="relative flex bg-white" style={{ aspectRatio: '32/21' }}>
-            {editBtn(spread)}
-            <div className="w-[55%] bg-gray-50 flex items-center justify-center">
-              {renderImage(spread)}
-            </div>
-            <div className="w-[45%] border-l border-gray-100 flex flex-col">
-              <div className="flex-1 px-8 py-6 md:px-12 md:py-8 flex flex-col justify-center overflow-auto">
-                <div className="max-w-md mx-auto">
-                  {renderText(spread.textBlocks)}
-                </div>
-              </div>
-              {pageNum(nums.right, 'right')}
-            </div>
-          </div>
-        );
-
-      // Text left, image 3/4 right, text snippet below image
-      case 'text-left-img-right-3q': {
-        const mainBlocks = spread.textBlocks.length > 1
-          ? spread.textBlocks.slice(0, -1)
-          : spread.textBlocks;
-        const bottomBlock = spread.textBlocks.length > 1
-          ? spread.textBlocks[spread.textBlocks.length - 1]
-          : null;
-
-        return (
-          <div className="relative flex bg-white" style={{ aspectRatio: '32/21' }}>
-            {editBtn(spread)}
-            <div className="w-[45%] border-r border-gray-100 flex flex-col">
-              <div className="flex-1 px-8 py-6 md:px-10 md:py-8 flex flex-col justify-center overflow-auto">
-                <div className="max-w-sm mx-auto">
-                  {renderText(mainBlocks)}
-                </div>
-              </div>
-              {pageNum(nums.left, 'left')}
-            </div>
-            <div className="w-[55%] flex flex-col">
-              <div className={`${bottomBlock ? 'flex-[3]' : 'flex-1'} bg-gray-50 flex items-center justify-center`}>
-                {renderImage(spread)}
-              </div>
-              {bottomBlock && (
-                <div className="flex-1 border-t border-gray-100 px-6 py-3 flex items-center overflow-auto">
-                  <p className="text-sm leading-relaxed text-gray-700 font-serif">
-                    {bottomBlock.text}
-                  </p>
-                </div>
-              )}
-              {pageNum(nums.right, 'right')}
-            </div>
-          </div>
-        );
-      }
-
-      // Image 3/4 left with snippet below, text right
-      case 'img-left-3q-text-right': {
-        const snippet = spread.textBlocks.length > 0
-          ? spread.textBlocks[0].text.substring(0, 180)
-          : '';
-        const restBlocks = spread.textBlocks.length > 1
-          ? spread.textBlocks.slice(1)
-          : spread.textBlocks;
-
-        return (
-          <div className="relative flex bg-white" style={{ aspectRatio: '32/21' }}>
-            {editBtn(spread)}
-            <div className="w-[55%] flex flex-col">
-              <div className={`${snippet ? 'flex-[3]' : 'flex-1'} bg-gray-50 flex items-center justify-center`}>
-                {renderImage(spread)}
-              </div>
-              {snippet && (
-                <div className="flex-1 border-t border-gray-100 px-6 py-3 flex items-center overflow-auto">
-                  <p className="text-sm leading-relaxed text-gray-700 font-serif">
-                    {snippet}
-                  </p>
-                </div>
-              )}
-              {pageNum(nums.left, 'left')}
-            </div>
-            <div className="w-[45%] border-l border-gray-100 flex flex-col">
-              <div className="flex-1 px-8 py-6 md:px-10 md:py-8 flex flex-col justify-center overflow-auto">
-                <div className="max-w-sm mx-auto">
-                  {renderText(restBlocks)}
-                </div>
-              </div>
-              {pageNum(nums.right, 'right')}
-            </div>
-          </div>
-        );
-      }
-
-      // Portrait image centered, text columns on both sides
-      case 'text-around-img-center': {
-        const allBlocks = spread.textBlocks;
-        const midIdx = Math.ceil(allBlocks.length / 2);
-        const leftBlocks = allBlocks.length > 1 ? allBlocks.slice(0, midIdx) : allBlocks;
-        const rightBlocks = allBlocks.length > 1 ? allBlocks.slice(midIdx) : [];
-
-        return (
-          <div className="relative flex bg-white" style={{ aspectRatio: '32/21' }}>
-            {editBtn(spread)}
-            {/* Left text column */}
-            <div className="w-[28%] border-r border-gray-100 flex flex-col">
-              <div className="flex-1 px-6 py-6 md:px-8 md:py-8 flex flex-col justify-center overflow-auto">
-                <div className="space-y-3">
-                  {leftBlocks.map((block, idx) => (
-                    <p key={idx} className="text-sm leading-relaxed text-gray-900 font-serif">
-                      {block.text}
-                    </p>
-                  ))}
-                </div>
-              </div>
-              {pageNum(nums.left, 'left')}
-            </div>
-            {/* Centered portrait image */}
-            <div className="w-[44%] bg-gray-50 flex items-center justify-center p-4">
-              {renderImage(spread, 'max-w-full max-h-full object-contain rounded-sm')}
-            </div>
-            {/* Right text column */}
-            <div className="w-[28%] border-l border-gray-100 flex flex-col">
-              <div className="flex-1 px-6 py-6 md:px-8 md:py-8 flex flex-col justify-center overflow-auto">
-                <div className="space-y-3">
-                  {rightBlocks.length > 0 ? (
-                    rightBlocks.map((block, idx) => (
-                      <p key={idx} className="text-sm leading-relaxed text-gray-900 font-serif">
-                        {block.text}
-                      </p>
-                    ))
-                  ) : leftBlocks.length > 0 && leftBlocks[0].text.length > 200 ? (
-                    <p className="text-sm leading-relaxed text-gray-900 font-serif">
-                      {/* Show continuation for single long text block */}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              {pageNum(nums.right, 'right')}
-            </div>
-          </div>
-        );
-      }
-    }
   };
 
   // ════════════════════════════════════════════════════════
@@ -674,17 +301,17 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
         )}
       </div>
 
-      {/* View controls */}
-      <div className="inline-flex items-center gap-1 p-1 glass rounded-full">
+      {/* Vyer */}
+      <div className="inline-flex items-center gap-1 p-1 glass rounded-full max-w-full overflow-x-auto">
         {([
-          { key: 'workshop', label: 'Verkstad', icon: 'auto_awesome' },
-          { key: 'grid', label: 'Rutnät', icon: 'grid_view' },
-          { key: 'book', label: 'Bokvy', icon: 'menu_book' },
+          { key: 'book', label: 'Läs boken', icon: 'auto_stories' },
+          { key: 'workshop', label: 'Redigera', icon: 'edit_note' },
+          { key: 'grid', label: 'Alla sidor', icon: 'grid_view' },
         ] as const).map((v) => (
           <button
             key={v.key}
             onClick={() => setViewMode(v.key)}
-            className={`px-4 py-1.5 rounded-full text-sm font-heading font-semibold transition-all inline-flex items-center gap-1.5 ${
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-heading font-semibold transition-all inline-flex items-center gap-1.5 ${
               viewMode === v.key ? 'bg-gradient-to-r from-brand to-magic text-white shadow-glow' : 'text-gray-600 hover:text-brand'
             }`}
           >
@@ -693,111 +320,53 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
         ))}
       </div>
 
-      {/* ─── WORKSHOP (immersiv editor) ─── */}
+      {/* ─── Den satta boken - exakt som PDF:en ─── */}
+      {viewMode === 'book' && (
+        <div className="card-glass hover:!shadow-glow p-4 sm:p-8">
+          <BookReader book={book} />
+        </div>
+      )}
+
+      {/* ─── Verkstad (redigera text och bilder) ─── */}
       {viewMode === 'workshop' && (
         <Workshop book={book} onUpdateSpread={onUpdateSpread} />
       )}
 
-      {/* ─── GRID / BOK ─── */}
-      {viewMode !== 'workshop' && (viewMode === 'grid' ? (
-        <div className={`grid gap-6 ${
-          isSeparateTextFormat
-            ? 'grid-cols-1 lg:grid-cols-2'
-            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-        }`}>
-          {book.spreads.map((spread, idx) => {
-            const isSpecial = spread.pages === 'omslag' || spread.pages === 'slutsida';
-            const showLuna = isSeparateTextFormat && !isSpecial;
-            const layout = showLuna ? pickLunaLayout(idx) : null;
-
-            return (
-              <div
-                key={spread.id}
-                onClick={() => setSelectedSpread(spread)}
-                className="card-glass overflow-hidden cursor-pointer
-                           hover:-translate-y-1 transition-all group"
-              >
-                {showLuna && layout ? (
-                  renderGridLuna(spread, layout)
+      {/* ─── Alla uppslag ─── */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {book.spreads.map((spread) => (
+            <button
+              key={spread.id}
+              onClick={() => setSelectedSpread(spread)}
+              className="card-glass overflow-hidden text-left hover:-translate-y-1 transition-all group"
+            >
+              <div className="bg-brand/5 aspect-[3/4] relative overflow-hidden">
+                {spread.generatedImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`data:image/png;base64,${spread.generatedImage}`}
+                    alt={spreadName(spread)}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
                 ) : (
-                  <div className="bg-gray-100 aspect-[3/2]">
-                    {renderImage(spread)}
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                    <Icon name="image_not_supported" size={28} />
+                    <span className="text-xs mt-1">Ingen bild</span>
                   </div>
                 )}
-
-                {/* Info footer */}
-                <div className="p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-heading font-semibold text-gray-700">
-                      {spread.pages === 'omslag' ? 'Omslag' :
-                       spread.pages === 'slutsida' ? 'Slutsida' :
-                       `Sida ${spread.pages}`}
-                    </span>
-                    <span className="text-xs text-brand opacity-0 group-hover:opacity-100 transition-opacity">
-                      Klicka för att redigera
-                    </span>
-                  </div>
-                  {spread.chapter && !showLuna && firstChapterSpreadIds.has(spread.id) && (
-                    <p className="text-xs text-gray-500">{spread.chapter}</p>
-                  )}
-                </div>
+                <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/95 text-brand text-xs font-heading font-bold shadow-glow opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Icon name="edit" size={14} /> Redigera
+                </span>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        /* ─── BOOK VIEW ─── */
-        <div className="space-y-8">
-          {book.spreads.map((spread, idx) => {
-            const isSpecial = spread.pages === 'omslag' || spread.pages === 'slutsida';
-            const showLuna = isSeparateTextFormat && !isSpecial;
-            const layout = showLuna ? pickLunaLayout(idx) : null;
-
-            return (
-              <div
-                key={spread.id}
-                className="card-glass overflow-hidden hover:-translate-y-1 transition-all"
-              >
-                {/* Chapter heading bar - only for non-Luna formats, only first spread of each chapter */}
-                {spread.chapter && !showLuna && firstChapterSpreadIds.has(spread.id) && (
-                  <div className="bg-gray-800 text-white px-6 py-2 text-sm font-semibold">
-                    {spread.chapter}
-                  </div>
-                )}
-
-                {showLuna && layout ? (
-                  renderBookLuna(spread, layout)
-                ) : (
-                  /* Standard: full spread image */
-                  <div className="relative bg-gray-50">
-                    {renderImage(spread, 'w-full object-contain')}
-                    <div className="absolute top-4 right-4">
-                      <button
-                        onClick={() => setSelectedSpread(spread)}
-                        className="px-4 py-1.5 bg-white/90 backdrop-blur-sm text-brand rounded-full
-                                   text-sm font-semibold hover:bg-white transition-colors shadow-glow"
-                      >
-                        Redigera
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Page label for standard view */}
-                {!showLuna && (
-                  <div className="px-6 py-2 bg-gray-50 text-center border-t">
-                    <span className="text-sm font-medium text-gray-500">
-                      {spread.pages === 'omslag' ? 'Omslag' :
-                       spread.pages === 'slutsida' ? 'Slutsida' :
-                       `Sida ${spread.pages}`}
-                    </span>
-                  </div>
-                )}
+              <div className="px-3 py-2.5">
+                <p className="font-heading font-semibold text-sm text-gray-700 truncate">{spreadName(spread)}</p>
+                {spread.chapter && <p className="text-xs text-gray-400 truncate">{spread.chapter}</p>}
               </div>
-            );
-          })}
+            </button>
+          ))}
         </div>
-      ))}
+      )}
 
       {/* Page Editor Modal */}
       {selectedSpread && (
@@ -806,6 +375,7 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
           characters={book.characters}
           styleGuide={book.styleGuide}
           bookFormat={book.bookFormat}
+          illustrationShape={book.illustrationShape}
           onSave={handleSaveSpread}
           onClose={() => setSelectedSpread(null)}
         />

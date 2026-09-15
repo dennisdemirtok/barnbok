@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookFormat, BookProject, Spread } from '@/lib/types';
+import { BookProject, Spread } from '@/lib/types';
 import type { StyleTestPlan } from '@/lib/claude';
 import { STYLE_PRESETS, getStylePreset } from '@/lib/styles';
 import { saveStyleTest, loadStyleTest, clearStyleTest } from '@/lib/storage';
@@ -24,7 +24,6 @@ interface TestState {
   title: string;
   rawText: string;
   numScenes: number;
-  textOnImage: boolean;
   selectedStyles: string[];
   plan: StyleTestPlan | null;
   styleGuides: Record<string, string>;
@@ -45,7 +44,6 @@ const EMPTY_STATE: TestState = {
   title: '',
   rawText: '',
   numScenes: 3,
-  textOnImage: false,
   selectedStyles: DEFAULT_STYLES,
   plan: null,
   styleGuides: {},
@@ -108,7 +106,6 @@ export default function StyleTester({ onContinue, onBack }: Props) {
     () => (state.plan ? buildPages(state.plan, effectiveTitle) : []),
     [state.plan, effectiveTitle]
   );
-  const bookFormat: BookFormat = state.textOnImage ? 'bildbok-text-pa-bild' : 'bildbok-separat-text';
   const activeStyles = STYLE_PRESETS.filter(s => state.selectedStyles.includes(s.id));
 
   // ── Ladda senaste provningen ──
@@ -146,7 +143,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
     if (!s.plan) return;
     const [pageId, styleId] = key.split('|');
     const page = buildPages(s.plan, s.title.trim() || s.plan.title).find(p => p.id === pageId);
-    const styleGuide = s.styleGuides[styleId] || getStylePreset(styleId)?.value;
+    const styleGuide = s.styleGuides[styleId] || getStylePreset(styleId)?.artDirection;
     if (!page || !styleGuide) return;
 
     setCell(key, { status: 'generating' });
@@ -158,7 +155,9 @@ export default function StyleTester({ onContinue, onBack }: Props) {
           spread: page.spread,
           characters: s.plan.characters,
           styleGuide,
-          bookFormat: s.textOnImage ? 'bildbok-text-pa-bild' : 'bildbok-separat-text',
+          // Texten sätts av layoutmotorn - bildform enligt stilens bokkoncept
+          bookFormat: 'bildbok-separat-text',
+          illustrationShape: getStylePreset(styleId)?.shape,
         }),
       });
       const data = await res.json();
@@ -252,11 +251,14 @@ export default function StyleTester({ onContinue, onBack }: Props) {
     const title = s.title.trim() || s.plan.title;
     const rows = buildPages(s.plan, title);
 
+    const preset = getStylePreset(styleId);
     const book: BookProject = {
       id: crypto.randomUUID(),
       title,
       subtitle: '',
-      bookFormat: s.textOnImage ? 'bildbok-text-pa-bild' : 'bildbok-separat-text',
+      bookFormat: 'bildbok-separat-text',
+      stylePresetId: styleId,
+      illustrationShape: preset?.shape,
       characters: s.plan.characters.map(c => ({
         id: crypto.randomUUID(),
         name: c.name,
@@ -269,7 +271,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
       })),
       // Bilderna görs om i steg 3 med godkända karaktärsreferenser för konsekventa figurer
       spreads: rows.map(r => ({ ...r.spread, id: crypto.randomUUID() })),
-      styleGuide: s.styleGuides[styleId] || getStylePreset(styleId)?.value || '',
+      styleGuide: s.styleGuides[styleId] || preset?.artDirection || '',
       status: 'characters',
       createdAt: new Date().toISOString(),
     };
@@ -308,7 +310,6 @@ export default function StyleTester({ onContinue, onBack }: Props) {
   const wordCount = state.rawText.trim() ? state.rawText.trim().split(/\s+/).length : 0;
   const plannedImages = (state.numScenes + 1) * state.selectedStyles.length;
   const estimatedMinutes = Math.max(1, Math.round((plannedImages / CONCURRENCY) * SECONDS_PER_IMAGE / 60));
-  const imageAspect = state.textOnImage ? 'aspect-[3/2]' : 'aspect-[2/3]';
 
   const header = (
     <div className="flex items-start justify-between gap-4">
@@ -423,7 +424,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                       <button
                         key={style.id}
                         onClick={() => toggleStyle(style.id)}
-                        className={`flex items-center gap-2.5 p-2.5 rounded-2xl text-left text-sm transition-all ${
+                        className={`flex items-start gap-2.5 p-2.5 rounded-2xl text-left text-sm transition-all ${
                           on
                             ? 'bg-white ring-2 ring-brand shadow-glow'
                             : 'bg-white/60 ring-1 ring-gray-200 hover:ring-brand/40'
@@ -432,8 +433,13 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                         <span className={`w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
                           {on && <Icon name="check" size={18} />}
                         </span>
-                        <span className={`font-heading font-semibold leading-tight ${on ? 'text-gray-800' : 'text-gray-500'}`}>
-                          {style.label}
+                        <span className="min-w-0">
+                          <span className={`block font-heading font-semibold leading-tight ${on ? 'text-gray-800' : 'text-gray-500'}`}>
+                            {style.label}
+                          </span>
+                          <span className="block text-[11px] leading-snug text-gray-500 mt-0.5">
+                            {style.concept} · {style.shape === 'spread' ? 'uppslagsbilder' : 'helsidesbilder'}
+                          </span>
                         </span>
                       </button>
                     );
@@ -441,20 +447,6 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                 </div>
               </div>
 
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={state.textOnImage}
-                  onChange={e => setState(prev => ({ ...prev, textOnImage: e.target.checked }))}
-                  className="mt-1 w-4 h-4 accent-brand"
-                />
-                <span className="text-sm">
-                  <span className="font-heading font-semibold text-gray-700">Texten i bilden (serietidning)</span>
-                  <span className="block text-gray-500 text-xs mt-0.5">
-                    Av = illustrationer utan text, som i en kapitelbok. På = pratbubblor i bilden – passar bäst för kort text.
-                  </span>
-                </span>
-              </label>
             </div>
 
             <div className="glass rounded-4xl p-5 space-y-4">
@@ -628,7 +620,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                     <h3 className="font-heading font-bold text-gray-800 leading-tight">{style.label}</h3>
                     <p className="text-xs text-gray-500">
                       {rowDone} av {pages.length} bilder klara
-                      {style.series && state.styleGuides[style.id] && state.styleGuides[style.id] !== style.value && ' · kalibrerad från riktiga böcker'}
+                      {' · '}{style.concept}
                     </p>
                   </div>
                 </div>
@@ -644,11 +636,11 @@ export default function StyleTester({ onContinue, onBack }: Props) {
               <div className="overflow-x-auto -mx-1 px-1 pb-1">
                 <div
                   className="grid gap-3"
-                  // Porträttbilder får en maxbredd så att flera stilrader ryms på skärmen samtidigt
+                  // Omslaget är alltid stående; sidorna följer stilens bildform
                   style={{
-                    gridTemplateColumns: state.textOnImage
-                      ? `repeat(${pages.length}, minmax(240px, 1fr))`
-                      : `repeat(${pages.length}, minmax(140px, 200px))`,
+                    gridTemplateColumns: `minmax(130px, 190px) repeat(${pages.length - 1}, ${
+                      style.shape === 'spread' ? 'minmax(200px, 290px)' : 'minmax(130px, 190px)'
+                    })`,
                   }}
                 >
                   {pages.map(page => {
@@ -656,7 +648,7 @@ export default function StyleTester({ onContinue, onBack }: Props) {
                     const cell = state.cells[key];
                     return (
                       <div key={key} className="min-w-0">
-                        <div className={`${imageAspect} relative rounded-2xl overflow-hidden bg-brand/5 ring-1 ring-brand/10 group`}>
+                        <div className={`${page.id !== 'cover' && style.shape === 'spread' ? 'aspect-[3/2]' : 'aspect-[3/4]'} relative rounded-2xl overflow-hidden bg-brand/5 ring-1 ring-brand/10 group`}>
                           {cell?.status === 'done' && cell.image ? (
                             <>
                               {/* eslint-disable-next-line @next/next/no-img-element */}

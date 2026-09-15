@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { planStyleTest } from '@/lib/claude';
 import { fetchStyleProfile } from '@/lib/style-profiles';
-import { STYLE_PRESETS } from '@/lib/styles';
+import { STYLE_PRESETS, composeStyleGuide } from '@/lib/styles';
 
 export const maxDuration = 300;
 
@@ -35,11 +35,11 @@ export async function POST(request: Request) {
       }))),
     ]);
 
-    // Kalibrerad bildstil från referensanalysen när den finns, annars stilens beskrivning
+    // Stilens egen art direction, kompletterad med analysen av riktiga böcker när den finns
     const styleGuides: Record<string, string> = {};
     for (const s of STYLE_PRESETS) {
       const profile = profiles.find(p => p.id === s.id)?.profile;
-      styleGuides[s.id] = profile?.image_style || s.value;
+      styleGuides[s.id] = composeStyleGuide(s, profile?.image_style);
     }
 
     return NextResponse.json({ plan, styleGuides });

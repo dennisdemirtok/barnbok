@@ -73,6 +73,7 @@ export default function Workshop({ book, onUpdateSpread }: Props) {
           characters,
           styleGuide,
           bookFormat,
+          illustrationShape: book.illustrationShape,
           customInstructions: customInstruction || undefined,
           isRegenerate: true,
         }),

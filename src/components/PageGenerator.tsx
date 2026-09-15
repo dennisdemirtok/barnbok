@@ -69,6 +69,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
             characters: book.characters,
             styleGuide: book.styleGuide,
             bookFormat: book.bookFormat,
+            illustrationShape: book.illustrationShape,
           }),
         });
 
@@ -152,6 +153,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           characters: book.characters,
           styleGuide: book.styleGuide,
           bookFormat: book.bookFormat,
+          illustrationShape: book.illustrationShape,
         }),
       });
 

@@ -25,14 +25,12 @@ const FORMAT_OPTIONS: { value: BookFormat; label: string; description: string; i
     label: 'Bildbok med separat text',
     description: 'Likt "Luna"-böcker - text ovanför/under eller bredvid bilderna. Mer text, bild och text kompletterar varandra.',
     icon: 'article',
-    comingSoon: true,
   },
   {
     value: 'kapitelbok',
     label: 'Kapitelbok',
     description: 'Likt Harry Potter / Bert-böcker - mest text med enstaka illustrationer. Längre kapitel och detaljerat berättande.',
     icon: 'menu_book',
-    comingSoon: true,
   },
   {
     value: 'larobok',
@@ -70,7 +68,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
   // Step 1 fields
   const [title, setTitle] = useState('');
-  const [bookFormat, setBookFormat] = useState<BookFormat>('bildbok-text-pa-bild');
+  const [bookFormat, setBookFormat] = useState<BookFormat>('bildbok-separat-text');
   const [numCharacters, setNumCharacters] = useState(3);
   const [characterNames, setCharacterNames] = useState('');
   const [numPages, setNumPages] = useState(32);
@@ -83,8 +81,8 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
   const [selectedPlotTags, setSelectedPlotTags] = useState<string[]>([]);
   const [setting, setSetting] = useState('');
   const [selectedSettingTags, setSelectedSettingTags] = useState<string[]>([]);
-  const [imageStyle, setImageStyle] = useState('Färgglatt, manga/comic-stil med stora uttrycksfulla ögon, tjocka konturer, detaljerade bakgrunder, skandinavisk estetik');
-  const [styleSeries, setStyleSeries] = useState<string | undefined>(undefined);
+  const [stylePresetId, setStylePresetId] = useState('luna');
+  const [imageStyle, setImageStyle] = useState(''); // egna tillägg till stilen
 
   // State
   const [loading, setLoading] = useState(false);
@@ -172,7 +170,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
       plot: [...selectedPlotTags, plotText].filter(Boolean).join('. '),
       setting: [...selectedSettingTags, setting].filter(Boolean).join(', '),
       imageStyle,
-      styleSeries,
+      stylePresetId,
       subject: bookFormat === 'larobok' ? subject : undefined,
     };
 
@@ -498,38 +496,44 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
 
           {/* Image Style */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Bildstil
+            <label className="block text-sm font-semibold text-gray-700 mb-1">
+              Stil &amp; bokkoncept
+            </label>
+            <p className="text-xs text-gray-500 mb-3">
+              Stilen styr hur figurerna ritas, bildernas form och typografin i den färdiga boken.
+              Osäker? Prova flera stilar på en textbit via &quot;Stilprovning&quot; i steg 1.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {STYLE_PRESETS.map((style) => {
+                const on = stylePresetId === style.id;
+                return (
+                  <button
+                    key={style.id}
+                    onClick={() => setStylePresetId(style.id)}
+                    className={`flex items-start gap-2.5 p-3 rounded-2xl text-left transition-all ${
+                      on ? 'bg-white ring-2 ring-brand shadow-glow' : 'bg-white/60 ring-1 ring-gray-200 hover:ring-brand/40'
+                    }`}
+                  >
+                    <span className={`w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br ${style.swatch} flex items-center justify-center text-white`}>
+                      {on && <Icon name="check" size={18} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-heading font-semibold text-gray-800 leading-tight">{style.label}</span>
+                      <span className="block text-xs text-gray-500 mt-0.5 leading-snug">{style.concept}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <label className="block text-xs font-semibold text-gray-600 mt-4 mb-1.5">
+              Egna önskemål om bilderna <span className="font-normal text-gray-400">(valfritt)</span>
             </label>
             <textarea
               value={imageStyle}
-              onChange={(e) => { setImageStyle(e.target.value); setStyleSeries(undefined); }}
-              placeholder="Beskriv hur bilderna ska se ut..."
+              onChange={(e) => setImageStyle(e.target.value)}
+              placeholder="T.ex. höstiga färger, mycket kvällsljus, Otis har alltid sin gröna mössa..."
               className="field h-20 text-sm resize-y"
             />
-            <div className="flex flex-wrap gap-2 mt-2">
-              {STYLE_PRESETS.map((style) => (
-                <button
-                  key={style.label}
-                  onClick={() => { setImageStyle(style.value); setStyleSeries(style.series); }}
-                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
-                    imageStyle === style.value
-                      ? 'bg-gradient-to-r from-sunset to-magic text-white shadow-glow'
-                      : 'magic-chip hover:shadow-glow'
-                  }`}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {style.series && <Icon name="auto_awesome" filled size={13} />}{style.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {styleSeries && (
-              <p className="text-xs text-brand mt-2 inline-flex items-start gap-1">
-                <Icon name="auto_awesome" filled size={14} className="mt-0.5 shrink-0" />
-                Stilprofil analyserad från riktiga böcker används - text och bild kalibreras automatiskt mot seriens stil.
-              </p>
-            )}
           </div>
 
           {/* Summary */}
@@ -538,6 +542,7 @@ export default function BookCreator({ onBookCreated, onBack }: Props) {
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
               <div><span className="font-medium">Titel:</span> {title}</div>
               <div><span className="font-medium">Format:</span> {FORMAT_OPTIONS.find(f => f.value === bookFormat)?.label}</div>
+              <div><span className="font-medium">Stil:</span> {STYLE_PRESETS.find(st => st.id === stylePresetId)?.label}</div>
               <div><span className="font-medium">Sidor:</span> {numPages} ({contentSpreads()} uppslag + omslag + slutsida)</div>
               <div><span className="font-medium">Karaktärer:</span> {numCharacters}</div>
               <div><span className="font-medium">Ålder:</span> {targetAge}</div>
