@@ -92,18 +92,23 @@ export async function generateCharacterSheet(
   const hasHeroCostume = !!character.heroCostume &&
     !/^(ej relevant|inte relevant|ingen|inga|nej|n\/a|saknas|-)\.?$/i.test(character.heroCostume.trim());
 
-  // Build layout instructions based on whether hero costume exists
+  // Ansiktet är karaktärens identitet, så bladet har alltid en stor närbild på
+  // ansiktet - i en liten helkroppsfigur syns inte dragen tillräckligt tydligt.
   let layoutSection: string;
   if (hasHeroCostume) {
-    layoutSection = `LAYOUT: 2×2 grid (4 views) on a clean white background.
-- Top-left: FRONT VIEW wearing normal clothes. Label: "FRONT - Normal"
-- Top-right: 3/4 ANGLE VIEW wearing normal clothes. Label: "3/4 - Normal"
-- Bottom-left: FRONT VIEW wearing hero costume. Label: "FRONT - Hero"
-- Bottom-right: 3/4 ANGLE VIEW wearing hero costume. Label: "3/4 - Hero"`;
+    layoutSection = `LAYOUT: 3 columns × 2 rows (6 views) on a clean white background.
+- Top-left: FRONT VIEW, full body, normal clothes. Label: "FRONT - Normal"
+- Top-middle: 3/4 ANGLE VIEW, full body, normal clothes. Label: "3/4 - Normal"
+- Top-right: BACK VIEW, full body, normal clothes. Label: "BAK - Normal"
+- Bottom-left: LARGE CLOSE-UP OF THE HEAD seen straight from the front, filling its whole cell - the face is the most important part of the sheet, draw the features large and clearly. Label: "ANSIKTE - framifrån"
+- Bottom-middle: CLOSE-UP OF THE HEAD in profile (seen from the side). Label: "ANSIKTE - profil"
+- Bottom-right: FRONT VIEW, full body, hero costume. Label: "FRONT - Hero"`;
   } else {
-    layoutSection = `LAYOUT: 1×2 grid (2 views side by side) on a clean white background.
-- Left: FRONT VIEW wearing normal clothes. Label: "FRONT - Normal"
-- Right: 3/4 ANGLE VIEW wearing normal clothes. Label: "3/4 - Normal"`;
+    layoutSection = `LAYOUT: 2 columns × 2 rows (4 views) on a clean white background.
+- Top-left: FRONT VIEW, full body, normal clothes. Label: "FRONT - Normal"
+- Top-right: 3/4 ANGLE VIEW, full body, normal clothes. Label: "3/4 - Normal"
+- Bottom-left: LARGE CLOSE-UP OF THE HEAD seen straight from the front, filling its whole cell - the face is the most important part of the sheet, draw the features large and clearly. Label: "ANSIKTE - framifrån"
+- Bottom-right: CLOSE-UP OF THE HEAD in profile (seen from the side), same head as the close-up next to it. Label: "ANSIKTE - profil"`;
   }
 
   // Build color swatch list
@@ -130,13 +135,13 @@ ${layoutSection}
 REQUIRED ELEMENTS:
 1. COLOR CALLOUT SWATCHES: Include a row of small labeled colored squares showing the exact colors used for: ${swatchColors.join(', ')}. Each swatch must have a text label beneath it identifying what it represents.
 2. HEIGHT SCALE: Draw a vertical reference line with height marking (${heightEstimate}) next to the front view to indicate the character's height.
-3. FACIAL EXPRESSION: Neutral/calm expression in ALL views — not smiling, not angry, just neutral and composed. This makes it easy to adapt the character to different emotions later.
+3. FACE: give the character clear, memorable facial features that are easy to redraw - the shape of the face, the eyes and eyebrows, the nose, the mouth and teeth, the hairline and hairstyle, plus any freckles, mole, gap in the teeth, glasses or similar marks mentioned in the appearance. The close-up views must show all of them. Neutral/calm expression in ALL views — not smiling, not angry, just neutral and composed. This makes it easy to adapt the character to different emotions later.
 4. VIEW LABELS: Clear text label directly under each view (e.g., "FRONT - Normal", "3/4 - Normal"${hasHeroCostume ? ', "FRONT - Hero", "3/4 - Hero"' : ''}).
 5. BACKGROUND: Clean pure white background. No scenery, no props, no distractions.
 6. PROFESSIONAL LAYOUT: Arrange everything like a professional animation or comic character model sheet used by illustrators for reference.
 
 CONSISTENCY RULES (CRITICAL):
-- The character must look IDENTICAL across ALL views: same exact proportions, same facial features, same hair style and color, same eye color, same skin tone.
+- The character must look IDENTICAL across ALL views: same exact proportions, same facial features, same hair style and color, same eye color, same skin tone. The close-up head must be the same face as the full-body views, only larger.
 - Clothing details must be consistent within each outfit (normal clothes consistent across normal views, hero costume consistent across hero views).
 - The character should be easily reproducible from this reference sheet in future illustrations.
 
@@ -311,7 +316,7 @@ export async function generatePageImage(
   // Add reference images for characters in this scene FIRST (higher priority)
   for (const char of charsInScene) {
     contents.push({
-      text: `Reference image for character "${char.name}"${char.heroName ? ` (${char.heroName})` : ''} - THIS CHARACTER APPEARS IN THIS SCENE. This sheet defines who ${char.name} IS: draw exactly this face (face shape, eyes, eyebrows, nose, mouth and teeth, freckles or marks, ears), this hair color and hairstyle, skin tone, age and body proportions. Clothes may change only when the scene calls for it; the face never changes. ${char.appearance}`,
+      text: `Reference image for character "${char.name}"${char.heroName ? ` (${char.heroName})` : ''} - THIS CHARACTER APPEARS IN THIS SCENE. This sheet defines who ${char.name} IS: draw exactly this face (face shape, eyes, eyebrows, nose, mouth and teeth, freckles or marks, ears), this hair color and hairstyle, skin tone, age and body proportions. Clothes may change only when the scene calls for it; the face never changes.${char.faceNotes ? ` FACE: ${char.faceNotes}` : ''} ${char.appearance}`,
     });
     contents.push({
       inlineData: {

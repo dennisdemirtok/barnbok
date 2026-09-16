@@ -43,6 +43,7 @@ export interface SavedCharacter {
   power?: string;
   role: 'main' | 'supporting' | 'villain';
   referenceImage?: string; // base64
+  faceNotes?: string; // ansiktets kännetecken från karaktärsbladet
   stylePresetId?: string; // stilen referensbilden gjordes i
   savedAt: string;
   fromBookId?: string;
@@ -62,6 +63,7 @@ export interface Character {
   role: 'main' | 'supporting' | 'villain';
   referenceImage?: string; // base64
   referenceImageUrl?: string; // sparad i molnet - servern hämtar bilden härifrån
+  faceNotes?: string; // ansiktets kännetecken, avlästa från karaktärsbladet
   approved: boolean;
 }
 

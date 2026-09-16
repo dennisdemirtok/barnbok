@@ -95,6 +95,7 @@ export async function loadBookForJob(bookId: string): Promise<BookForJob | null>
     heroCostume: c.hero_costume || undefined,
     power: c.power || undefined,
     referenceImageUrl: c.reference_image_url || undefined,
+    faceNotes: c.face_notes || undefined,
   }));
 
   const spreads: SpreadWithUrl[] = (spreadRows || []).map(s => ({

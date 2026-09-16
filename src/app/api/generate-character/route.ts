@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateCharacterSheet } from '@/lib/gemini';
+import { describeCharacterFace } from '@/lib/character-check';
 import { Character } from '@/lib/types';
 
 export const maxDuration = 120;
@@ -43,8 +44,10 @@ async function handleSingle(body: {
     character,
     styleGuide || 'Swedish children\'s book, manga/comic style, thick outlines, large expressive eyes'
   );
+  // Ansiktets kännetecken läses av direkt och följer med boken framåt
+  const faceNotes = await describeCharacterFace(character.name, imageBase64);
 
-  return NextResponse.json({ image: imageBase64 });
+  return NextResponse.json({ image: imageBase64, faceNotes });
 }
 
 // Batch generation: process multiple characters in parallel
@@ -63,7 +66,7 @@ async function handleBatch(body: {
 
   // Process up to 3 at a time with staggered starts
   const CONCURRENCY = 3;
-  const results: Array<{ id: string; image?: string; error?: string }> = [];
+  const results: Array<{ id: string; image?: string; faceNotes?: string; error?: string }> = [];
 
   for (let i = 0; i < characters.length; i += CONCURRENCY) {
     const chunk = characters.slice(i, i + CONCURRENCY);
@@ -79,7 +82,8 @@ async function handleBatch(body: {
           character,
           styleGuide || 'Swedish children\'s book, manga/comic style, thick outlines, large expressive eyes'
         );
-        return { id: character.id, image };
+        const faceNotes = await describeCharacterFace(character.name, image);
+        return { id: character.id, image, faceNotes };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Okänt fel';
         return { id: character.id, error: message };

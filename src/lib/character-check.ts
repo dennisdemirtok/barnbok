@@ -269,6 +269,7 @@ function describeCharacter(c: Character, hasReference: boolean): string {
     c.role === 'main' ? 'main character' : c.role,
     c.age ? `age ${c.age}` : '',
     c.appearance,
+    c.faceNotes ? `face: ${c.faceNotes}` : '',
     c.normalClothes ? `normal clothes: ${c.normalClothes}` : '',
     c.heroCostume ? `hero costume: ${c.heroCostume}` : '',
   ].filter(Boolean).join('; ');
@@ -533,6 +534,34 @@ export async function reviewPageImage(
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Granskningen misslyckades');
+}
+
+/**
+ * Läser av det färdiga karaktärsbladet och skriver ner ansiktets kännetecken.
+ * Texten följer sedan med i varje bildprompt och i granskningen, så att samma
+ * ansikte går att rita om även när referensbilden tolkas lite olika.
+ */
+export async function describeCharacterFace(name: string, imageBase64: string): Promise<string> {
+  const prompt = `This is a character model sheet for "${name}" in a children's book. Look at the face in the close-ups and write the identity markers an illustrator needs to draw exactly this face again.
+
+Answer with ONE English sentence, max 30 words, only concrete visible features in this order: face shape, hair (color, length, style), eyebrows, eye shape and color, nose, mouth/teeth, skin tone, and any freckles, mole, glasses, gap teeth or similar. No clothes, no mood, no style words.
+Example: "Round face, short tousled sandy hair, thick straight eyebrows, large round green eyes, small upturned nose, wide mouth with two big front teeth, fair skin, freckles across the nose."`;
+
+  try {
+    const response = await getClient().models.generateContent({
+      model: REVIEW_MODELS[0],
+      contents: [
+        { inlineData: { mimeType: detectMimeType(imageBase64), data: imageBase64 } },
+        { text: prompt },
+      ],
+      config: { temperature: 0.2 },
+    });
+    const text = responseText(response).trim().replace(/^["']|["']$/g, '');
+    return text.length > 10 ? text.slice(0, 400) : '';
+  } catch (err) {
+    console.warn('[Karaktärsblad] kunde inte läsa av ansiktet:', err instanceof Error ? err.message : err);
+    return '';
+  }
 }
 
 export function reviewToCheckResult(review: ImageReview, extra: { summary?: string; attempts?: number } = {}): CheckResult {

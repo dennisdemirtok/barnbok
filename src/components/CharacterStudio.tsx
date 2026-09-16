@@ -472,7 +472,7 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
       if (!res.ok) throw new Error(data.error || 'Generering misslyckades');
       if (!data.image) throw new Error('Ingen bild kom tillbaka');
       if (reqId !== requestRef.current) return;
-      setDraft(prev => ({ ...prev, referenceImage: data.image, stylePresetId: usedStyle.id }));
+      setDraft(prev => ({ ...prev, referenceImage: data.image, faceNotes: data.faceNotes || prev.faceNotes, stylePresetId: usedStyle.id }));
       setDirty(true);
       writeLastStyle(usedStyle.id);
     } catch (err) {

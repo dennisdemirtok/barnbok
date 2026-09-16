@@ -98,6 +98,7 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
         hero_costume: c.heroCostume || null,
         power: c.power || null,
         reference_image_url: referenceUrl,
+        face_notes: c.faceNotes || null,
       };
     }));
 
@@ -253,6 +254,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     heroCostume: c.hero_costume || undefined,
     power: c.power || undefined,
     referenceImageUrl: c.reference_image_url || undefined,
+    faceNotes: c.face_notes || undefined,
   }));
 
   const spreads: Spread[] = (spreadRows || []).map(s => {

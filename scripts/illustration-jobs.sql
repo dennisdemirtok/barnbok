@@ -99,3 +99,4 @@ alter table barnbok_characters add column if not exists hero_name text;
 alter table barnbok_characters add column if not exists hero_costume text;
 alter table barnbok_characters add column if not exists power text;
 alter table barnbok_characters add column if not exists reference_image_url text;
+alter table barnbok_characters add column if not exists face_notes text;

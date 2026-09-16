@@ -87,10 +87,10 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         throw new Error(data.error || 'Generering misslyckades');
       }
 
-      const { image } = await res.json();
+      const { image, faceNotes } = await res.json();
 
       setChars(prev => prev.map(c =>
-        c.id === charId ? { ...c, referenceImage: image } : c
+        c.id === charId ? { ...c, referenceImage: image, faceNotes: faceNotes || c.faceNotes } : c
       ));
     } catch (err) {
       setCharError(charId, err instanceof Error ? err.message : 'Något gick fel');
@@ -150,14 +150,14 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         }
 
         const { results } = await res.json() as {
-          results: Array<{ id: string; image?: string; error?: string }>;
+          results: Array<{ id: string; image?: string; faceNotes?: string; error?: string }>;
         };
 
         // Update each character with its result
         for (const result of results) {
           if (result.image) {
             setChars(prev => prev.map(c =>
-              c.id === result.id ? { ...c, referenceImage: result.image } : c
+              c.id === result.id ? { ...c, referenceImage: result.image, faceNotes: result.faceNotes || c.faceNotes } : c
             ));
           } else {
             console.error(`Karaktär ${result.id} misslyckades:`, result.error);
@@ -229,6 +229,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         power: char.power,
         role: char.role,
         referenceImage: char.referenceImage,
+        faceNotes: char.faceNotes,
         savedAt: new Date().toISOString(),
         fromBookId: bookId,
         fromBookTitle: bookTitle,
@@ -256,6 +257,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
       power: saved.power,
       role: saved.role,
       referenceImage: saved.referenceImage,
+      faceNotes: saved.faceNotes,
       approved: !!saved.referenceImage, // Auto-approve if has image
     };
     setChars(prev => [...prev, newChar]);
@@ -280,6 +282,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         ? {
             ...c,
             referenceImage: saved.referenceImage,
+            faceNotes: saved.faceNotes,
             appearance: saved.appearance,
             normalClothes: saved.normalClothes || c.normalClothes,
             heroCostume: saved.heroCostume || c.heroCostume,
