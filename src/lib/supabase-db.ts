@@ -106,6 +106,12 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
       .from('barnbok_characters')
       .insert(charRows);
 
+    // Saknas bara den nyaste kolumnen: spara resten (bilderna är det viktiga)
+    if (charError && /face_notes/i.test(charError.message)) {
+      const withoutNotes = charRows.map(({ face_notes, ...rest }) => rest);
+      ({ error: charError } = await supabase.from('barnbok_characters').insert(withoutNotes));
+      if (!charError) problems.push('Ansiktsbeskrivningarna sparades inte - kör scripts/character-face-notes.sql i Supabase');
+    }
     // Äldre databaser saknar de nya kolumnerna - spara det som går hellre än inget
     if (charError && /column .* does not exist/i.test(charError.message)) {
       const basicRows = charRows.map(r => ({
