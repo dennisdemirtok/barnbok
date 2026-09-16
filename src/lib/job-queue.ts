@@ -15,6 +15,12 @@ const WORKERS = 4;
 const ITEM_BUDGET_MS = DEFAULT_QUALITY_BUDGET_MS;
 // Jobb vars puls är äldre än så här anses ha dött med en omstart
 const STALE_MS = 3 * 60 * 1000;
+// Databasanrop som inte svarat på så här länge räknas som tappade
+const DB_TIMEOUT_MS = 30_000;
+// Händer ingenting alls på så här länge har körningen fastnat
+const NO_PROGRESS_MS = 8 * 60 * 1000;
+
+interface JobItemRow { id: string; spread_id: string; label?: string; attempts: number }
 
 export interface JobItemView {
   spreadId: string;
@@ -259,6 +265,15 @@ export async function runJob(jobId: string): Promise<void> {
     const { data: job } = await db.from('barnbok_jobs').select('*').eq('id', jobId).single();
     if (!job || job.status !== 'running') return;
 
+    let lastProgressAt = Date.now();
+    // Uppslag som en tidigare körning tog men aldrig blev klar med läggs tillbaka i kön
+    const stuckBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await db.from('barnbok_job_items')
+      .update({ status: 'queued', updated_at: new Date().toISOString() })
+      .eq('job_id', jobId)
+      .eq('status', 'running')
+      .lt('claimed_at', stuckBefore);
+
     const book = await loadBookForJob(job.book_id);
     if (!book) {
       await db.from('barnbok_jobs').update({ status: 'failed', message: 'Boken hittades inte', updated_at: new Date().toISOString() }).eq('id', jobId);
@@ -270,12 +285,29 @@ export async function runJob(jobId: string): Promise<void> {
       // Trappa igång arbetarna så att de inte träffar bildmodellen samtidigt
       if (n > 0) await new Promise(r => setTimeout(r, n * 2000));
       for (;;) {
-        const { data: claimed, error } = await db.rpc('barnbok_claim_job_item', { p_job: jobId });
-        if (error) { console.warn('[Jobb] kunde inte hämta uppslag:', error.message); throw new Error(missingTables(error.message) ? MISSING_TABLES : error.message); }
-        const item = Array.isArray(claimed) ? claimed[0] : claimed;
+        // Databasanrop får aldrig hänga - då skulle arbetaren tystna för gott
+        let claimed: unknown;
+        try {
+          const res = await withTimeout(
+            db.rpc('barnbok_claim_job_item', { p_job: jobId }),
+            DB_TIMEOUT_MS,
+            'Databasen svarade inte när nästa uppslag skulle hämtas'
+          );
+          if (res.error) throw new Error(missingTables(res.error.message) ? MISSING_TABLES : res.error.message);
+          claimed = res.data;
+        } catch (err) {
+          console.warn('[Jobb] kunde inte hämta uppslag:', err instanceof Error ? err.message : err);
+          return;
+        }
+        const item = (Array.isArray(claimed) ? claimed[0] : claimed) as JobItemRow | undefined;
         if (!item) return;
+        lastProgressAt = Date.now();
 
-        const { data: check } = await db.from('barnbok_jobs').select('status').eq('id', jobId).single();
+        const check = await withTimeout(
+          db.from('barnbok_jobs').select('status').eq('id', jobId).single().then(r => r.data as { status: string } | null),
+          DB_TIMEOUT_MS,
+          'Databasen svarade inte'
+        ).catch(() => null);
         if (check?.status !== 'running') return;
 
         const spread = spreadById.get(item.spread_id);
@@ -308,17 +340,24 @@ export async function runJob(jobId: string): Promise<void> {
             ? { status: 'error', error: message }
             : { status: 'queued', error: message });
         }
-        await db.rpc('barnbok_job_progress', { p_job: jobId });
+        lastProgressAt = Date.now();
+        await withTimeout(db.rpc('barnbok_job_progress', { p_job: jobId }), DB_TIMEOUT_MS, 'Databasen svarade inte').catch(() => null);
       }
     };
 
     const finishItem = async (id: string, patch: Record<string, unknown>) => {
-      await db.from('barnbok_job_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+      await withTimeout(
+        db.from('barnbok_job_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id),
+        DB_TIMEOUT_MS,
+        'Databasen svarade inte när uppslaget skulle bockas av'
+      ).catch(err => console.warn('[Jobb] kunde inte spara resultatet:', err instanceof Error ? err.message : err));
     };
 
-    // Puls medan jobbet lever, så att en omstart kan upptäckas
+    // Puls medan jobbet lever, så att en omstart kan upptäckas. Händer inget
+    // alls på länge slutar pulsen - då räknas jobbet som stannat och tas upp igen.
     await db.from('barnbok_jobs').update({ heartbeat_at: new Date().toISOString() }).eq('id', jobId);
     const beat = setInterval(() => {
+      if (Date.now() - lastProgressAt > NO_PROGRESS_MS) return;
       void db.from('barnbok_jobs').update({ heartbeat_at: new Date().toISOString() }).eq('id', jobId);
     }, 30_000);
 
@@ -357,7 +396,7 @@ export async function runJob(jobId: string): Promise<void> {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(message)), ms);
     promise.then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); });
