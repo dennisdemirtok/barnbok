@@ -8,6 +8,7 @@ import { saveBook, SaveResult } from '@/lib/storage';
 import { exportBookToPDF } from '@/lib/pdf-export';
 import { getBookPublishState, updateBookInfoInCloud } from '@/lib/supabase-db';
 import { useAuth } from '@/lib/auth';
+import AudiobookPanel from './AudiobookPanel';
 import PageEditor from './PageEditor';
 import Workshop from './Workshop';
 import BookReader from './BookReader';
@@ -46,6 +47,9 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
   const { user } = useAuth();
   const [cloudState, setCloudState] = useState<CloudState>('loading');
   const [menuOpen, setMenuOpen] = useState(false);
+  // Ljudbokspanelen fälls ut under bokkortet
+  const [showAudio, setShowAudio] = useState(false);
+  const audioRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -294,9 +298,12 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     { key: 'check', label: 'Kontrollera karaktärer', icon: 'verified_user', onClick: handleCheckCharacters },
     {
       key: 'audio',
-      label: 'Skapa ljudbok (kommer snart)',
+      label: 'Ljudbok',
       icon: 'headphones',
-      onClick: () => showNotice({ tone: 'warning', text: 'Ljudböcker kommer snart – boken ska kunna läsas upp med en naturlig svensk röst, sida för sida.' }, 6000),
+      onClick: () => {
+        setShowAudio(true);
+        setTimeout(() => audioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+      },
     },
     {
       key: 'done',
@@ -489,6 +496,19 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
           </div>
         )}
       </div>
+
+      {/* Ljudbok: provlyssna rösten och gör hela uppläsningen */}
+      {showAudio && (
+        <div ref={audioRef} className="scroll-mt-6">
+          <AudiobookPanel
+            bookId={cloudState === 'public' || cloudState === 'private' ? book.id : undefined}
+            book={bookWithInfo()}
+            title={titleDraft.trim() || book.title}
+            canCreate={cloudState === 'public' || cloudState === 'private'}
+            onClose={() => setShowAudio(false)}
+          />
+        </div>
+      )}
 
       {/* Vyer */}
       <div className="grid grid-cols-3 sm:inline-grid sm:w-auto gap-1 p-1 glass rounded-full">

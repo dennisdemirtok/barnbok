@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ensureBookDescription, isDescriptionSupported, PublicBookDetails, PublicBookSummary } from '@/lib/supabase-db';
 import { exportBookToPDF } from '@/lib/pdf-export';
+import AudiobookPanel from '../AudiobookPanel';
 import BookReader from '../BookReader';
 import Icon from '../Icon';
 import BookCard from './BookCard';
@@ -31,6 +32,9 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
   const [downloadError, setDownloadError] = useState('');
   const [copied, setCopied] = useState(false);
   const [showPrint, setShowPrint] = useState<'print' | 'audio' | null>(null);
+  // Ljudbokspanelen fälls ut under knappraden i stället för "kommer snart"-rutan
+  const [showAudio, setShowAudio] = useState(false);
+  const audioRef = useRef<HTMLDivElement>(null);
 
   // Baksidestext skapas första gången någon öppnar en bok som saknar en
   useEffect(() => {
@@ -163,7 +167,14 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
                 <Icon name={copied ? 'check' : 'ios_share'} size={19} />
                 {copied ? 'Länken är kopierad' : 'Dela'}
               </button>
-              <button onClick={() => setShowPrint('audio')} className="btn-ghost">
+              <button
+                onClick={() => {
+                  setShowAudio(true);
+                  setTimeout(() => audioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+                }}
+                aria-expanded={showAudio}
+                className="btn-ghost"
+              >
                 <Icon name="headphones" size={19} /> Lyssna som ljudbok
               </button>
               <button onClick={() => setShowPrint('print')} className="btn-ghost">
@@ -171,6 +182,23 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
               </button>
             </div>
             {downloadError && <div className="note-error mt-3">{downloadError}</div>}
+
+            {showAudio && (
+              <div ref={audioRef} className="mt-5 scroll-mt-6">
+                <AudiobookPanel
+                  bookId={book.id}
+                  book={book}
+                  title={book.title}
+                  canCreate
+                  onUnavailable={() => {
+                    // Ljudbok är inte påslaget - visa "kommer snart" med intresseanmälan i stället
+                    setShowAudio(false);
+                    setShowPrint('audio');
+                  }}
+                  onClose={() => setShowAudio(false)}
+                />
+              </div>
+            )}
 
             {shownCharacters.length > 0 && (
               <div className="mt-7">

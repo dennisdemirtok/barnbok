@@ -79,7 +79,18 @@ export function narrationSegments(book: BookProject): NarrationSegment[] {
     }
   }
   push();
-  return segments.map((s, i) => ({ ...s, index: i }));
+  // Ett pyttelitet avsnitt (bara titeln, eller en rubrik utan text) blir inget
+  // eget spår - det läggs ihop med nästa så att spellistan blir vettig
+  const merged: NarrationSegment[] = [];
+  for (const segment of segments) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.text.split(/\s+/).length < 30) {
+      merged[merged.length - 1] = { ...previous, label: segment.label, text: `${previous.text}\n\n${segment.text}` };
+      continue;
+    }
+    merged.push(segment);
+  }
+  return merged.map((seg, i) => ({ ...seg, index: i }));
 }
 
 // Provlyssning: bokens första sidor, ungefär så här många ord

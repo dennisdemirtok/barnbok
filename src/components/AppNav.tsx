@@ -340,10 +340,10 @@ export function SiteFooter({ onNavigate, onStyleTest }: FooterProps) {
       ],
     },
     {
-      title: 'Snart',
+      title: 'Lyssna',
       items: [
-        { label: 'Ljudböcker' },
-        { label: 'Tryckta böcker' },
+        { label: 'Ljudbok av din bok', onClick: () => onNavigate('bookstore') },
+        { label: 'Tryckta böcker (snart)' },
       ],
     },
   ];
