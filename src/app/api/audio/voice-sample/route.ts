@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { hasTtsKey, synthesize, VOICE_SAMPLE_TEXT, TtsQuality } from '@/lib/tts';
+import { hasTtsKey, isQuality, synthesize, VOICE_SAMPLE_TEXT, TtsQuality } from '@/lib/tts';
 import { voiceById } from '@/lib/tts-voices';
 import { serverSupabase, SERVER_IMAGES_BUCKET } from '@/lib/supabase-server';
 
@@ -12,7 +12,8 @@ export const maxDuration = 60;
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const voiceId = params.get('voiceId') || '';
-  const quality: TtsQuality = params.get('quality') === 'economy' ? 'economy' : 'best';
+  const qualityParam = params.get('quality');
+  const quality: TtsQuality = isQuality(qualityParam) ? qualityParam : 'best';
   if (!/^[A-Za-z0-9]{10,40}$/.test(voiceId)) {
     return NextResponse.json({ error: 'Okänt röst-id' }, { status: 400 });
   }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { hasTtsKey, previewText, synthesize, estimateSeconds, TtsQuality } from '@/lib/tts';
+import { hasTtsKey, previewText, synthesize, estimateSeconds, isQuality, TtsQuality } from '@/lib/tts';
 import { voiceById } from '@/lib/tts-voices';
 import { loadBookForJob } from '@/lib/job-queue';
 import { BookProject } from '@/lib/types';
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
 
     const text = previewText(book as BookProject, Math.min(Math.max(body.maxWords ?? 280, 60), 600));
-    const quality: TtsQuality = body.quality === 'economy' ? 'economy' : 'best';
+    const quality: TtsQuality = isQuality(body.quality) ? body.quality : 'best';
     const mp3 = await synthesize(text, voice.id, quality);
 
     return new NextResponse(new Uint8Array(mp3), {

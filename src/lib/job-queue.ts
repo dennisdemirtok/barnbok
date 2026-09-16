@@ -7,7 +7,7 @@
 import { serverSupabase, SERVER_IMAGES_BUCKET } from './supabase-server';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from './character-check';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
-import { estimateSeconds, narrationSegments, synthesize, TtsQuality } from './tts';
+import { estimateSeconds, isQuality, narrationSegments, synthesize, TtsQuality } from './tts';
 import { DEFAULT_VOICE_ID, voiceById } from './tts-voices';
 
 // Så många uppslag illustreras samtidigt. Servern väntar inte på ett svar till
@@ -367,7 +367,7 @@ export async function runJob(jobId: string): Promise<void> {
     const isAudiobook = job.kind === 'audiobook';
     const payload = job.payload as { voiceId?: string; quality?: TtsQuality } | null;
     const voiceId = payload?.voiceId || DEFAULT_VOICE_ID;
-    const audioQuality: TtsQuality = payload?.quality === 'economy' ? 'economy' : 'best';
+    const audioQuality: TtsQuality = isQuality(payload?.quality) ? payload.quality : 'best';
     const segments = isAudiobook ? narrationSegments(bookForNarration(book)) : [];
 
     const worker = async (n: number) => {

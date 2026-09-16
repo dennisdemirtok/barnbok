@@ -7,15 +7,18 @@ import { DEFAULT_VOICE_ID } from './tts-voices';
 
 const API = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Två lägen: bästa uttalet, eller den snabbare modellen som bara kostar halva
-// kvoten hos ElevenLabs (bra när man vill hinna med fler böcker i månaden).
-export type TtsQuality = 'best' | 'economy';
+// Tre lägen att läsa i. Kvoten hos ElevenLabs räknas per tecken: de två första
+// kostar ett tecken per tecken, det snabba läget hälften.
+export type TtsQuality = 'best' | 'expressive' | 'economy';
 const MODELS: Record<TtsQuality, string> = {
   best: 'eleven_multilingual_v2',
-  economy: 'eleven_turbo_v2_5',
+  expressive: 'eleven_v3',
+  economy: 'eleven_flash_v2_5',
 };
-// Hur mycket av kvoten en bokstav kostar i respektive läge
-export const CREDIT_FACTOR: Record<TtsQuality, number> = { best: 1, economy: 0.5 };
+export const CREDIT_FACTOR: Record<TtsQuality, number> = { best: 1, expressive: 1, economy: 0.5 };
+export const QUALITY_IDS: TtsQuality[] = ['best', 'expressive', 'economy'];
+export const isQuality = (value: unknown): value is TtsQuality =>
+  typeof value === 'string' && (QUALITY_IDS as string[]).includes(value);
 // Max tecken per anrop. Kortare bitar ger snabbare svar och mindre att göra om
 const CHUNK_CHARS = 2200;
 const REQUEST_TIMEOUT_MS = 120_000;

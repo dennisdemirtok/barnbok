@@ -117,7 +117,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
 
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   // 'best' = bästa uttalet, 'economy' = halva kvoten hos ElevenLabs
-  const [quality, setQuality] = useState<'best' | 'economy'>('best');
+  const [quality, setQuality] = useState<'best' | 'expressive' | 'economy'>('best');
   // Röstprov: några sekunder av vald röst, så att valet går att höra
   const [sampleId, setSampleId] = useState('');
   const [customVoice, setCustomVoice] = useState('');
@@ -362,13 +362,23 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const voice = NARRATOR_VOICES.find(v => v.id === voiceId);
 
   // Väljer röst och spelar upp provet direkt
-  const chooseVoice = (id: string) => {
-    setVoiceId(id);
+  const playSample = (id: string, mode: 'best' | 'expressive' | 'economy') => {
     setSampleId(id);
     const player = sampleRef.current;
     if (!player) return;
-    player.src = `/api/audio/voice-sample?voiceId=${encodeURIComponent(id)}&quality=${quality}`;
+    player.src = `/api/audio/voice-sample?voiceId=${encodeURIComponent(id)}&quality=${mode}`;
     player.play().catch(() => setError('Kunde inte spela upp röstprovet'));
+  };
+
+  const chooseVoice = (id: string) => {
+    setVoiceId(id);
+    playSample(id, quality);
+  };
+
+  // Byter man läge spelas samma röst upp igen, så skillnaden hörs direkt
+  const changeQuality = (mode: 'best' | 'expressive' | 'economy') => {
+    setQuality(mode);
+    if (sampleId) playSample(sampleId, mode);
   };
 
   return (
@@ -457,8 +467,29 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
       {parts.length === 0 && !running && (
         <div className="mt-5 space-y-5">
           <div>
-            <h4 className="text-sm font-semibold text-ink">Välj röst</h4>
-            <p className="mt-0.5 text-xs text-ink/50">Klicka på en röst för att höra den läsa svenska.</p>
+            <h4 className="text-sm font-semibold text-ink">Välj uppläsning</h4>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {([
+                { id: 'best' as const, label: 'Naturlig', hint: 'lugn uppläsning · full kvot' },
+                { id: 'expressive' as const, label: 'Levande', hint: 'mer inlevelse · full kvot' },
+                { id: 'economy' as const, label: 'Snabb', hint: 'halva kvoten' },
+              ]).map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => changeQuality(option.id)}
+                  aria-pressed={quality === option.id}
+                  className={`px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                    quality === option.id ? 'border-brand bg-brand/5 text-ink ring-2 ring-brand/15' : 'border-line bg-white text-ink/70 hover:border-ink/25'
+                  }`}
+                >
+                  {option.label}
+                  <span className="block text-[11px] font-normal text-ink/50">{option.hint}</span>
+                </button>
+              ))}
+            </div>
+
+            <h4 className="mt-5 text-sm font-semibold text-ink">Välj röst</h4>
+            <p className="mt-0.5 text-xs text-ink/50">Klicka på en röst för att höra den. Byt läge ovanför och klicka igen, så hör du skillnaden på samma röst.</p>
             {([true, false]).map(native => (
             <div key={String(native)} className="mt-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink/40">
@@ -519,24 +550,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
               Hittar du en svensk röst i ElevenLabs röstbibliotek: lägg till den bland dina röster och klistra in dess röst-id här.
             </p>
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              {([
-                { id: 'best' as const, label: 'Bästa uttalet', hint: 'full kvot' },
-                { id: 'economy' as const, label: 'Räcker dubbelt så långt', hint: 'halva kvoten, något enklare uttal' },
-              ]).map(option => (
-                <button
-                  key={option.id}
-                  onClick={() => setQuality(option.id)}
-                  aria-pressed={quality === option.id}
-                  className={`px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
-                    quality === option.id ? 'border-brand bg-brand/5 text-ink ring-2 ring-brand/15' : 'border-line bg-white text-ink/70 hover:border-ink/25'
-                  }`}
-                >
-                  {option.label}
-                  <span className="block text-[11px] font-normal text-ink/50">{option.hint}</span>
-                </button>
-              ))}
-            </div>
+
           </div>
 
           <div className="flex flex-wrap gap-2">
