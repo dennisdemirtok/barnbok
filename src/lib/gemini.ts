@@ -326,8 +326,12 @@ export async function generatePageImage(
     });
   }
 
-  // Also add reference images for characters NOT in this scene (for style consistency)
-  const charsNotInScene = approvedChars.filter(c => !charsInScene.includes(c));
+  // Ett par figurer utanför scenen följer med för stilens skull. Fler än så gör
+  // bara anropet tungt och långsamt - en bok kan ha många namngivna figurer.
+  const charsNotInScene = approvedChars
+    .filter(c => !charsInScene.includes(c))
+    .sort((a, b) => (a.role === 'main' ? 0 : 1) - (b.role === 'main' ? 0 : 1))
+    .slice(0, Math.max(0, 3 - charsInScene.length));
   for (const char of charsNotInScene) {
     contents.push({
       text: `Reference for character "${char.name}" (NOT in this scene, for style reference only). ${char.appearance}`,
