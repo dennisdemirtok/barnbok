@@ -275,6 +275,7 @@ export async function runJob(jobId: string): Promise<void> {
       .lt('claimed_at', stuckBefore);
 
     const book = await loadBookForJob(job.book_id);
+    console.log(`[Jobb] ${jobId}: startar körning, boken har ${book?.spreads.length ?? 0} uppslag`);
     if (!book) {
       await db.from('barnbok_jobs').update({ status: 'failed', message: 'Boken hittades inte', updated_at: new Date().toISOString() }).eq('id', jobId);
       return;
@@ -284,6 +285,7 @@ export async function runJob(jobId: string): Promise<void> {
     const worker = async (n: number) => {
       // Trappa igång arbetarna så att de inte träffar bildmodellen samtidigt
       if (n > 0) await new Promise(r => setTimeout(r, n * 2000));
+      console.log(`[Jobb] arbetare ${n} startar`);
       for (;;) {
         // Databasanrop får aldrig hänga - då skulle arbetaren tystna för gott
         let claimed: unknown;
@@ -300,7 +302,8 @@ export async function runJob(jobId: string): Promise<void> {
           return;
         }
         const item = (Array.isArray(claimed) ? claimed[0] : claimed) as JobItemRow | undefined;
-        if (!item) return;
+        if (!item) { console.log(`[Jobb] arbetare ${n}: inget mer att ta`); return; }
+        console.log(`[Jobb] arbetare ${n} tog ${item.label || item.spread_id} (försök ${item.attempts})`);
         lastProgressAt = Date.now();
 
         const check = await withTimeout(
@@ -332,6 +335,7 @@ export async function runJob(jobId: string): Promise<void> {
           // Bilden hör till boken, inte bara till jobbet
           await db.from('barnbok_spreads').update({ image_url: url, image_status: 'done' }).eq('id', spread.id);
           await finishItem(item.id, { status: 'done', image_url: url, quality: result.qualityCheck });
+          console.log(`[Jobb] arbetare ${n} klar med ${item.label || item.spread_id}`);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(`[Jobb] ${item.label || item.spread_id} misslyckades:`, message);
