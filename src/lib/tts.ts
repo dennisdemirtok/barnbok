@@ -104,6 +104,18 @@ export function narrationSegments(book: BookProject): NarrationSegment[] {
   return merged.map((seg, i) => ({ ...seg, index: i }));
 }
 
+// Kapitellista med vad varje avsnitt kostar att läsa upp
+export interface SegmentSummary { index: number; label: string; characters: number; seconds: number }
+
+export function segmentSummaries(book: BookProject): SegmentSummary[] {
+  return narrationSegments(book).map(seg => ({
+    index: seg.index,
+    label: seg.label,
+    characters: seg.text.length,
+    seconds: estimateSeconds(seg.text),
+  }));
+}
+
 // Provlyssning: bokens första sidor, ungefär så här många ord
 export function previewText(book: BookProject, maxWords = 280): string {
   const segments = narrationSegments(book);

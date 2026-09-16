@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAudiobookJob, audioManifestPath, loadBookForJob } from '@/lib/job-queue';
-import { estimateSeconds, hasTtsKey, isQuality, narrationSegments } from '@/lib/tts';
+import { hasTtsKey, isQuality, segmentSummaries } from '@/lib/tts';
 import { serverSupabase, SERVER_IMAGES_BUCKET } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
@@ -11,10 +11,12 @@ export async function POST(request: Request) {
     if (!hasTtsKey()) {
       return NextResponse.json({ error: 'Ljudbok är inte påslaget på servern (ELEVENLABS_API_KEY saknas)' }, { status: 503 });
     }
-    const { bookId, voiceId, quality } = await request.json() as { bookId?: string; voiceId?: string; quality?: string };
+    const { bookId, voiceId, quality, segments } = await request.json() as
+      { bookId?: string; voiceId?: string; quality?: string; segments?: number[] };
     if (!bookId) return NextResponse.json({ error: 'bookId saknas' }, { status: 400 });
 
-    const result = await createAudiobookJob(bookId, voiceId, isQuality(quality) ? quality : 'best');
+    const chapters = Array.isArray(segments) ? segments.filter(n => Number.isInteger(n) && n >= 0).slice(0, 200) : undefined;
+    const result = await createAudiobookJob(bookId, voiceId, isQuality(quality) ? quality : 'best', chapters);
     if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json(result);
   } catch (error) {
@@ -32,17 +34,27 @@ export async function GET(request: Request) {
   const res = await fetch(url, { cache: 'no-store' }).catch(() => null);
   const audiobook = res?.ok ? await res.json().catch(() => null) : null;
 
-  // Uppskattning så att man vet vad man drar igång innan man startar
+  // Uppskattning och kapitellista, så att man kan välja ett enda kapitel
   let estimate: { segments: number; characters: number; seconds: number } | null = null;
+  let chapters: { index: number; label: string; characters: number; seconds: number; url?: string }[] = [];
   const book = await loadBookForJob(bookId).catch(() => null);
   if (book) {
-    const segments = narrationSegments({
+    const summaries = segmentSummaries({
       id: book.id, title: book.title, author: book.author, spreads: book.spreads,
       characters: book.characters, styleGuide: book.styleGuide, bookFormat: book.bookFormat,
       status: 'done', createdAt: new Date().toISOString(),
     } as never);
-    const text = segments.map(s => s.text).join(' ');
-    estimate = { segments: segments.length, characters: text.length, seconds: estimateSeconds(text) };
+    const done = new Map<number, string>(
+      ((audiobook?.parts || []) as { index?: number; url: string }[])
+        .filter(p => typeof p.index === 'number')
+        .map(p => [p.index as number, p.url])
+    );
+    chapters = summaries.map(s => ({ ...s, url: done.get(s.index) }));
+    estimate = {
+      segments: summaries.length,
+      characters: summaries.reduce((n, s) => n + s.characters, 0),
+      seconds: summaries.reduce((n, s) => n + s.seconds, 0),
+    };
   }
-  return NextResponse.json({ audiobook, estimate });
+  return NextResponse.json({ audiobook, estimate, chapters });
 }

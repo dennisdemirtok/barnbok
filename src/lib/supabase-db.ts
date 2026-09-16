@@ -446,6 +446,14 @@ export interface PublicCharacter {
   name: string;
   role: 'main' | 'supporting';
   imageUrl?: string;
+  age?: string;
+  appearance?: string;
+  personality?: string;
+  normalClothes?: string;
+  heroName?: string;
+  // Teknisk notering för bildmodellen - visas aldrig, men följer med när
+  // karaktären sparas till användarens eget bibliotek
+  faceNotes?: string;
 }
 
 export interface PublicBookDetails {
@@ -476,10 +484,71 @@ export async function loadPublicBookDetails(id: string): Promise<PublicBookDetai
     role: c.role === 'main' ? 'main' : 'supporting',
     // Referensbilder sparas inte i molnet idag - visas om en sådan kolumn finns
     imageUrl: c.reference_image_url || c.image_url || undefined,
+    age: c.age || undefined,
+    appearance: c.appearance || undefined,
+    personality: c.personality || undefined,
+    normalClothes: c.normal_clothes || undefined,
+    heroName: c.hero_name || undefined,
+    faceNotes: c.face_notes || undefined,
   }));
   characters.sort((a, b) => (a.role === b.role ? 0 : a.role === 'main' ? -1 : 1));
 
   return { book, summary, characters };
+}
+
+// ── Karaktärer på tvärs av böcker ──
+
+export interface CharacterAppearance {
+  bookId: string;
+  title: string;
+  coverUrl?: string;
+  authorName?: string;
+}
+
+// Andra publicerade böcker där en karaktär med samma namn finns med.
+// Namnet jämförs skiftlägesokänsligt (ilike utan jokertecken = exakt match).
+// Tom lista = karaktären finns bara i den här boken (eller inget kunde läsas).
+export async function findCharacterAppearances(name: string, exceptBookId: string): Promise<CharacterAppearance[]> {
+  const trimmed = name.trim();
+  if (!trimmed) return [];
+
+  // Undvik att % och _ i ett namn tolkas som jokertecken
+  const pattern = trimmed.replace(/[%_]/g, m => `\\${m}`);
+  const { data: charRows, error: charError } = await supabase
+    .from('barnbok_characters')
+    .select('book_id')
+    .ilike('name', pattern)
+    .limit(200);
+  if (charError || !charRows) return [];
+
+  const bookIds = Array.from(new Set(charRows.map(c => c.book_id as string).filter(id => id && id !== exceptBookId)));
+  if (bookIds.length === 0) return [];
+
+  const { data: bookRows, error: bookError } = await supabase
+    .from('barnbok_books')
+    .select('id, title, theme, published_at')
+    .in('id', bookIds)
+    .eq('is_public', true)
+    .order('published_at', { ascending: false });
+  if (bookError || !bookRows) return [];
+
+  // Omslagen i ett anrop
+  const covers = new Map<string, string>();
+  const { data: coverRows } = await supabase
+    .from('barnbok_spreads')
+    .select('book_id, image_url')
+    .in('book_id', bookRows.map(b => b.id))
+    .eq('pages', 'omslag');
+  for (const c of coverRows || []) {
+    if (c.image_url) covers.set(c.book_id, c.image_url);
+  }
+
+  return bookRows.map(b => ({
+    bookId: b.id,
+    title: b.title,
+    coverUrl: covers.get(b.id) || undefined,
+    authorName: parseBookMeta(b.theme).author || undefined,
+  }));
 }
 
 // ── Baksidestext ──
@@ -816,6 +885,9 @@ export async function downloadSpreadImage(imageUrl: string): Promise<string | nu
     return null;
   }
 }
+
+// Samma hämtning, men namnet passar även karaktärsbilder (base64 utan data:-prefix)
+export const downloadImageAsBase64 = downloadSpreadImage;
 
 // ═══════════════════════════════════════════
 //  Reference/Training database

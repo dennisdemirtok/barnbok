@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ensureBookDescription, isDescriptionSupported, PublicBookDetails, PublicBookSummary } from '@/lib/supabase-db';
+import { ensureBookDescription, isDescriptionSupported, PublicBookDetails, PublicBookSummary, PublicCharacter } from '@/lib/supabase-db';
 import { exportBookToPDF } from '@/lib/pdf-export';
 import AudiobookPanel from '../AudiobookPanel';
 import BookReader from '../BookReader';
@@ -20,10 +20,11 @@ interface Props {
   onBack: () => void;
   onOpenAuthor: (userId: string, name: string) => void;
   onOpenBook: (id: string) => void;
+  onOpenCharacter: (character: PublicCharacter) => void;
   onDescription: (bookId: string, description: string) => void;
 }
 
-export default function BookDetail({ details, likes, moreByAuthor, openingId, onBack, onOpenAuthor, onOpenBook, onDescription }: Props) {
+export default function BookDetail({ details, likes, moreByAuthor, openingId, onBack, onOpenAuthor, onOpenBook, onOpenCharacter, onDescription }: Props) {
   const { book, summary, characters } = details;
   const readerRef = useRef<HTMLDivElement>(null);
   const [description, setDescription] = useState(summary.description || '');
@@ -203,18 +204,27 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
             {shownCharacters.length > 0 && (
               <div className="mt-7">
                 <h3 className="text-sm font-semibold text-ink">{mainCharacters.length > 0 ? 'Huvudpersoner' : 'Personer i boken'}</h3>
-                <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-3">
+                <ul className="mt-3 flex flex-wrap gap-2.5">
                   {shownCharacters.map(c => (
-                    <li key={c.id} className="flex items-center gap-2.5 min-w-0">
-                      {c.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={c.imageUrl} alt="" loading="lazy" className="w-10 h-10 rounded-full object-cover border border-line bg-white" />
-                      ) : (
-                        <span className="w-10 h-10 rounded-full bg-brand/10 text-brand font-semibold text-sm flex items-center justify-center shrink-0">
-                          {initials(c.name)}
-                        </span>
-                      )}
-                      <span className="text-sm font-medium text-ink truncate max-w-[10rem]">{c.name}</span>
+                    <li key={c.id} className="min-w-0">
+                      {/* Klick öppnar karaktärens egen sida */}
+                      <button
+                        onClick={() => onOpenCharacter(c)}
+                        title={`Läs mer om ${c.name}`}
+                        className="flex items-center gap-2.5 min-w-0 max-w-full pl-1 pr-3.5 py-1 rounded-full bg-white border border-line hover:border-ink/30 hover:bg-paper active:scale-[0.98] transition-all"
+                      >
+                        {c.imageUrl ? (
+                          // Referensbladet visar framvyn till vänster - beskär mot den
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={c.imageUrl} alt="" loading="lazy" className="w-10 h-10 rounded-full object-cover object-[22%_20%] border border-line bg-white shrink-0" />
+                        ) : (
+                          <span className="w-10 h-10 rounded-full bg-brand/10 text-brand font-semibold text-sm flex items-center justify-center shrink-0">
+                            {initials(c.name)}
+                          </span>
+                        )}
+                        <span className="text-sm font-medium text-ink truncate max-w-[10rem]">{c.name}</span>
+                        <Icon name="chevron_right" size={18} className="text-ink/35 shrink-0 -ml-1" />
+                      </button>
                     </li>
                   ))}
                 </ul>

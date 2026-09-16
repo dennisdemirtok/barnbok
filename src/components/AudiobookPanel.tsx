@@ -136,7 +136,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const autoPlay = useRef(false);
 
   // Städa bort provlyssningens blob-adress när panelen stängs
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  useEffect(() => () => { if (previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const loadAudiobook = useCallback(async (): Promise<Audiobook | null> => {
     if (!bookId) return null;
@@ -230,13 +230,27 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     setError('');
     setPreviewing(true);
     if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+      if (previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
       setPreviewUrl('');
     }
     try {
+      // Sparad bok: provet ligger kvar i molnet och spelas som en vanlig adress,
+      // så samma prov kostar aldrig något en andra gång
+      if (bookId) {
+        const url = `/api/audio/preview?bookId=${encodeURIComponent(bookId)}&voiceId=${encodeURIComponent(voiceId)}&quality=${quality}`;
+        const head = await fetch(url, { method: 'GET' });
+        if (!head.ok) {
+          const data = await head.json().catch(() => null) as { error?: string } | null;
+          if (head.status === 503) { setUnavailable(true); onUnavailable?.(); return; }
+          throw new Error(data?.error || 'Provlyssningen gick inte att göra just nu');
+        }
+        setPreviewVoice(head.headers.get('X-Voice') || '');
+        setPreviewUrl(url);
+        return;
+      }
+
       const body: Record<string, unknown> = { voiceId, quality };
-      if (bookId) body.bookId = bookId;
-      else if (book) body.book = bookForPreview(book);
+      if (book) body.book = bookForPreview(book);
       else throw new Error('Hittade ingen text att läsa upp');
 
       const res = await fetch('/api/audio/preview', {

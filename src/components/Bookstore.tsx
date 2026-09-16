@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  getLikeCounts, getMyLikedBookIds, listPublicBooks, loadPublicBookDetails, PublicBookDetails, PublicBookSummary, setBookLiked,
+  getLikeCounts, getMyLikedBookIds, listPublicBooks, loadPublicBookDetails, PublicBookDetails, PublicBookSummary, PublicCharacter, setBookLiked,
 } from '@/lib/supabase-db';
 import { useAuth } from '@/lib/auth';
 import Icon from './Icon';
@@ -10,6 +10,7 @@ import StepHeader from './StepHeader';
 import AuthorPage from './bookstore/AuthorPage';
 import BookCard from './bookstore/BookCard';
 import BookDetail from './bookstore/BookDetail';
+import CharacterDetail from './bookstore/CharacterDetail';
 import { FORMAT_LABEL, LikesState } from './bookstore/shared';
 
 interface Props {
@@ -23,7 +24,8 @@ type SortKey = 'nyast' | 'gillade' | 'titel';
 type View =
   | { kind: 'list' }
   | { kind: 'book'; details: PublicBookDetails }
-  | { kind: 'author'; userId: string; name: string };
+  | { kind: 'author'; userId: string; name: string }
+  | { kind: 'character'; character: PublicCharacter; bookId: string; bookTitle: string };
 
 export default function Bookstore({ onBack, initialBookId }: Props) {
   const { user } = useAuth();
@@ -88,6 +90,9 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
     const path = window.location.pathname;
     if (view.kind === 'book') {
       window.history.replaceState(null, '', `${path}?bok=${view.details.book.id}`);
+    } else if (view.kind === 'character') {
+      // En karaktärssida hör till sin bok - behåll bokens länk
+      window.history.replaceState(null, '', `${path}?bok=${view.bookId}`);
     } else if (window.location.search.includes('bok=')) {
       window.history.replaceState(null, '', path);
     }
@@ -111,6 +116,12 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
     } finally {
       setOpeningId(null);
     }
+  };
+
+  const openCharacter = (character: PublicCharacter, bookId: string, bookTitle: string) => {
+    setOpenError('');
+    setStack(prev => [...prev, { kind: 'character', character, bookId, bookTitle }]);
+    window.scrollTo({ top: 0 });
   };
 
   const openAuthor = (userId: string, name: string) => {
@@ -189,7 +200,27 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
           onBack={goBack}
           onOpenAuthor={openAuthor}
           onOpenBook={openBook}
+          onOpenCharacter={c => openCharacter(c, details.book.id, details.book.title)}
           onDescription={handleDescription}
+        />
+        {likeToast}
+      </>
+    );
+  }
+
+  // ── Karaktärens sida ──
+  if (view.kind === 'character') {
+    return (
+      <>
+        {openError && <div className="note-error mb-4">{openError}</div>}
+        <CharacterDetail
+          key={view.character.id}
+          character={view.character}
+          bookId={view.bookId}
+          bookTitle={view.bookTitle}
+          openingId={openingId}
+          onBack={goBack}
+          onOpenBook={openBook}
         />
         {likeToast}
       </>

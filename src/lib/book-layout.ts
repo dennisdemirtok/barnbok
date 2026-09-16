@@ -596,6 +596,8 @@ function buildSpreadScene(pb: PageBuilder, scene: Scene, sizes: ImageSizes, t: T
 // ════════════════════════════════════════════════════════
 
 const CB_MARGIN = { top: 22, bottom: 27, inner: 19, outer: 16 };
+// Luft som alltid ska finnas kvar mot sidfoten när en sida får gå längre ner
+const PAGE_NUMBER_AIR = 15;
 
 function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationShape, sizes: ImageSizes, t: Typography, m: Measurer, lively = false, paper?: 'lined') {
   const textW = PAGE_W - CB_MARGIN.inner - CB_MARGIN.outer;
@@ -817,7 +819,32 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
       let first = true;
       while (words.length > 0) {
         if (!wrap || y >= wrap.bottom || y + lh > bottom) {
-          const rest = { type: 'para' as const, text: words.join(' '), continued: !first || block.continued };
+          // Sista ordparet i stycket: hellre en rad som går lite längre ner än
+          // ett ensamt ord överst på nästa sida
+          const tail = words.join(' ');
+          const figure = wrap;
+          const pastFigure = !figure || y >= figure.bottom;
+          const occTail = pastFigure || !figure ? 0 : figure.occupied(y, y + lh);
+          const availTail = textW - occTail;
+          const roomBelow = b === run.length - 1
+            && numbered
+            && page !== null
+            && y + lh <= PAGE_H - PAGE_NUMBER_AIR
+            && availTail >= 28
+            && m.width(tail, style.font, style.size) <= availTail;
+          if (roomBelow) {
+            const x0 = xFor();
+            page!.els.push({
+              kind: 'text',
+              x: !pastFigure && figure && figure.side === 'left' ? x0 + occTail : x0,
+              y: y + style.size * PT * 0.95,
+              width: availTail, text: tail,
+              font: style.font, size: style.size, color: INK, align: 'left',
+            });
+            y += lh;
+            return [];
+          }
+          const rest = { type: 'para' as const, text: tail, continued: !first || block.continued };
           return [rest, ...run.slice(b + 1)];
         }
         const occ = wrap.occupied(y, y + lh);
@@ -970,7 +997,16 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
       let i = 0;
       while (i < lines.length) {
         if (!page) openPage();
-        const n = fitLines(lines, i, bottom - y);
+        let n = fitLines(lines, i, bottom - y);
+        // Hellre en sida som går ett par rader längre ner än en nästan tom sida
+        // med bara ett ord på. Sidnumret får aldrig trängas.
+        if (n > 0 && i + n < lines.length && lines.length - (i + n) <= 2 && numbered) {
+          const slack = Math.min(lh * 2, PAGE_H - PAGE_NUMBER_AIR - bottom);
+          if (slack > 0) {
+            const stretched = fitLines(lines, i, bottom - y + slack);
+            if (i + stretched >= lines.length) n = lines.length - i;
+          }
+        }
         if (n === 0) {
           if (!pageHasText) { // raden ryms inte ens på tom sida - tvinga
             emitLines(page!, lines.slice(i, i + 1), xFor(), y);

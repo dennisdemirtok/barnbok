@@ -243,7 +243,13 @@ export async function createIllustrationJob(bookId: string): Promise<{ jobId: st
 }
 
 /** Startar ett ljudboksjobb: ett avsnitt (kapitel) i taget läses upp och sparas. */
-export async function createAudiobookJob(bookId: string, voiceId?: string, quality: TtsQuality = 'best'): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
+export async function createAudiobookJob(
+  bookId: string,
+  voiceId?: string,
+  quality: TtsQuality = 'best',
+  // Tomt = hela boken. Annars bara de kapitel som räknas upp.
+  segmentIndexes?: number[],
+): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
   const db = serverSupabase();
   const voice = voiceById(voiceId).id;
 
@@ -262,12 +268,14 @@ export async function createAudiobookJob(bookId: string, voiceId?: string, quali
 
   const book = await loadBookForJob(bookId);
   if (!book) return { error: 'Hittade inte boken i molnet - spara boken och försök igen' };
-  const segments = narrationSegments(bookForNarration(book));
+  const all = narrationSegments(bookForNarration(book));
+  const wanted = segmentIndexes?.length ? new Set(segmentIndexes) : null;
+  const segments = wanted ? all.filter(s => wanted.has(s.index)) : all;
   if (segments.length === 0) return { error: 'Boken har ingen text att läsa upp' };
 
   const { data: jobRow, error } = await db
     .from('barnbok_jobs')
-    .insert({ book_id: bookId, kind: 'audiobook', status: 'running', total: segments.length, payload: { voiceId: voice, quality } })
+    .insert({ book_id: bookId, kind: 'audiobook', status: 'running', total: segments.length, payload: { voiceId: voice, quality, segments: segments.map(s => s.index) } })
     .select()
     .single();
   if (error || !jobRow) {
@@ -589,13 +597,27 @@ async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: stri
     .select('label, spread_number, image_url, quality, status')
     .eq('job_id', jobId)
     .order('spread_number');
-  const parts = (items || [])
+  const fresh = (items || [])
     .filter(i => i.status === 'done' && i.image_url)
     .map(i => ({
-      label: i.label || `Del ${i.spread_number + 1}`,
+      index: i.spread_number as number,
+      label: i.label || `Del ${(i.spread_number as number) + 1}`,
       url: i.image_url as string,
       seconds: (i.quality as { seconds?: number } | null)?.seconds ?? 0,
     }));
+
+  // Tidigare inlästa kapitel ligger kvar - listan växer när man gör ett i taget
+  const existingUrl = db.storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(audioManifestPath(book.id)).data.publicUrl;
+  const existing = await fetch(existingUrl, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .catch(() => null) as { parts?: { index?: number; label: string; url: string; seconds: number }[] } | null;
+
+  const byIndex = new Map<number, { index: number; label: string; url: string; seconds: number }>();
+  for (const part of existing?.parts || []) {
+    if (typeof part.index === 'number') byIndex.set(part.index, part as { index: number; label: string; url: string; seconds: number });
+  }
+  for (const part of fresh) byIndex.set(part.index, part);
+  const parts = Array.from(byIndex.values()).sort((a, b) => a.index - b.index);
   if (parts.length === 0) return;
   const manifest = {
     bookId: book.id,
