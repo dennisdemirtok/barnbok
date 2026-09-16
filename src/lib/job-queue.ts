@@ -55,8 +55,10 @@ interface BookForJob {
   spreads: SpreadWithUrl[];
 }
 
-// Jobb som körs i den här processen just nu
-const running = new Set<string>();
+// Jobb som körs i den här processen just nu, med starttid. En körning som hängt
+// sig länge får aldrig blockera en ny - då skulle jobbet stå still för alltid.
+const running = new Map<string, number>();
+const RUN_MAX_AGE_MS = 20 * 60 * 1000;
 
 const MISSING_TABLES = 'Bakgrundsjobben är inte påslagna i databasen än - kör scripts/illustration-jobs.sql i Supabase';
 
@@ -150,7 +152,7 @@ export async function getJob(jobId: string): Promise<JobView | null> {
   if (!data) return null;
   // Servern kan ha startat om (ny version) mitt i jobbet - ta upp det igen
   const beat = data.heartbeat_at ? Date.parse(data.heartbeat_at) : 0;
-  if (data.status === 'running' && !running.has(jobId) && Date.now() - beat > STALE_MS) {
+  if (data.status === 'running' && Date.now() - beat > STALE_MS) {
     console.log(`[Jobb] ${jobId} hade stannat - startar om`);
     void runJob(jobId);
   }
@@ -256,25 +258,33 @@ export async function resumeStaleJobs(): Promise<number> {
 // ── Själva arbetet ──
 
 export async function runJob(jobId: string): Promise<void> {
-  if (running.has(jobId)) return;
-  running.add(jobId);
-  const db = serverSupabase();
+  const already = running.get(jobId);
+  if (already && Date.now() - already < RUN_MAX_AGE_MS) return;
   const startedAt = Date.now();
+  running.set(jobId, startedAt);
+  const db = serverSupabase();
+  console.log(`[Jobb] ${jobId}: körningen startar`);
 
   try {
-    const { data: job } = await db.from('barnbok_jobs').select('*').eq('id', jobId).single();
-    if (!job || job.status !== 'running') return;
+    const job = await withTimeout(
+      db.from('barnbok_jobs').select('*').eq('id', jobId).single().then(r => r.data),
+      DB_TIMEOUT_MS, 'Databasen svarade inte när jobbet skulle läsas'
+    );
+    if (!job || job.status !== 'running') { console.log(`[Jobb] ${jobId}: inget att göra (${job?.status ?? 'saknas'})`); return; }
 
     let lastProgressAt = Date.now();
     // Uppslag som en tidigare körning tog men aldrig blev klar med läggs tillbaka i kön
     const stuckBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    await db.from('barnbok_job_items')
-      .update({ status: 'queued', updated_at: new Date().toISOString() })
-      .eq('job_id', jobId)
-      .eq('status', 'running')
-      .lt('claimed_at', stuckBefore);
+    await withTimeout(
+      db.from('barnbok_job_items')
+        .update({ status: 'queued', updated_at: new Date().toISOString() })
+        .eq('job_id', jobId)
+        .eq('status', 'running')
+        .lt('claimed_at', stuckBefore),
+      DB_TIMEOUT_MS, 'Databasen svarade inte när fastnade uppslag skulle läggas tillbaka'
+    );
 
-    const book = await loadBookForJob(job.book_id);
+    const book = await withTimeout(loadBookForJob(job.book_id), DB_TIMEOUT_MS * 2, 'Boken kunde inte läsas i tid');
     console.log(`[Jobb] ${jobId}: startar körning, boken har ${book?.spreads.length ?? 0} uppslag`);
     if (!book) {
       await db.from('barnbok_jobs').update({ status: 'failed', message: 'Boken hittades inte', updated_at: new Date().toISOString() }).eq('id', jobId);
@@ -396,7 +406,8 @@ export async function runJob(jobId: string): Promise<void> {
       .update({ status: 'failed', message: err instanceof Error ? err.message : String(err) })
       .eq('id', jobId);
   } finally {
-    running.delete(jobId);
+    if (running.get(jobId) === startedAt) running.delete(jobId);
+    console.log(`[Jobb] ${jobId}: körningen avslutad efter ${Math.round((Date.now() - startedAt) / 1000)} s`);
   }
 }
 
