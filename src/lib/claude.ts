@@ -542,7 +542,7 @@ ${numbered}
 ${options.title ? `Författarens titel: "${options.title}"` : 'Ingen titel angiven - föreslå en kort, lockande titel på svenska utifrån texten.'}
 
 UPPGIFT:
-1. KARAKTÄRER: Lista alla namngivna figurer som återkommer. Använd utseendet som står i texten; där det saknas, hitta på ett konkret och konsekvent utseende som passar (ålder, hår, ögon, kroppsbyggnad, kläder).
+1. KARAKTÄRER: Lista högst 8 figurer: huvudpersonerna och de bikaraktärer som är med i flera scener eller syns tydligt på bild. Namngivna statister som bara nämns i förbigående (grannar i en uppräkning, en kassörska, någon som omtalas) ska INTE listas - de ritas ändå utifrån bildprompten. Använd utseendet som står i texten; där det saknas, hitta på ett konkret och konsekvent utseende som passar (ålder, hår, ögon, kroppsbyggnad, kläder).
 2. OMSLAG: Bildprompt på ENGELSKA för framsidan som fångar bokens stämning och visar huvudkaraktärerna. Titeln ska stå som stor titeltext på svenska.
 3. UPPSLAG: Dela upp HELA manuset i ${options.minSpreads}-${options.maxSpreads} på varandra följande delar. Ange för varje del vilket stycke den börjar på (startParagraph). Första delen börjar på stycke 1 och delarna ska komma i stigande ordning.
 ${isChapterBook
@@ -1179,6 +1179,7 @@ HELA BOKENS LÄNGD: ca ${book.targetWords} ord (${book.lengthLabel}), ungefär $
 ${input.title?.trim() ? `TITEL: "${input.title.trim()}"` : 'TITEL: ingen angiven - hitta på en kort, lockande svensk titel'}
 
 HANDLING: ${input.plot}
+Handlingen är facit: namn, föremål, färger och platser som står där ska användas precis som de är. Byt aldrig ut ett namn eller en detalj mot ett eget - hitta bara på det som saknas.
 ${input.setting?.trim() ? `MILJÖ: ${input.setting.trim()}\n` : ''}
 KARAKTÄRER:
 ${characterLines.length > 0
@@ -1202,7 +1203,7 @@ ${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary)}
 ${comicWritingHint(book)}
 ${proseRules(targetAge)}
 
-${variationBlock({ names: characterLines.length === 0, opening: true })}
+${variationBlock({ names: characterLines.length === 0 && plotNames(input.plot).length === 0, opening: true })}
 ${input.plot.trim().length < 120 ? `\n${seedsBlock(drawStorySeeds(preset.id, avoidTextOf(recent)), 'krydda')}\n` : ''}
 ${memoryBlock(recent)}`;
 

@@ -136,8 +136,14 @@ export async function POST(request: Request) {
   }
 }
 
+// Fler än så blir ohanterligt för författaren: varje karaktär ska godkännas
+// med en egen bild, och statister ritas ändå från bildprompten
+const MAX_CHARACTERS = 8;
+
 function toCharacters(planned: StyleTestCharacter[]): Character[] {
-  return planned.map((c, i) => ({
+  const main = planned.filter(c => c.role === 'main');
+  const rest = planned.filter(c => c.role !== 'main');
+  return [...main, ...rest].slice(0, MAX_CHARACTERS).map((c, i) => ({
     id: crypto.randomUUID(),
     name: c.name,
     age: c.age,
@@ -146,6 +152,7 @@ function toCharacters(planned: StyleTestCharacter[]): Character[] {
     personality: c.personality,
     // En bok måste ha en huvudperson
     role: c.role === 'main' || (i === 0 && !planned.some(x => x.role === 'main')) ? 'main' : 'supporting',
+
     approved: false,
   }));
 }
