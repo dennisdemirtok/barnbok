@@ -458,8 +458,14 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
         <div className="mt-5 space-y-5">
           <div>
             <h4 className="text-sm font-semibold text-ink">Välj röst</h4>
-            <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
-              {NARRATOR_VOICES.map(v => {
+            <p className="mt-0.5 text-xs text-ink/50">Klicka på en röst för att höra den läsa svenska.</p>
+            {([true, false]).map(native => (
+            <div key={String(native)} className="mt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink/40">
+              {native ? 'Svenska röster' : 'Övriga röster (läser med brytning)'}
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {NARRATOR_VOICES.filter(v => v.native === native).map(v => {
                 const chosen = v.id === voiceId;
                 return (
                   <button
@@ -488,6 +494,8 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                 );
               })}
             </div>
+            </div>
+            ))}
 
             <audio ref={sampleRef} onEnded={() => setSampleId('')} className="hidden" />
 
