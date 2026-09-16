@@ -61,12 +61,14 @@ export interface Character {
   power?: string;
   role: 'main' | 'supporting' | 'villain';
   referenceImage?: string; // base64
+  referenceImageUrl?: string; // sparad i molnet - servern hämtar bilden härifrån
   approved: boolean;
 }
 
 export interface Spread {
   id: string;
   spreadNumber: number;
+  imageUrl?: string; // bild sparad i molnet (servern lägger den här)
   pages: string; // e.g. "6-7"
   chapter?: string;
   textBlocks: TextBlock[];

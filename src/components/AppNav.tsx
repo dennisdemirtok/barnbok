@@ -2,6 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
+import {
+  IllustrationJob,
+  JobRef,
+  JOB_REF_EVENT,
+  clearJobRef,
+  fetchJob,
+  notifyBookIllustrated,
+  onJobUpdate,
+  readJobRef,
+} from '@/lib/job-client';
 
 export type NavTarget = 'library' | 'create' | 'characterStudio' | 'bookstore';
 
@@ -17,6 +27,8 @@ interface HeaderProps extends NavProps {
   onLogout: () => void;
   // Internt verktyg - visas bara för administratörer
   onOpenReferences?: () => void;
+  // Öppnar boken som illustreras i bakgrunden
+  onOpenJob?: (bookId: string) => void;
 }
 
 const LINKS: { target: Exclude<NavTarget, 'create'>; label: string; icon: string }[] = [
@@ -26,7 +38,7 @@ const LINKS: { target: Exclude<NavTarget, 'create'>; label: string; icon: string
 ];
 
 // ── Toppmeny: full navigering på desktop, bara logga + konto på mobil ──
-export function SiteHeader({ active, onNavigate, userEmail, authLoading, onLogin, onLogout, onOpenReferences }: HeaderProps) {
+export function SiteHeader({ active, onNavigate, userEmail, authLoading, onLogin, onLogout, onOpenReferences, onOpenJob }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-md border-b border-line">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 md:h-16 flex items-center justify-between gap-3">
@@ -77,7 +89,146 @@ export function SiteHeader({ active, onNavigate, userEmail, authLoading, onLogin
           )}
         </div>
       </div>
+
+      <JobStatusBar onOpen={onOpenJob} />
     </header>
+  );
+}
+
+// ── Statusrad för bakgrundsjobbet: syns på alla sidor medan boken illustreras ──
+function JobStatusBar({ onOpen }: { onOpen?: (bookId: string) => void }) {
+  const [jobRef, setJobRef] = useState<JobRef | null>(null);
+  const [job, setJob] = useState<IllustrationJob | null>(null);
+  const notifiedRef = useRef(false);
+
+  // Hitta jobbet efter en omladdning, och när ett nytt startas i den här fliken
+  useEffect(() => {
+    const sync = () => setJobRef(readJobRef());
+    sync();
+    window.addEventListener(JOB_REF_EVENT, sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener(JOB_REF_EVENT, sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
+  const jobId = jobRef?.jobId;
+
+  useEffect(() => {
+    if (!jobId) {
+      setJob(null);
+      return;
+    }
+    notifiedRef.current = false;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Illustreringssidan pollar redan - då behöver den här raden inte fråga själv
+    let lastShared = 0;
+
+    const off = onJobUpdate(fresh => {
+      if (fresh.id !== jobId) return;
+      lastShared = Date.now();
+      setJob(fresh);
+      if (fresh.status !== 'running') {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+      }
+    });
+
+    const tick = async () => {
+      if (Date.now() - lastShared > 8000) {
+        try {
+          const fresh = await fetchJob(jobId);
+          if (stopped) return;
+          if (fresh) {
+            setJob(fresh);
+            if (fresh.status !== 'running') return;
+          }
+        } catch {
+          // Nätverksglapp - försök igen vid nästa varv
+        }
+      }
+      if (!stopped) timer = setTimeout(tick, 6000);
+    };
+
+    tick();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      off();
+    };
+  }, [jobId]);
+
+  const status = job?.status;
+
+  // Klart: notis om användaren tittar någon annanstans, sedan rensas jobbet
+  useEffect(() => {
+    if (!status || status === 'running') return;
+    if (status === 'done' && !notifiedRef.current) {
+      notifiedRef.current = true;
+      if (document.hidden) notifyBookIllustrated(readJobRef()?.title || '');
+    }
+    const timer = setTimeout(() => {
+      clearJobRef();
+      setJobRef(null);
+    }, 25000);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  if (!jobRef || !job) return null;
+
+  const running = job.status === 'running';
+  const failed = job.status === 'failed';
+  const percent = job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
+
+  const label = running
+    ? `Illustrerar ${job.done}/${job.total}`
+    : job.status === 'done'
+    ? 'Boken är färdigillustrerad'
+    : job.status === 'canceled'
+    ? 'Illustreringen stoppad'
+    : 'Illustreringen kunde inte slutföras';
+
+  const open = () => {
+    if (!running) {
+      clearJobRef();
+      setJobRef(null);
+    }
+    onOpen?.(jobRef.bookId);
+  };
+
+  return (
+    <div className="border-t border-line bg-white/75">
+      <button
+        onClick={open}
+        className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center gap-2.5 text-left hover:bg-ink/[0.03] transition-colors"
+        title="Öppna boken"
+      >
+        <span className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center ${
+          failed ? 'bg-red-100 text-red-600' : job.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 'bg-ink/[0.06] text-brand'
+        }`}>
+          {running
+            ? <span className="spinner !w-3.5 !h-3.5" />
+            : <Icon name={job.status === 'done' ? 'celebration' : failed ? 'error' : 'pause_circle'} filled size={16} />}
+        </span>
+
+        <span className="text-xs sm:text-sm font-medium text-ink/75 truncate">
+          {label}
+          {jobRef.title && <span className="hidden sm:inline text-ink/40"> · {jobRef.title}</span>}
+        </span>
+
+        {running && (
+          <span className="ml-auto flex items-center gap-2 shrink-0">
+            <span className="hidden sm:inline text-xs text-ink/40">Du kan stänga sidan</span>
+            <span className="w-20 sm:w-32 h-1 rounded-full bg-ink/10 overflow-hidden">
+              <span className="block h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${percent}%` }} />
+            </span>
+          </span>
+        )}
+        {!running && <Icon name="arrow_forward" size={16} className="ml-auto shrink-0 text-ink/35" />}
+      </button>
+    </div>
   );
 }
 

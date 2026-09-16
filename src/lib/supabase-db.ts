@@ -73,21 +73,47 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
     const { error: delCharError } = await supabase.from('barnbok_characters').delete().eq('book_id', book.id);
     if (delCharError) problems.push(`Karaktärer (rensning): ${delCharError.message}`);
 
-    const charRows = book.characters.map((c, i) => ({
-      id: c.id,
-      book_id: book.id,
-      user_id: userId,
-      name: c.name,
-      appearance: c.appearance,
-      role: c.role === 'villain' ? 'supporting' : c.role,
-      approved: c.approved,
-      sort_order: i,
+    // Referensbilden är karaktärens ansikte - den måste ligga i molnet, annars
+    // kan servern inte rita samma person när den illustrerar i bakgrunden
+    const charRows = await Promise.all(book.characters.map(async (c, i) => {
+      let referenceUrl = c.referenceImageUrl ?? null;
+      if (c.referenceImage) {
+        const upload = await uploadCharacterImage(book.id, c.id, c.referenceImage);
+        if (upload.url) referenceUrl = upload.url;
+        else problems.push(`Karaktärsbild ${c.name}: ${upload.error}`);
+      }
+      return {
+        id: c.id,
+        book_id: book.id,
+        user_id: userId,
+        name: c.name,
+        appearance: c.appearance,
+        role: c.role === 'villain' ? 'supporting' : c.role,
+        approved: c.approved,
+        sort_order: i,
+        age: c.age || null,
+        normal_clothes: c.normalClothes || null,
+        personality: c.personality || null,
+        hero_name: c.heroName || null,
+        hero_costume: c.heroCostume || null,
+        power: c.power || null,
+        reference_image_url: referenceUrl,
+      };
     }));
 
-    const { error: charError } = await supabase
+    let { error: charError } = await supabase
       .from('barnbok_characters')
       .insert(charRows);
 
+    // Äldre databaser saknar de nya kolumnerna - spara det som går hellre än inget
+    if (charError && /column .* does not exist/i.test(charError.message)) {
+      const basicRows = charRows.map(r => ({
+        id: r.id, book_id: r.book_id, user_id: r.user_id, name: r.name,
+        appearance: r.appearance, role: r.role, approved: r.approved, sort_order: r.sort_order,
+      }));
+      ({ error: charError } = await supabase.from('barnbok_characters').insert(basicRows));
+      if (!charError) problems.push('Karaktärernas bilder sparades inte - kör scripts/illustration-jobs.sql i Supabase');
+    }
     if (charError) problems.push(`Karaktärer: ${charError.message}`);
   }
 
@@ -220,6 +246,13 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     appearance: c.appearance || '',
     role: c.role as 'main' | 'supporting',
     approved: c.approved,
+    age: c.age || undefined,
+    normalClothes: c.normal_clothes || undefined,
+    personality: c.personality || undefined,
+    heroName: c.hero_name || undefined,
+    heroCostume: c.hero_costume || undefined,
+    power: c.power || undefined,
+    referenceImageUrl: c.reference_image_url || undefined,
   }));
 
   const spreads: Spread[] = (spreadRows || []).map(s => {
@@ -707,11 +740,24 @@ export async function deleteBookFromCloud(id: string): Promise<void> {
 //  Image storage
 // ═══════════════════════════════════════════
 
+async function uploadCharacterImage(
+  bookId: string,
+  characterId: string,
+  base64Image: string
+): Promise<{ url: string | null; error?: string }> {
+  return uploadImage(`books/${bookId}/characters/${characterId}.png`, base64Image);
+}
+
 async function uploadSpreadImage(
   bookId: string,
   spreadId: string,
   base64Image: string
 ): Promise<{ url: string | null; error?: string }> {
+  return uploadImage(`books/${bookId}/${spreadId}.png`, base64Image);
+}
+
+// Laddar upp en base64-bild till bokbilderna och ger tillbaka den publika adressen
+export async function uploadImage(filePath: string, base64Image: string): Promise<{ url: string | null; error?: string }> {
   try {
     // Convert base64 to blob
     const byteCharacters = atob(base64Image);
@@ -721,8 +767,6 @@ async function uploadSpreadImage(
     }
     const byteArray = new Uint8Array(byteNumbers);
     const blob = new Blob([byteArray], { type: 'image/png' });
-
-    const filePath = `books/${bookId}/${spreadId}.png`;
 
     const { error } = await supabase.storage
       .from(IMAGES_BUCKET)

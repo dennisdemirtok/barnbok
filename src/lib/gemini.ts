@@ -3,6 +3,7 @@ import { aspectFor, resolveComposition } from './compositions';
 import { Character, Spread, BookFormat, IllustrationShape } from './types';
 import { textSideForSpread } from './styles';
 import { describeLettering, letteringCaps } from './comic';
+import { withReferenceImages } from './character-refs';
 
 const MODEL = 'gemini-3.1-flash-image-preview';
 
@@ -300,8 +301,9 @@ export async function generatePageImage(
   // Build the contents array with reference images and prompt
   const contents: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
 
-  // Detect which characters are in this specific scene
-  const approvedChars = characters.filter(c => c.referenceImage && c.approved);
+  // Detect which characters are in this specific scene. Bilder som ligger i molnet hämtas hem.
+  const withRefs = await withReferenceImages(characters);
+  const approvedChars = withRefs.filter(c => c.referenceImage && c.approved);
   const charsInScene = findCharactersInScene(spread, approvedChars);
   const mainCharsInScene = charsInScene.filter(c => c.role === 'main');
   const supportingCharsInScene = charsInScene.filter(c => c.role !== 'main');

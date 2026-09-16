@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { BookProject, Character, Spread, BookFormat } from '@/lib/types';
-import { saveBook } from '@/lib/storage';
+import { saveBook, loadBook } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import BookLibrary from '@/components/BookLibrary';
 import BookImporter, { EMPTY_DRAFT, ImportMode, ManuscriptDraft } from '@/components/BookImporter';
@@ -144,6 +144,44 @@ export default function Home() {
     setBook(prev => prev && { ...prev, spreads });
   };
 
+  // Servern illustrerar boken i bakgrunden och läser den ur molnet, så boken
+  // måste vara sparad där innan jobbet startar
+  const handleEnsureSaved = async (): Promise<boolean> => {
+    if (!book) return false;
+    try {
+      const result = await saveBook(book, { cloud: true });
+      if (result.idsMigrated) setBook(result.book);
+      if (result.cloud !== 'synced') {
+        console.warn('Molnsparning innan illustrering:', result.cloudError || result.cloud);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Molnsparning innan illustrering misslyckades:', err);
+      return false;
+    }
+  };
+
+  // Klick på statusraden i toppmenyn: tillbaka till bokens illustrationssteg
+  const handleOpenJob = async (bookId: string) => {
+    if (book?.id === bookId) {
+      setStep('generate');
+      return;
+    }
+    try {
+      const loaded = await loadBook(bookId);
+      if (loaded) {
+        setBook(loaded);
+        setIsClonedBook(false);
+        setStep('generate');
+        return;
+      }
+    } catch (err) {
+      console.error('Kunde inte öppna boken som illustreras:', err);
+    }
+    setStep('library');
+  };
+
   const handleUpdateSpread = (updatedSpread: Spread) => {
     setBook(prev => prev && {
       ...prev,
@@ -234,6 +272,7 @@ export default function Home() {
         onLogin={() => setShowLogin(true)}
         onLogout={signOut}
         onOpenReferences={isAdmin ? () => setShowRefManager(true) : undefined}
+        onOpenJob={handleOpenJob}
       />
 
       {/* Stegindikator */}
@@ -372,6 +411,7 @@ export default function Home() {
             book={book}
             onPagesGenerated={handlePagesGenerated}
             onSpreadsProgress={handleSpreadsProgress}
+            onEnsureSaved={handleEnsureSaved}
             onBack={() => setStep('characters')}
           />
         )}

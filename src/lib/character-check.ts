@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { withReferenceImages } from './character-refs';
 import {
   Character,
   Spread,
@@ -488,7 +489,7 @@ export async function reviewPageImage(
   opts: { timeoutMs?: number } = {}
 ): Promise<ImageReview> {
   const ai = getClient();
-  const { required, optional } = expectedCharactersForSpread(ctx.spread, ctx.characters);
+  const { required, optional } = expectedCharactersForSpread(ctx.spread, await withReferenceImages(ctx.characters));
   const isComic = ctx.bookFormat === 'bildbok-text-pa-bild';
 
   // Referensbilder för figurerna i scenen (max 6 för att hålla nere anropet)

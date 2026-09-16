@@ -1,28 +1,80 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { BookProject, Spread, SpreadQualityCheck } from '@/lib/types';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { resolveBookShape } from '@/lib/book-layout';
 import { COMPOSITION_LABEL } from '@/lib/compositions';
+import {
+  IllustrationJob,
+  JobItem,
+  askNotificationPermission,
+  cancelJob,
+  clearJobRef,
+  estimateMinutesLeft,
+  fetchBookJob,
+  fetchJob,
+  publishJob,
+  startIllustrationJob,
+  writeJobRef,
+} from '@/lib/job-client';
 
-const BATCH_SIZE = 3; // Generate 3 images in parallel
+// Uppslag kan ha bilden antingen som base64 (nygenererad i webbläsaren) eller
+// som en URL i molnet (bakgrundsjobbet lägger den där)
+type SpreadWithUrl = Spread & { imageUrl?: string };
+
+const POLL_MS = 4000;
 
 interface Props {
   book: BookProject;
   onPagesGenerated: (spreads: Spread[]) => void;
   onSpreadsProgress?: (spreads: Spread[]) => void;
+  // Sparar boken i molnet innan jobbet startar. Servern läser text, karaktärer
+  // och stil därifrån, så utan en lyckad sparning kan den inte rita.
+  onEnsureSaved?: () => Promise<boolean>;
   onBack: () => void;
 }
 
-export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgress, onBack }: Props) {
+// Väger in vad servern rapporterat om ett uppslag i den lokala kopian
+function mergeItem(spread: Spread, item: JobItem): Spread {
+  const current = spread as SpreadWithUrl;
+  const hasImage = !!current.imageUrl || !!spread.generatedImage;
+
+  if (item.status === 'done' && item.imageUrl) {
+    if (current.imageUrl === item.imageUrl && spread.status === 'done') return spread;
+    return {
+      ...spread,
+      imageUrl: item.imageUrl,
+      generatedImage: undefined,
+      status: 'done' as const,
+      error: undefined,
+      qualityCheck: item.quality ?? spread.qualityCheck,
+    } as Spread;
+  }
+
+  if (item.status === 'error') {
+    const message = item.error || 'Okänt fel';
+    if (spread.status === 'error' && spread.error === message) return spread;
+    return { ...spread, status: 'error' as const, error: message };
+  }
+
+  if (item.status === 'running') {
+    return spread.status === 'generating' ? spread : { ...spread, status: 'generating' as const, error: undefined };
+  }
+
+  // 'queued' - ligger i kö. Ett uppslag som redan har en bild rörs inte.
+  if (hasImage || spread.status === 'pending') return spread;
+  return { ...spread, status: 'pending' as const, error: undefined };
+}
+
+export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgress, onEnsureSaved, onBack }: Props) {
   // Uppslag som sparats mitt i en generering (t.ex. vid omladdning) har ingen
   // pågående förfrågan längre – återställ dem till 'pending' så de inte snurrar för evigt
   const [spreads, setSpreads] = useState<Spread[]>(() =>
     book.spreads.map(s => (s.status === 'generating' ? { ...s, status: 'pending' as const } : s))
   );
-  const autoStartedRef = useRef(false);
+  const startedRef = useRef(false);
 
   // Push every spread update to the parent so generated images are auto-saved
   // even if the user never clicks "Granska boken"
@@ -30,9 +82,15 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
     onSpreadsProgress?.(spreads);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spreads]);
-  const [isGenerating, setIsGenerating] = useState(false);
+
+  const [job, setJob] = useState<IllustrationJob | null>(null);
+  const [pollingId, setPollingId] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const abortRef = useRef(false);
+
+  const jobRunning = job?.status === 'running';
+  const isBusy = jobRunning || starting || !!regeneratingId;
 
   const totalSpreads = spreads.length;
   const completedSpreads = spreads.filter(s => s.status === 'done').length;
@@ -42,131 +100,159 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
   const progress = totalSpreads > 0 ? (completedSpreads / totalSpreads) * 100 : 0;
 
   // Går att granska även efter "Stoppa" – saknade sidor kan regenereras i granskningen
-  const canProceedToReview = completedSpreads > 0 && !isGenerating;
-  const allDone = completedSpreads === totalSpreads;
+  const canProceedToReview = completedSpreads > 0 && !isBusy;
+  const allDone = totalSpreads > 0 && completedSpreads === totalSpreads;
   const missingCount = pendingCount + failedCount;
   // Helsidesbilder visas stående i ett tätare rutnät, uppslag liggande
   const portrait = resolveBookShape(book) === 'page';
 
-  // Grov tidsuppskattning: bild + granskning, ibland ett par rättningsförsök - ca 1,5 min per omgång om 3
   const remainingSpreads = pendingCount + generatingCount;
-  const estimatedMinutes = Math.max(1, Math.ceil((Math.ceil(remainingSpreads / BATCH_SIZE) * 90) / 60));
+  const estimatedMinutes = estimateMinutesLeft(remainingSpreads);
 
-  const generateAllPages = async () => {
-    setIsGenerating(true);
-    setError('');
-    abortRef.current = false;
+  const applyJob = useCallback((fresh: IllustrationJob) => {
+    setSpreads(prev => {
+      let changed = false;
+      const next = prev.map(s => {
+        const item = fresh.items.find(i => i.spreadId === s.id);
+        if (!item) return s;
+        const merged = mergeItem(s, item);
+        if (merged !== s) changed = true;
+        return merged;
+      });
+      return changed ? next : prev;
+    });
+  }, []);
 
-    const pendingSpreads = spreads.filter(s => s.status !== 'done');
-
-    // Process in batches of BATCH_SIZE
-    for (let i = 0; i < pendingSpreads.length; i += BATCH_SIZE) {
-      if (abortRef.current) break;
-
-      const batch = pendingSpreads.slice(i, i + BATCH_SIZE);
-      const batchIds = batch.map(s => s.id);
-
-      // Mark all in batch as generating
-      setSpreads(prev => prev.map(s =>
-        batchIds.includes(s.id) ? { ...s, status: 'generating' as const } : s
-      ));
-
-      try {
-        const res = await fetch('/api/generate-page', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            batch: true,
-            spreads: batch,
-            characters: book.characters,
-            styleGuide: book.styleGuide,
-            bookFormat: book.bookFormat,
-            illustrationShape: book.illustrationShape,
-          }),
-        });
-
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || 'Batch-generering misslyckades');
-        }
-
-        const { results } = await res.json() as {
-          results: Array<{
-            id: string;
-            image?: string;
-            error?: string;
-            qualityCheck?: SpreadQualityCheck;
-          }>;
-        };
-
-        // Update each spread with its result
-        setSpreads(prev => prev.map(s => {
-          const result = results.find(r => r.id === s.id);
-          if (!result) return s;
-
-          if (result.image) {
-            return {
-              ...s,
-              generatedImage: result.image,
-              status: 'done' as const,
-              error: undefined,
-              qualityCheck: result.qualityCheck,
-            };
-          } else {
-            return { ...s, status: 'error' as const, error: result.error || 'Okänt fel' };
-          }
-        }));
-      } catch (err) {
-        // If the whole batch fails, mark all as error
-        const message = err instanceof Error ? err.message : 'Okänt fel';
-        setSpreads(prev => prev.map(s =>
-          batchIds.includes(s.id) && s.status === 'generating'
-            ? { ...s, status: 'error' as const, error: message }
-            : s
-        ));
-      }
-    }
-
-    setIsGenerating(false);
-  };
-
-  const stopGeneration = () => {
-    abortRef.current = true;
-  };
-
-  // Starta automatiskt en gång för en helt ny bok (alla uppslag väntar)
+  // ── Polla jobbet medan det kör ──
   useEffect(() => {
-    if (autoStartedRef.current) return;
-    autoStartedRef.current = true;
-    if (spreads.length > 0 && spreads.every(s => s.status === 'pending')) {
-      generateAllPages();
+    if (!pollingId) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      try {
+        const fresh = await fetchJob(pollingId);
+        if (stopped) return;
+        if (fresh) {
+          setJob(fresh);
+          publishJob(fresh);
+          applyJob(fresh);
+          if (fresh.status !== 'running') {
+            if (fresh.status === 'failed' && fresh.message) setError(fresh.message);
+            setPollingId(null);
+            return;
+          }
+        }
+      } catch {
+        // Nätverksglapp (t.ex. mobilen somnade) - försök igen vid nästa varv
+      }
+      if (!stopped) timer = setTimeout(tick, POLL_MS);
+    };
+
+    tick();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [pollingId, applyJob]);
+
+  const startJob = useCallback(async () => {
+    setError('');
+    setStarting(true);
+    // Fråga om notiser direkt i klicket - vissa webbläsare kräver det
+    askNotificationPermission();
+    try {
+      if (onEnsureSaved) {
+        const saved = await onEnsureSaved();
+        if (!saved) {
+          setError('Boken kunde inte sparas i molnet, så servern kan inte hämta text och karaktärer. Kontrollera att du är inloggad och försök igen.');
+          return;
+        }
+      }
+
+      const started = await startIllustrationJob(book.id);
+      writeJobRef({ jobId: started.jobId, bookId: book.id, title: book.title });
+      setSpreads(prev => prev.map(s => (s.status === 'error' ? { ...s, status: 'pending' as const, error: undefined } : s)));
+      setJob(prev =>
+        prev && prev.id === started.jobId
+          ? { ...prev, status: 'running' as const }
+          : {
+              id: started.jobId,
+              bookId: book.id,
+              status: 'running' as const,
+              total: started.total,
+              done: 0,
+              failed: 0,
+              updatedAt: new Date().toISOString(),
+              items: [],
+            }
+      );
+      setPollingId(started.jobId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kunde inte starta illustreringen');
+    } finally {
+      setStarting(false);
     }
+  }, [book.id, book.title, onEnsureSaved]);
+
+  // ── Vid start: haka på ett pågående jobb, annars starta en helt ny bok ──
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    let cancelled = false;
+
+    (async () => {
+      let existing: IllustrationJob | null = null;
+      try {
+        existing = await fetchBookJob(book.id);
+      } catch {
+        // Jobb-API:t svarade inte - användaren får starta manuellt
+      }
+      if (cancelled) return;
+
+      if (existing) {
+        setJob(existing);
+        publishJob(existing);
+        applyJob(existing);
+        if (existing.status === 'running') {
+          writeJobRef({ jobId: existing.id, bookId: book.id, title: book.title });
+          setPollingId(existing.id);
+          return;
+        }
+      }
+
+      // Helt ny bok där inget uppslag har bild: sätt igång direkt
+      if (spreads.length > 0 && spreads.every(s => s.status === 'pending')) {
+        void startJob();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Varna innan användaren lämnar sidan medan bilder genereras
-  useEffect(() => {
-    if (!isGenerating) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isGenerating]);
-
-  const retryFailed = async () => {
-    setSpreads(prev => prev.map(s =>
-      s.status === 'error' ? { ...s, status: 'pending' as const, error: undefined } : s
-    ));
-    setTimeout(() => generateAllPages(), 100);
+  const stopJob = async () => {
+    const id = pollingId || job?.id;
+    setPollingId(null);
+    setJob(prev => (prev ? { ...prev, status: 'canceled' as const } : prev));
+    setSpreads(prev => prev.map(s => (s.status === 'generating' ? { ...s, status: 'pending' as const } : s)));
+    clearJobRef();
+    if (!id) return;
+    try {
+      await cancelJob(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kunde inte stoppa illustreringen');
+    }
   };
 
+  // Enstaka omgenerering görs direkt mot bildmotorn - den är snabb nog att vänta på
   const retrySingle = async (spreadId: string) => {
     const spread = spreads.find(s => s.id === spreadId);
     if (!spread) return;
 
-    setIsGenerating(true);
+    setRegeneratingId(spreadId);
     setSpreads(prev => prev.map(s =>
       s.id === spreadId ? { ...s, status: 'generating' as const, error: undefined } : s
     ));
@@ -181,6 +267,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           styleGuide: book.styleGuide,
           bookFormat: book.bookFormat,
           illustrationShape: book.illustrationShape,
+          isRegenerate: true,
         }),
       });
 
@@ -196,10 +283,11 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           ? {
               ...s,
               generatedImage: image,
+              imageUrl: undefined,
               status: 'done' as const,
               error: undefined,
               qualityCheck,
-            }
+            } as Spread
           : s
       ));
     } catch (err) {
@@ -210,7 +298,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           : s
       ));
     } finally {
-      setIsGenerating(false);
+      setRegeneratingId(null);
     }
   };
 
@@ -230,7 +318,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
             <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
               allDone ? 'bg-emerald-500 text-white shadow-soft' : 'bg-ink text-white shadow-soft'
             }`}>
-              {isGenerating
+              {isBusy
                 ? <span className="spinner !w-6 !h-6" />
                 : <Icon name={allDone ? 'celebration' : 'auto_fix_high'} filled size={26} />}
             </div>
@@ -238,13 +326,15 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               <p className="font-heading font-semibold text-ink">
                 {allDone
                   ? 'Alla uppslag är klara! 🎉'
-                  : isGenerating
-                  ? `Genererar ${generatingCount} ${generatingCount === 1 ? 'bild' : 'bilder'} parallellt...`
-                  : 'Redo att generera'}
+                  : starting
+                  ? 'Startar illustreringen...'
+                  : jobRunning
+                  ? 'Servern illustrerar din bok'
+                  : 'Redo att illustrera'}
               </p>
               <p className="text-sm text-ink/55">
-                {completedSpreads} av {totalSpreads} uppslag klara
-                {isGenerating && remainingSpreads > 0 && ` · ~${estimatedMinutes} min kvar`}
+                {completedSpreads} av {totalSpreads} klara
+                {jobRunning && remainingSpreads > 0 && ` · ungefär ${estimatedMinutes} min kvar`}
               </p>
             </div>
           </div>
@@ -253,7 +343,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 
         <div className="bg-ink/10 rounded-full h-3 overflow-hidden">
           <div
-            className="bg-brand animate-shimmer h-full rounded-full transition-all duration-500 ease-out"
+            className={`bg-brand h-full rounded-full transition-all duration-500 ease-out ${jobRunning ? 'animate-shimmer' : ''}`}
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -265,12 +355,12 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           </span>
           {generatingCount > 0 && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand/10 text-brand">
-              <span className="spinner !w-3.5 !h-3.5" /> {generatingCount} genereras
+              <span className="spinner !w-3.5 !h-3.5" /> {generatingCount} ritas nu
             </span>
           )}
           {pendingCount > 0 && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ink/[0.05] text-ink/55">
-              <Icon name="schedule" size={15} /> {pendingCount} väntar
+              <Icon name="schedule" size={15} /> {pendingCount} i kö
             </span>
           )}
           {failedCount > 0 && (
@@ -280,26 +370,34 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           )}
         </div>
 
+        {/* Jobbet kör på servern - sidan behöver inte vara öppen */}
+        {(jobRunning || starting) && (
+          <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-brand/[0.07] border border-brand/15 text-sm text-ink/70">
+            <Icon name="cloud_done" filled size={18} className="text-brand mt-px shrink-0" />
+            <p>
+              <strong className="text-ink font-semibold">Du kan stänga sidan</strong> - bilderna görs klart i bakgrunden.
+              Kom tillbaka när du vill, även från en annan enhet, så fortsätter du där boken är.
+            </p>
+          </div>
+        )}
+
         {/* Controls */}
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 pt-1">
-          {!isGenerating ? (
-            <>
-              <button
-                onClick={generateAllPages}
-                disabled={allDone}
-                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Icon name="auto_fix_high" filled size={19} />
-                {completedSpreads > 0 ? 'Fortsätt generera' : 'Starta generering'}
-              </button>
-              {failedCount > 0 && (
-                <button onClick={retryFailed} className="btn-action">
-                  <Icon name="refresh" size={19} /> Försök igen ({failedCount} misslyckade)
-                </button>
-              )}
-            </>
+          {!jobRunning ? (
+            <button
+              onClick={startJob}
+              disabled={allDone || starting || !!regeneratingId}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Icon name="auto_fix_high" filled size={19} />
+              {starting
+                ? 'Startar...'
+                : completedSpreads > 0
+                ? `Illustrera resten${missingCount > 0 ? ` (${missingCount})` : ''}`
+                : 'Illustrera boken'}
+            </button>
           ) : (
-            <button onClick={stopGeneration} className="btn-danger">
+            <button onClick={stopJob} className="btn-danger">
               <Icon name="stop_circle" filled size={19} /> Stoppa
             </button>
           )}
@@ -328,77 +426,80 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 
       {/* Spread grid */}
       <div className={`grid gap-3 sm:gap-4 ${portrait ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
-        {spreads.map((spread) => (
-          <div
-            key={spread.id}
-            className={`card-glass overflow-hidden ${
-              spread.status === 'generating' ? 'ring-2 ring-brand/50' :
-              spread.status === 'error' ? 'ring-2 ring-red-300' :
-              ''
-            }`}
-          >
-            <div className={`bg-paper flex items-center justify-center ${portrait ? 'aspect-[3/4]' : 'aspect-[3/2]'}`}>
-              {spread.status === 'generating' ? (
-                <div className="text-center text-brand">
-                  <span className="spinner !w-8 !h-8 mb-2" />
-                  <p className="text-xs sm:text-sm text-ink/55 px-2">Målar och kontrollerar...</p>
-                </div>
-              ) : spread.generatedImage ? (
-                <img
-                  src={`data:image/png;base64,${spread.generatedImage}`}
-                  alt={`Sida ${spread.pages}`}
-                  className="w-full h-full object-contain"
-                />
-              ) : spread.status === 'error' ? (
-                <div className="text-center p-4">
-                  <Icon name="broken_image" size={28} className="text-red-300 mb-1" />
-                  <p className="text-xs text-ink/55 mb-2">{spread.error}</p>
-                  {!isGenerating && (
-                    <button
-                      onClick={() => retrySingle(spread.id)}
-                      className="px-3 py-1 bg-brand text-white text-xs rounded-full font-medium
-                                 hover:opacity-90 transition-opacity"
-                    >
-                      Försök igen
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center text-ink/40">
-                  <Icon name="hourglass_empty" size={26} className="mb-1" />
-                  <p className="text-sm">Väntar...</p>
-                </div>
-              )}
-            </div>
-
-            <div className="p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-sm text-ink/80 truncate" title={spread.composition ? COMPOSITION_LABEL[spread.composition] : undefined}>
-                  {spread.pages === 'omslag' ? 'Omslag' :
-                   spread.pages === 'slutsida' ? 'Slutsida' :
-                   `Sida ${spread.pages}`}
-                  {spread.composition && <span className="ml-1 text-ink/40 font-normal">· {COMPOSITION_LABEL[spread.composition]}</span>}
-                </span>
-                <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                  spread.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
-                  spread.status === 'generating' ? 'bg-brand/10 text-brand' :
-                  spread.status === 'error' ? 'bg-red-100 text-red-600' :
-                  'bg-ink/[0.05] text-ink/55'
-                }`}>
-                  {spread.status === 'done' ? 'Klar' :
-                   spread.status === 'generating' ? 'Genererar' :
-                   spread.status === 'error' ? 'Fel' : 'Väntar'}
-                </span>
+        {spreads.map((spread) => {
+          const imageUrl = (spread as SpreadWithUrl).imageUrl;
+          return (
+            <div
+              key={spread.id}
+              className={`card-glass overflow-hidden ${
+                spread.status === 'generating' ? 'ring-2 ring-brand/50' :
+                spread.status === 'error' ? 'ring-2 ring-red-300' :
+                ''
+              }`}
+            >
+              <div className={`bg-paper flex items-center justify-center ${portrait ? 'aspect-[3/4]' : 'aspect-[3/2]'}`}>
+                {spread.status === 'generating' ? (
+                  <div className="text-center text-brand">
+                    <span className="spinner !w-8 !h-8 mb-2" />
+                    <p className="text-xs sm:text-sm text-ink/55 px-2">Målar och kontrollerar...</p>
+                  </div>
+                ) : imageUrl || spread.generatedImage ? (
+                  <img
+                    src={imageUrl || `data:image/png;base64,${spread.generatedImage}`}
+                    alt={`Sida ${spread.pages}`}
+                    className="w-full h-full object-contain"
+                  />
+                ) : spread.status === 'error' ? (
+                  <div className="text-center p-4">
+                    <Icon name="broken_image" size={28} className="text-red-300 mb-1" />
+                    <p className="text-xs text-ink/55 mb-2">{spread.error}</p>
+                    {!isBusy && (
+                      <button
+                        onClick={() => retrySingle(spread.id)}
+                        className="px-3 py-1 bg-brand text-white text-xs rounded-full font-medium
+                                   hover:opacity-90 transition-opacity"
+                      >
+                        Försök igen
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center text-ink/40">
+                    <Icon name="hourglass_empty" size={26} className="mb-1" />
+                    <p className="text-sm">Väntar...</p>
+                  </div>
+                )}
               </div>
-              {spread.chapter && (
-                <p className="text-xs text-ink/55 mt-1">{spread.chapter}</p>
-              )}
-              {spread.status === 'done' && spread.qualityCheck && (
-                <QualityNote check={spread.qualityCheck} />
-              )}
+
+              <div className="p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm text-ink/80 truncate" title={spread.composition ? COMPOSITION_LABEL[spread.composition] : undefined}>
+                    {spread.pages === 'omslag' ? 'Omslag' :
+                     spread.pages === 'slutsida' ? 'Slutsida' :
+                     `Sida ${spread.pages}`}
+                    {spread.composition && <span className="ml-1 text-ink/40 font-normal">· {COMPOSITION_LABEL[spread.composition]}</span>}
+                  </span>
+                  <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                    spread.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
+                    spread.status === 'generating' ? 'bg-brand/10 text-brand' :
+                    spread.status === 'error' ? 'bg-red-100 text-red-600' :
+                    'bg-ink/[0.05] text-ink/55'
+                  }`}>
+                    {spread.status === 'done' ? 'Klar' :
+                     spread.status === 'generating' ? 'Genererar' :
+                     spread.status === 'error' ? 'Fel' : 'Väntar'}
+                  </span>
+                </div>
+                {spread.chapter && (
+                  <p className="text-xs text-ink/55 mt-1">{spread.chapter}</p>
+                )}
+                {spread.status === 'done' && spread.qualityCheck && (
+                  <QualityNote check={spread.qualityCheck} />
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
