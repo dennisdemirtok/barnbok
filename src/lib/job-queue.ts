@@ -21,6 +21,10 @@ const DB_TIMEOUT_MS = 30_000;
 const NO_PROGRESS_MS = 8 * 60 * 1000;
 
 interface JobItemRow { id: string; spread_id: string; label?: string; attempts: number }
+// Ett uppslag som tagits men inte blivit klart på så här länge är övergivet
+const STUCK_ITEM_MS = 6 * 60 * 1000;
+// Fler försök än så är lönlöst - då är det något annat som är fel
+const MAX_ITEM_ATTEMPTS = 3;
 
 export interface JobItemView {
   spreadId: string;
@@ -298,20 +302,13 @@ export async function runJob(jobId: string): Promise<void> {
       console.log(`[Jobb] arbetare ${n} startar`);
       for (;;) {
         // Databasanrop får aldrig hänga - då skulle arbetaren tystna för gott
-        let claimed: unknown;
+        let item: JobItemRow | undefined;
         try {
-          const res = await withTimeout(
-            db.rpc('barnbok_claim_job_item', { p_job: jobId }),
-            DB_TIMEOUT_MS,
-            'Databasen svarade inte när nästa uppslag skulle hämtas'
-          );
-          if (res.error) throw new Error(missingTables(res.error.message) ? MISSING_TABLES : res.error.message);
-          claimed = res.data;
+          item = await claimNextItem(jobId);
         } catch (err) {
           console.warn('[Jobb] kunde inte hämta uppslag:', err instanceof Error ? err.message : err);
           return;
         }
-        const item = (Array.isArray(claimed) ? claimed[0] : claimed) as JobItemRow | undefined;
         if (!item) { console.log(`[Jobb] arbetare ${n}: inget mer att ta`); return; }
         console.log(`[Jobb] arbetare ${n} tog ${item.label || item.spread_id} (försök ${item.attempts})`);
         lastProgressAt = Date.now();
@@ -350,7 +347,7 @@ export async function runJob(jobId: string): Promise<void> {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(`[Jobb] ${item.label || item.spread_id} misslyckades:`, message);
           // Ett uppslag som fastnat får försöka igen senare, annars markeras det
-          await finishItem(item.id, item.attempts >= 2
+          await finishItem(item.id, item.attempts >= MAX_ITEM_ATTEMPTS
             ? { status: 'error', error: message }
             : { status: 'queued', error: message });
         }
@@ -409,6 +406,50 @@ export async function runJob(jobId: string): Promise<void> {
     if (running.get(jobId) === startedAt) running.delete(jobId);
     console.log(`[Jobb] ${jobId}: körningen avslutad efter ${Math.round((Date.now() - startedAt) / 1000)} s`);
   }
+}
+
+/**
+ * Tar nästa uppslag ur kön. Villkoret "status = queued" i samma uppdatering gör
+ * att bara en arbetare kan vinna raden, även om flera frågar samtidigt.
+ * Uppslag som en tidigare körning tog men aldrig blev klar med tas tillbaka här.
+ */
+async function claimNextItem(jobId: string): Promise<JobItemRow | undefined> {
+  const db = serverSupabase();
+  const stuckBefore = new Date(Date.now() - STUCK_ITEM_MS).toISOString();
+
+  for (let round = 0; round < 2; round++) {
+    const query = db
+      .from('barnbok_job_items')
+      .select('id, spread_id, label, attempts, status')
+      .eq('job_id', jobId)
+      .lt('attempts', MAX_ITEM_ATTEMPTS)
+      .order('spread_number')
+      .limit(6);
+    const { data: candidates, error } = await withTimeout(
+      round === 0
+        ? query.eq('status', 'queued')
+        : query.eq('status', 'running').lt('claimed_at', stuckBefore),
+      DB_TIMEOUT_MS,
+      'Databasen svarade inte när kön skulle läsas'
+    );
+    if (error) throw new Error(missingTables(error.message) ? MISSING_TABLES : error.message);
+
+    for (const candidate of candidates || []) {
+      const now = new Date().toISOString();
+      const { data: won } = await withTimeout(
+        db.from('barnbok_job_items')
+          .update({ status: 'running', claimed_at: now, attempts: (candidate.attempts ?? 0) + 1, updated_at: now })
+          .eq('id', candidate.id)
+          .eq('status', candidate.status) // villkoret: någon annan får inte ha hunnit före
+          .select('id, spread_id, label, attempts'),
+        DB_TIMEOUT_MS,
+        'Databasen svarade inte när uppslaget skulle tas'
+      );
+      const row = won?.[0];
+      if (row) return row as JobItemRow;
+    }
+  }
+  return undefined;
 }
 
 function withTimeout<T>(promise: PromiseLike<T>, ms: number, message: string): Promise<T> {
