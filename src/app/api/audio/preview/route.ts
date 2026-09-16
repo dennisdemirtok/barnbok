@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { hasTtsKey, previewText, synthesize, estimateSeconds } from '@/lib/tts';
+import { hasTtsKey, previewText, synthesize, estimateSeconds, TtsQuality } from '@/lib/tts';
 import { voiceById } from '@/lib/tts-voices';
 import { loadBookForJob } from '@/lib/job-queue';
 import { BookProject } from '@/lib/types';
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     if (!hasTtsKey()) {
       return NextResponse.json({ error: 'Ljudbok är inte påslaget på servern (ELEVENLABS_API_KEY saknas)' }, { status: 503 });
     }
-    const body = await request.json() as { bookId?: string; book?: Partial<BookProject>; voiceId?: string; maxWords?: number };
+    const body = await request.json() as { bookId?: string; book?: Partial<BookProject>; voiceId?: string; maxWords?: number; quality?: TtsQuality };
     const voice = voiceById(body.voiceId);
 
     let book: Partial<BookProject> | null = body.book ?? null;
@@ -27,7 +27,8 @@ export async function POST(request: Request) {
     }
 
     const text = previewText(book as BookProject, Math.min(Math.max(body.maxWords ?? 280, 60), 600));
-    const mp3 = await synthesize(text, voice.id);
+    const quality: TtsQuality = body.quality === 'economy' ? 'economy' : 'best';
+    const mp3 = await synthesize(text, voice.id, quality);
 
     return new NextResponse(new Uint8Array(mp3), {
       headers: {
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
         'Cache-Control': 'no-store',
         'X-Voice': voice.name,
         'X-Seconds': String(estimateSeconds(text)),
+        'X-Characters': String(text.length),
       },
     });
   } catch (error) {

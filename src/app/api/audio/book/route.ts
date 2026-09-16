@@ -11,10 +11,10 @@ export async function POST(request: Request) {
     if (!hasTtsKey()) {
       return NextResponse.json({ error: 'Ljudbok är inte påslaget på servern (ELEVENLABS_API_KEY saknas)' }, { status: 503 });
     }
-    const { bookId, voiceId } = await request.json() as { bookId?: string; voiceId?: string };
+    const { bookId, voiceId, quality } = await request.json() as { bookId?: string; voiceId?: string; quality?: 'best' | 'economy' };
     if (!bookId) return NextResponse.json({ error: 'bookId saknas' }, { status: 400 });
 
-    const result = await createAudiobookJob(bookId, voiceId);
+    const result = await createAudiobookJob(bookId, voiceId, quality === 'economy' ? 'economy' : 'best');
     if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json(result);
   } catch (error) {

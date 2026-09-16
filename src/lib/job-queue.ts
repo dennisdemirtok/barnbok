@@ -7,7 +7,7 @@
 import { serverSupabase, SERVER_IMAGES_BUCKET } from './supabase-server';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from './character-check';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
-import { estimateSeconds, narrationSegments, synthesize } from './tts';
+import { estimateSeconds, narrationSegments, synthesize, TtsQuality } from './tts';
 import { DEFAULT_VOICE_ID, voiceById } from './tts-voices';
 
 // Så många uppslag illustreras samtidigt. Servern väntar inte på ett svar till
@@ -243,7 +243,7 @@ export async function createIllustrationJob(bookId: string): Promise<{ jobId: st
 }
 
 /** Startar ett ljudboksjobb: ett avsnitt (kapitel) i taget läses upp och sparas. */
-export async function createAudiobookJob(bookId: string, voiceId?: string): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
+export async function createAudiobookJob(bookId: string, voiceId?: string, quality: TtsQuality = 'best'): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
   const db = serverSupabase();
   const voice = voiceById(voiceId).id;
 
@@ -267,7 +267,7 @@ export async function createAudiobookJob(bookId: string, voiceId?: string): Prom
 
   const { data: jobRow, error } = await db
     .from('barnbok_jobs')
-    .insert({ book_id: bookId, kind: 'audiobook', status: 'running', total: segments.length, payload: { voiceId: voice } })
+    .insert({ book_id: bookId, kind: 'audiobook', status: 'running', total: segments.length, payload: { voiceId: voice, quality } })
     .select()
     .single();
   if (error || !jobRow) {
@@ -365,7 +365,9 @@ export async function runJob(jobId: string): Promise<void> {
     }
     const spreadById = new Map(book.spreads.map(s => [s.id, s]));
     const isAudiobook = job.kind === 'audiobook';
-    const voiceId = (job.payload as { voiceId?: string } | null)?.voiceId || DEFAULT_VOICE_ID;
+    const payload = job.payload as { voiceId?: string; quality?: TtsQuality } | null;
+    const voiceId = payload?.voiceId || DEFAULT_VOICE_ID;
+    const audioQuality: TtsQuality = payload?.quality === 'economy' ? 'economy' : 'best';
     const segments = isAudiobook ? narrationSegments(bookForNarration(book)) : [];
 
     const worker = async (n: number) => {
@@ -399,7 +401,7 @@ export async function runJob(jobId: string): Promise<void> {
             continue;
           }
           try {
-            const mp3 = await withTimeout(synthesize(segment.text, voiceId), AUDIO_BUDGET_MS, 'Uppläsningen tog för lång tid');
+            const mp3 = await withTimeout(synthesize(segment.text, voiceId, audioQuality), AUDIO_BUDGET_MS, 'Uppläsningen tog för lång tid');
             const url = await uploadFile(`books/${book.id}/audio/${String(segment.index).padStart(3, '0')}.mp3`, mp3, 'audio/mpeg');
             if (!url) throw new Error('Ljudet kunde inte sparas i molnet');
             await finishItem(item.id, { status: 'done', image_url: url, quality: { seconds: estimateSeconds(segment.text), label: segment.label } });

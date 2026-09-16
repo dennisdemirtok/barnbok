@@ -6,8 +6,16 @@ import { BookProject, Spread } from './types';
 import { DEFAULT_VOICE_ID } from './tts-voices';
 
 const API = 'https://api.elevenlabs.io/v1/text-to-speech';
-// Flerspråkig modell - bäst svenskt uttal av de som finns
-const MODEL = 'eleven_multilingual_v2';
+
+// Två lägen: bästa uttalet, eller den snabbare modellen som bara kostar halva
+// kvoten hos ElevenLabs (bra när man vill hinna med fler böcker i månaden).
+export type TtsQuality = 'best' | 'economy';
+const MODELS: Record<TtsQuality, string> = {
+  best: 'eleven_multilingual_v2',
+  economy: 'eleven_turbo_v2_5',
+};
+// Hur mycket av kvoten en bokstav kostar i respektive läge
+export const CREDIT_FACTOR: Record<TtsQuality, number> = { best: 1, economy: 0.5 };
 // Max tecken per anrop. Kortare bitar ger snabbare svar och mindre att göra om
 const CHUNK_CHARS = 2200;
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -133,13 +141,15 @@ function chunkText(text: string): string[] {
   return chunks;
 }
 
-async function speak(text: string, voiceId: string, around: { before?: string; after?: string }): Promise<Buffer> {
+async function speak(text: string, voiceId: string, around: { before?: string; after?: string }, quality: TtsQuality): Promise<Buffer> {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new Error('ElevenLabs-nyckeln saknas på servern (ELEVENLABS_API_KEY)');
 
   const body = {
     text,
-    model_id: MODEL,
+    model_id: MODELS[quality],
+    // Den snabba modellen gissar annars språk - säg att det är svenska
+    language_code: quality === 'economy' ? 'sv' : undefined,
     // Sammanhanget gör att tonen hänger ihop mellan bitarna
     previous_text: around.before?.slice(-500) || undefined,
     next_text: around.after?.slice(0, 500) || undefined,
@@ -168,11 +178,11 @@ function ttsErrorMessage(status: number, detail: string): string {
 }
 
 /** Läser upp en text och ger tillbaka en mp3. Långa texter läses i bitar. */
-export async function synthesize(text: string, voiceId = DEFAULT_VOICE_ID): Promise<Buffer> {
+export async function synthesize(text: string, voiceId = DEFAULT_VOICE_ID, quality: TtsQuality = 'best'): Promise<Buffer> {
   const chunks = chunkText(text);
   const parts: Buffer[] = [];
   for (let i = 0; i < chunks.length; i++) {
-    parts.push(await speak(chunks[i], voiceId, { before: chunks[i - 1], after: chunks[i + 1] }));
+    parts.push(await speak(chunks[i], voiceId, { before: chunks[i - 1], after: chunks[i + 1] }, quality));
   }
   return Buffer.concat(parts);
 }

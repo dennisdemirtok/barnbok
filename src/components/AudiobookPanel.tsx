@@ -116,6 +116,8 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const [error, setError] = useState('');
 
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
+  // 'best' = bästa uttalet, 'economy' = halva kvoten hos ElevenLabs
+  const [quality, setQuality] = useState<'best' | 'economy'>('best');
   const [previewing, setPreviewing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewVoice, setPreviewVoice] = useState('');
@@ -228,7 +230,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
       setPreviewUrl('');
     }
     try {
-      const body: Record<string, unknown> = { voiceId };
+      const body: Record<string, unknown> = { voiceId, quality };
       if (bookId) body.bookId = bookId;
       else if (book) body.book = bookForPreview(book);
       else throw new Error('Hittade ingen text att läsa upp');
@@ -268,7 +270,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
       const res = await fetch('/api/audio/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId, voiceId }),
+        body: JSON.stringify({ bookId, voiceId, quality }),
       });
       const data = await res.json().catch(() => null) as { jobId?: string; total?: number; error?: string } | null;
       if (res.status === 503) {
@@ -468,6 +470,25 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                 );
               })}
             </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {([
+                { id: 'best' as const, label: 'Bästa uttalet', hint: 'full kvot' },
+                { id: 'economy' as const, label: 'Räcker dubbelt så långt', hint: 'halva kvoten, något enklare uttal' },
+              ]).map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => setQuality(option.id)}
+                  aria-pressed={quality === option.id}
+                  className={`px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                    quality === option.id ? 'border-brand bg-brand/5 text-ink ring-2 ring-brand/15' : 'border-line bg-white text-ink/70 hover:border-ink/25'
+                  }`}
+                >
+                  {option.label}
+                  <span className="block text-[11px] font-normal text-ink/50">{option.hint}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -505,8 +526,8 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
             estimate ? (
               <p className="text-xs text-ink/55 leading-relaxed">
                 Hela boken blir ungefär {spokenDuration(estimate.seconds)} uppläst text
-                {' '}(cirka {thousands(estimate.characters)} tecken hos ElevenLabs). Uppläsningen görs i bakgrunden
-                {' '}och du kan stänga sidan under tiden.
+                {' '}(cirka {thousands(quality === 'economy' ? Math.round(estimate.characters / 2) : estimate.characters)} krediter hos ElevenLabs).
+                {' '}Uppläsningen görs i bakgrunden och du kan stänga sidan under tiden.
               </p>
             ) : (
               <p className="text-xs text-ink/55">Boken behöver finnas i molnet för att hela ljudboken ska kunna läsas in.</p>
