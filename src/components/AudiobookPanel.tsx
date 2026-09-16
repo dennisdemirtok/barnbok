@@ -118,6 +118,10 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   // 'best' = bästa uttalet, 'economy' = halva kvoten hos ElevenLabs
   const [quality, setQuality] = useState<'best' | 'economy'>('best');
+  // Röstprov: några sekunder av vald röst, så att valet går att höra
+  const [sampleId, setSampleId] = useState('');
+  const [customVoice, setCustomVoice] = useState('');
+  const sampleRef = useRef<HTMLAudioElement>(null);
   const [previewing, setPreviewing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewVoice, setPreviewVoice] = useState('');
@@ -357,6 +361,16 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
 
   const voice = NARRATOR_VOICES.find(v => v.id === voiceId);
 
+  // Väljer röst och spelar upp provet direkt
+  const chooseVoice = (id: string) => {
+    setVoiceId(id);
+    setSampleId(id);
+    const player = sampleRef.current;
+    if (!player) return;
+    player.src = `/api/audio/voice-sample?voiceId=${encodeURIComponent(id)}&quality=${quality}`;
+    player.play().catch(() => setError('Kunde inte spela upp röstprovet'));
+  };
+
   return (
     <div className="glass rounded-4xl p-5 sm:p-6">
       <div className="flex items-start gap-3">
@@ -450,7 +464,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                 return (
                   <button
                     key={v.id}
-                    onClick={() => setVoiceId(v.id)}
+                    onClick={() => chooseVoice(v.id)}
                     aria-pressed={chosen}
                     className={`flex items-start gap-2.5 p-3 rounded-2xl border text-left transition-all active:scale-[0.99] ${
                       chosen ? 'border-brand bg-brand/5 ring-2 ring-brand/15' : 'border-line bg-white hover:border-ink/25'
@@ -465,11 +479,37 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-ink">{v.name}</span>
                       <span className="block text-xs text-ink/55 leading-snug">{v.description}</span>
+                      <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-brand">
+                        <Icon name={sampleId === v.id ? 'volume_up' : 'play_arrow'} size={13} />
+                        {sampleId === v.id ? 'Spelar provet' : 'Hör rösten'}
+                      </span>
                     </span>
                   </button>
                 );
               })}
             </div>
+
+            <audio ref={sampleRef} onEnded={() => setSampleId('')} className="hidden" />
+
+            <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+              <input
+                value={customVoice}
+                onChange={e => setCustomVoice(e.target.value.trim())}
+                placeholder="Eget röst-id från ElevenLabs"
+                aria-label="Eget röst-id från ElevenLabs"
+                className="field !py-2 !text-sm sm:max-w-xs"
+              />
+              <button
+                onClick={() => customVoice && chooseVoice(customVoice)}
+                disabled={!customVoice}
+                className="btn-ghost !py-2 !text-sm disabled:opacity-40"
+              >
+                <Icon name="play_arrow" size={16} /> Hör den rösten
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-ink/45 leading-snug">
+              Hittar du en svensk röst i ElevenLabs röstbibliotek: lägg till den bland dina röster och klistra in dess röst-id här.
+            </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
               {([

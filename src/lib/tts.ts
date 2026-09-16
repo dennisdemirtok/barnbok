@@ -148,8 +148,8 @@ async function speak(text: string, voiceId: string, around: { before?: string; a
   const body = {
     text,
     model_id: MODELS[quality],
-    // Den snabba modellen gissar annars språk - säg att det är svenska
-    language_code: quality === 'economy' ? 'sv' : undefined,
+    // Säg alltid att texten är svensk - annars drar rösterna åt engelskt uttal
+    language_code: 'sv',
     // Sammanhanget gör att tonen hänger ihop mellan bitarna
     previous_text: around.before?.slice(-500) || undefined,
     next_text: around.after?.slice(0, 500) || undefined,
@@ -186,6 +186,10 @@ export async function synthesize(text: string, voiceId = DEFAULT_VOICE_ID, quali
   }
   return Buffer.concat(parts);
 }
+
+// Kort mening att välja röst på. Samma text för alla röster, så att de går att jämföra.
+export const VOICE_SAMPLE_TEXT =
+  'Hej! Det är jag som läser boken för dig. Vilja sjunker alltid åt vänster i vattnet, och det tycker hon är ganska tjatigt.';
 
 // Grov speltid: uppläsning ligger runt 150 ord i minuten
 export function estimateSeconds(text: string): number {
