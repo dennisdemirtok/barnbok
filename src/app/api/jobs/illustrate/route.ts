@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createIllustrationJob } from '@/lib/job-queue';
 
+// Jobbstatus får aldrig cachas - den ändras hela tiden
+export const dynamic = 'force-dynamic';
+
 // Startar bildjobbet på servern. Boken måste vara sparad i molnet först.
 export async function POST(request: Request) {
   try {

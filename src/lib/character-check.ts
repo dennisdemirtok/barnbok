@@ -336,9 +336,11 @@ Major unwanted_text: English text, empty speech bubbles or empty text boxes, inv
     layoutRules = 'Wide 16:9 band across a text page: the scene should read left to right; heads or key details cut off at the top or bottom edge -> major layout.';
   } else if (spread.composition === 'panels') {
     layoutRules = 'One image with 3-4 comic panels in a grid: fewer than 3 or more than 4 panels -> major layout. The same characters must look identical in all panels; each named character may appear once PER PANEL (appearing in several panels is expected, not a duplicate). Speech bubbles or sound words -> major unwanted_text.';
-  } else if (shape === 'spread') {
+  } else if (spread.composition === 'spread' || (!spread.composition && shape === 'spread')) {
     const side = textSideForSpread(spread.spreadNumber).toUpperCase();
-    layoutRules = `Landscape double-page spread. The vertical center line is the book's fold (gutter): a character's face or a key story detail sitting on or right next to the center line -> major layout.${!isComic && bookFormat !== 'larobok'
+    // Ett uppslag i en blandad bok är helt utfallande - ingen sida är reserverad för text
+    const reservedTextSide = !spread.composition && shape === 'spread';
+    layoutRules = `Landscape double-page spread. The vertical center line is the book's fold (gutter): a character's face or a key story detail sitting on or right next to the center line -> major layout.${reservedTextSide && !isComic && bookFormat !== 'larobok'
       ? ` The ${side} THIRD of the image is reserved for typeset story text and must be a calm, low-detail area (sky, wall, floor, soft background): a main character or the main action placed in that third -> major layout; some moderate detail there -> minor layout.`
       : ''} Image must be landscape (portrait -> major layout).`;
   } else {
