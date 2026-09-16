@@ -142,6 +142,12 @@ export async function getJob(jobId: string): Promise<JobView | null> {
   const db = serverSupabase();
   const { data } = await db.from('barnbok_jobs').select('*').eq('id', jobId).single();
   if (!data) return null;
+  // Servern kan ha startat om (ny version) mitt i jobbet - ta upp det igen
+  const beat = data.heartbeat_at ? Date.parse(data.heartbeat_at) : 0;
+  if (data.status === 'running' && !running.has(jobId) && Date.now() - beat > STALE_MS) {
+    console.log(`[Jobb] ${jobId} hade stannat - startar om`);
+    void runJob(jobId);
+  }
   return buildView(data);
 }
 
@@ -310,6 +316,7 @@ export async function runJob(jobId: string): Promise<void> {
     };
 
     // Puls medan jobbet lever, så att en omstart kan upptäckas
+    await db.from('barnbok_jobs').update({ heartbeat_at: new Date().toISOString() }).eq('id', jobId);
     const beat = setInterval(() => {
       void db.from('barnbok_jobs').update({ heartbeat_at: new Date().toISOString() }).eq('id', jobId);
     }, 30_000);
