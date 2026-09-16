@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { serverSupabase, hasServiceRole } from '@/lib/supabase-server';
+import { claimNextItem } from '@/lib/job-queue';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,5 +45,10 @@ export async function GET(request: Request) {
     medAnonNyckel: await read(anon),
     skrivningServernyckel: await write(serverSupabase()),
     skrivningAnonNyckel: await write(anon),
+    // Exakt samma funktion som arbetarna använder
+    koTest: await claimNextItem(jobId).then(
+      r => ({ fick: r?.label ?? null, forsok: r?.attempts ?? null }),
+      e => ({ fel: e instanceof Error ? e.message : String(e) })
+    ),
   });
 }

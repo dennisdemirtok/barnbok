@@ -413,7 +413,7 @@ export async function runJob(jobId: string): Promise<void> {
  * att bara en arbetare kan vinna raden, även om flera frågar samtidigt.
  * Uppslag som en tidigare körning tog men aldrig blev klar med tas tillbaka här.
  */
-async function claimNextItem(jobId: string): Promise<JobItemRow | undefined> {
+export async function claimNextItem(jobId: string): Promise<JobItemRow | undefined> {
   const db = serverSupabase();
   const stuckBefore = new Date(Date.now() - STUCK_ITEM_MS).toISOString();
 
