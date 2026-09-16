@@ -12,6 +12,17 @@ interface AudioPart {
   label: string;
   url: string;
   seconds: number;
+  // Kapitlets plats i boken - saknas i äldre manifest
+  index?: number;
+}
+
+// Ett kapitel som går att läsa in för sig. url finns när det redan är inläst.
+interface Chapter {
+  index: number;
+  label: string;
+  characters: number;
+  seconds: number;
+  url?: string;
 }
 
 interface Audiobook {
@@ -112,6 +123,11 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const [loading, setLoading] = useState(true);
   const [audiobook, setAudiobook] = useState<Audiobook | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  // Kryssade kapitel i listan
+  const [selected, setSelected] = useState<number[]>([]);
+  // Visar röst och läge igen när boken redan har delar inlästa
+  const [showVoice, setShowVoice] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState('');
 
@@ -129,6 +145,9 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const [starting, setStarting] = useState(false);
   const [job, setJob] = useState<IllustrationJob | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  // Vilka kapitel jobbet gäller (tomt = hela boken), och namnet när det bara är ett
+  const [jobSegments, setJobSegments] = useState<number[]>([]);
+  const [jobLabel, setJobLabel] = useState('');
 
   const [partIndex, setPartIndex] = useState(0);
   const playerRef = useRef<HTMLAudioElement>(null);
@@ -142,9 +161,12 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     if (!bookId) return null;
     const res = await fetch(`/api/audio/book?bookId=${encodeURIComponent(bookId)}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Kunde inte hämta ljudboken just nu');
-    const data = await res.json() as { audiobook: Audiobook | null; estimate: Estimate | null };
+    const data = await res.json() as { audiobook: Audiobook | null; estimate: Estimate | null; chapters?: Chapter[] };
     setAudiobook(data.audiobook);
     setEstimate(data.estimate);
+    setChapters(data.chapters || []);
+    // Kapitel som blivit inlästa ska inte ligga kvar kryssade
+    setSelected(prev => prev.filter(i => !(data.chapters || []).some(c => c.index === i && c.url)));
     if (data.audiobook?.voiceId) setVoiceId(data.audiobook.voiceId);
     return data.audiobook;
   }, [bookId]);
@@ -279,16 +301,19 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     }
   };
 
-  // ── Starta hela ljudboken ──
-  const createAudiobook = async () => {
+  // ── Starta uppläsningen: hela boken, eller bara de kapitel som skickas med ──
+  const startJob = async (segments?: number[]) => {
     if (!bookId) return;
     setError('');
     setStarting(true);
+    const wanted = segments?.length ? segments : [];
+    setJobSegments(wanted);
+    setJobLabel(wanted.length === 1 ? chapters.find(c => c.index === wanted[0])?.label || '' : '');
     try {
       const res = await fetch('/api/audio/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId, voiceId, quality }),
+        body: JSON.stringify(wanted.length ? { bookId, voiceId, quality, segments: wanted } : { bookId, voiceId, quality }),
       });
       const data = await res.json().catch(() => null) as { jobId?: string; total?: number; error?: string } | null;
       if (res.status === 503) {
@@ -309,6 +334,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
         updatedAt: new Date().toISOString(),
         items: [],
       });
+      setSelected([]);
       try { localStorage.setItem(jobKey(bookId), data.jobId); } catch { /* lagring blockerad */ }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kunde inte starta ljudboken');
@@ -320,17 +346,63 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   // ── Delar att spela: den färdiga ljudboken, annars det jobbet hunnit läsa in ──
   const liveParts: AudioPart[] = (job?.items || [])
     .filter(i => i.status === 'done' && i.imageUrl)
-    .map(i => ({ label: i.label || `Del ${i.spreadNumber + 1}`, url: i.imageUrl as string, seconds: itemSeconds(i.quality) }));
+    .map(i => ({
+      label: i.label || `Del ${i.spreadNumber + 1}`,
+      url: i.imageUrl as string,
+      seconds: itemSeconds(i.quality),
+      index: i.spreadNumber,
+    }));
 
-  const parts: AudioPart[] = audiobook?.parts?.length ? audiobook.parts : liveParts;
+  // Manifestet först, plus de delar jobbet hunnit bli klart med men som inte
+  // hämtats hem ännu. Kapitel som läses om ersätter den gamla delen.
+  const manifestParts: AudioPart[] = audiobook?.parts || [];
+  const liveOnly = liveParts.filter(p => !manifestParts.some(m => m.index === p.index || m.url === p.url));
+  const parts: AudioPart[] = [...manifestParts, ...liveOnly].sort((a, b) =>
+    typeof a.index === 'number' && typeof b.index === 'number' ? a.index - b.index : 0
+  );
   const current = parts[Math.min(partIndex, parts.length - 1)];
-  const totalSeconds = audiobook?.seconds ?? parts.reduce((n, p) => n + p.seconds, 0);
+  const totalSeconds = parts.reduce((n, p) => n + p.seconds, 0);
   const running = job?.status === 'running';
 
   const selectPart = (index: number) => {
     autoPlay.current = true;
     setPartIndex(index);
   };
+
+  // Hoppa till ett inläst kapitel i spelaren
+  const playChapter = (chapterIndex: number) => {
+    const at = parts.findIndex(p => p.index === chapterIndex);
+    if (at >= 0) selectPart(at);
+  };
+
+  const toggleChapter = (chapterIndex: number, on: boolean) =>
+    setSelected(prev => (on ? [...prev, chapterIndex] : prev.filter(i => i !== chapterIndex)));
+
+  // Snabbläget kostar halva kvoten hos ElevenLabs
+  const credits = (characters: number) => (quality === 'economy' ? Math.round(characters / 2) : characters);
+
+  const doneChapters = chapters.filter(c => c.url);
+  const leftChapters = chapters.filter(c => !c.url);
+  const leftCharacters = leftChapters.reduce((n, c) => n + c.characters, 0);
+  const leftSeconds = leftChapters.reduce((n, c) => n + c.seconds, 0);
+  const allRead = chapters.length > 0 && leftChapters.length === 0;
+  const selectedChapters = chapters.filter(c => selected.includes(c.index));
+  const selectedCharacters = selectedChapters.reduce((n, c) => n + c.characters, 0);
+  const showChapters = Boolean(canCreate && bookId) && chapters.length > 0;
+  // Röst och läge behövs så länge det finns något kvar att läsa in
+  const showSetup = !running && !allRead;
+  const settingsOpen = parts.length === 0 || showVoice;
+
+  // Vilka kapitel jobbet gäller. Efter en omladdning vet vi det först när
+  // jobbets rader hämtats, innan dess litar vi på vad vi själva startade.
+  const jobChapters = job?.items?.length ? job.items.map(i => i.spreadNumber) : jobSegments;
+
+  // Progresstexten ska stämma både för hela boken och för ett enda kapitel
+  const jobTotal = job?.total || 0;
+  const jobRunningItem = (job?.items || []).find(i => i.status === 'running');
+  const progressText = jobTotal === 1
+    ? `Läser upp ${jobRunningItem?.label || jobLabel || 'kapitlet'}`
+    : `Läser upp kapitel ${Math.min((job?.done || 0) + 1, jobTotal || 1)} av ${jobTotal}`;
 
   // Byt ljudfil och starta den när man valt en del själv eller förra delen tog slut
   useEffect(() => {
@@ -423,15 +495,18 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
         <div className="mt-5">
           <div className="flex items-center gap-2 text-sm font-medium text-ink">
             <span className="spinner !w-4 !h-4 text-brand" />
-            Läser upp kapitel {Math.min((job?.done || 0) + 1, job?.total || 1)} av {job?.total || 0}
+            <span className="min-w-0 truncate">{progressText}</span>
           </div>
+          {jobTotal > 1 && jobRunningItem?.label && (
+            <p className="mt-1 text-xs text-ink/55 truncate">{jobRunningItem.label}</p>
+          )}
           <div className="mt-2.5 h-1.5 w-full rounded-full bg-ink/10 overflow-hidden">
             <div
               className="h-full rounded-full bg-brand transition-all duration-500"
               style={{ width: `${job?.total ? Math.round(((job.done || 0) / job.total) * 100) : 0}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-ink/55">Du kan stänga sidan - ljudboken görs klart i bakgrunden.</p>
+          <p className="mt-2 text-xs text-ink/55">Du kan stänga sidan - uppläsningen görs klart i bakgrunden.</p>
         </div>
       )}
 
@@ -477,9 +552,93 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
         </div>
       )}
 
-      {/* ─── Inget ljud än: röst, provlyssning och start ─── */}
-      {parts.length === 0 && !running && (
+      {/* ─── Kapitel: läs in ett i taget eller flera på en gång ─── */}
+      {showChapters && (
+        <div className="mt-5">
+          <div className="flex items-baseline justify-between gap-2">
+            <h4 className="text-sm font-semibold text-ink">Kapitel</h4>
+            <p className="text-xs text-ink/50 shrink-0">{doneChapters.length} av {chapters.length} inlästa</p>
+          </div>
+          <ul className="mt-2 divide-y divide-line rounded-2xl border border-line overflow-hidden bg-white">
+            {chapters.map(chapter => {
+              const read = Boolean(chapter.url);
+              const inQueue = running && !read && (jobChapters.length === 0 || jobChapters.includes(chapter.index));
+              return (
+                <li key={chapter.index} className="flex items-center gap-2.5 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(chapter.index)}
+                    onChange={e => toggleChapter(chapter.index, e.target.checked)}
+                    disabled={running || starting}
+                    aria-label={`Markera ${chapter.label}`}
+                    className="w-4 h-4 shrink-0 accent-brand disabled:opacity-40"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ink truncate">{chapter.label}</p>
+                    <p className="text-[11px] text-ink/45 tabular-nums">
+                      {clock(chapter.seconds)} · {thousands(chapter.characters)} tecken
+                      {read ? ' · Inläst' : inQueue ? ' · Läses in' : ''}
+                    </p>
+                  </div>
+                  {read ? (
+                    <>
+                      <button
+                        onClick={() => playChapter(chapter.index)}
+                        className="btn-icon shrink-0"
+                        title={`Spela ${chapter.label}`}
+                        aria-label={`Spela ${chapter.label}`}
+                      >
+                        <Icon name="play_arrow" size={20} />
+                      </button>
+                      <button
+                        onClick={() => startJob([chapter.index])}
+                        disabled={running || starting}
+                        className="btn-icon shrink-0 disabled:opacity-40"
+                        title={`Läs om ${chapter.label}`}
+                        aria-label={`Läs om ${chapter.label}`}
+                      >
+                        <Icon name="refresh" size={19} />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => startJob([chapter.index])}
+                      disabled={running || starting}
+                      className="btn-ghost !py-1.5 !px-2.5 !text-xs shrink-0 disabled:opacity-40"
+                    >
+                      {inQueue ? <span className="spinner !w-3.5 !h-3.5" /> : <Icon name="graphic_eq" size={15} />}
+                      Läs in
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          {selected.length > 0 && !running && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button onClick={() => startJob(selected)} disabled={starting} className="btn-action !py-2 !text-sm">
+                {starting ? <span className="spinner !w-4 !h-4" /> : <Icon name="headphones" size={17} />}
+                Läs in valda ({selected.length})
+              </button>
+              <button onClick={() => setSelected([])} className="btn-ghost !py-2 !text-sm">Avmarkera</button>
+              <span className="text-xs text-ink/55">
+                cirka {thousands(credits(selectedCharacters))} krediter
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Röst, provlyssning och start ─── */}
+      {showSetup && (
         <div className="mt-5 space-y-5">
+          {!settingsOpen && (
+            <button onClick={() => setShowVoice(true)} className="btn-ghost !py-2 !text-sm">
+              <Icon name="tune" size={17} /> Byt röst eller läge
+            </button>
+          )}
+          {settingsOpen && (
           <div>
             <h4 className="text-sm font-semibold text-ink">Välj uppläsning</h4>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -566,6 +725,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
 
 
           </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <button onClick={playPreview} disabled={previewing} className="btn-ghost">
@@ -573,9 +733,13 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
               {previewing ? 'Läser in provet...' : 'Provlyssna första sidorna'}
             </button>
             {canCreate && bookId && (
-              <button onClick={createAudiobook} disabled={starting} className="btn-action">
+              <button
+                onClick={() => startJob(doneChapters.length > 0 ? leftChapters.map(c => c.index) : undefined)}
+                disabled={starting}
+                className="btn-action"
+              >
                 {starting ? <span className="spinner !w-4 !h-4" /> : <Icon name="headphones" size={19} />}
-                {starting ? 'Startar...' : 'Skapa hela ljudboken'}
+                {starting ? 'Startar...' : doneChapters.length > 0 ? 'Läs in resten av boken' : 'Skapa hela ljudboken'}
               </button>
             )}
           </div>
@@ -600,11 +764,22 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
 
           {canCreate && bookId ? (
             estimate ? (
-              <p className="text-xs text-ink/55 leading-relaxed">
-                Hela boken blir ungefär {spokenDuration(estimate.seconds)} uppläst text
-                {' '}(cirka {thousands(quality === 'economy' ? Math.round(estimate.characters / 2) : estimate.characters)} krediter hos ElevenLabs).
-                {' '}Uppläsningen görs i bakgrunden och du kan stänga sidan under tiden.
-              </p>
+              doneChapters.length > 0 ? (
+                <p className="text-xs text-ink/55 leading-relaxed">
+                  {leftChapters.length} kapitel kvar att läsa in, cirka {thousands(leftCharacters)} tecken
+                  {' '}({spokenDuration(leftSeconds)} uppläst text
+                  {quality === 'economy'
+                    ? `, cirka ${thousands(credits(leftCharacters))} krediter hos ElevenLabs i Snabb`
+                    : ', lika många krediter hos ElevenLabs'}).
+                  {' '}Uppläsningen görs i bakgrunden och du kan stänga sidan under tiden.
+                </p>
+              ) : (
+                <p className="text-xs text-ink/55 leading-relaxed">
+                  Hela boken blir ungefär {spokenDuration(estimate.seconds)} uppläst text
+                  {' '}(cirka {thousands(credits(estimate.characters))} krediter hos ElevenLabs).
+                  {' '}Uppläsningen görs i bakgrunden och du kan stänga sidan under tiden.
+                </p>
+              )
             ) : (
               <p className="text-xs text-ink/55">Boken behöver finnas i molnet för att hela ljudboken ska kunna läsas in.</p>
             )
