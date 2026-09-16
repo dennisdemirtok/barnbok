@@ -285,14 +285,15 @@ export async function runJob(jobId: string): Promise<void> {
         }
 
         try {
-          const result = await generatePageWithQualityCheck(
+          // Vakthund: ett uppslag får aldrig äga en arbetare för evigt
+          const result = await withTimeout(generatePageWithQualityCheck(
             spread,
             book.characters,
             book.styleGuide,
             book.bookFormat,
             { shape: book.illustrationShape, imageSize: '2K' },
             { deadline: Date.now() + ITEM_BUDGET_MS }
-          );
+          ), ITEM_BUDGET_MS + 60_000, 'Uppslaget tog för lång tid');
           const path = `books/${book.id}/${spread.id}.png`;
           const url = await uploadPng(path, result.image);
           if (!url) throw new Error('Bilden kunde inte sparas i molnet');
@@ -331,6 +332,11 @@ export async function runJob(jobId: string): Promise<void> {
     const { data: after } = await db.from('barnbok_jobs').select('*').eq('id', jobId).single();
     if (after?.status === 'running') {
       const left = await queuedCount(jobId);
+      if (left > 0) {
+        // Något tog slut i förtid (t.ex. ett uppslag som fastnade) - fortsätt snart
+        console.log(`[Jobb] ${jobId}: ${left} uppslag kvar, tar nytt tag om en stund`);
+        setTimeout(() => { void runJob(jobId); }, 15_000);
+      }
       if (left === 0) {
         const failed = after.failed ?? 0;
         await db.from('barnbok_jobs').update({
@@ -349,6 +355,13 @@ export async function runJob(jobId: string): Promise<void> {
   } finally {
     running.delete(jobId);
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); });
+  });
 }
 
 async function queuedCount(jobId: string): Promise<number> {

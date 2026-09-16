@@ -608,6 +608,8 @@ const MIN_GENERATION_ESTIMATE_MS = 45_000;
 const MIN_REVIEW_ESTIMATE_MS = 20_000;
 const SAFETY_MARGIN_MS = 10_000;
 const MAX_REVIEW_TIMEOUT_MS = 90_000;
+// En bild får aldrig ta längre än så - ett anrop som hänger ska släppa taget
+const MAX_GENERATION_TIMEOUT_MS = 150_000;
 
 interface Attempt {
   n: number;
@@ -667,8 +669,14 @@ export async function generatePageWithQualityCheck(
     const genStart = Date.now();
 
     if (n === 1) {
-      // Första bilden: fel här ska fortfarande nå anroparen - det finns ingen bild att leverera
-      image = await generatePageImage(spread, characters, styleGuide, bookFormat, { ...options, corrections: undefined });
+      // Första bilden: fel här ska fortfarande nå anroparen - det finns ingen bild att leverera.
+      // Tidsgränsen är viktig: ett anrop som hänger skulle annars blockera för alltid.
+      const remaining = deadline - Date.now();
+      image = await generatePageImage(spread, characters, styleGuide, bookFormat, {
+        ...options,
+        corrections: undefined,
+        timeoutMs: options.timeoutMs ?? Math.max(60_000, Math.min(remaining, MAX_GENERATION_TIMEOUT_MS)),
+      });
     } else {
       const remaining = deadline - Date.now();
       if (remaining < generationEstimate + reviewEstimate + SAFETY_MARGIN_MS) {
