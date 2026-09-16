@@ -22,6 +22,19 @@ export async function GET(request: Request) {
     return { antal: data?.length ?? 0, forsta: (data?.[0] as { label?: string })?.label ?? null, fel: error?.message ?? null };
   };
 
+  // Provskrivning: sätter samma värde tillbaka, men visar om skrivningen biter
+  const write = async (db: { from: (t: string) => any }) => {
+    const { data: row } = await db.from('barnbok_job_items').select('id, status').eq('job_id', jobId).limit(1);
+    const first = row?.[0] as { id: string; status: string } | undefined;
+    if (!first) return { rader: 0, fel: 'ingen rad att prova på' };
+    const { data, error } = await db
+      .from('barnbok_job_items')
+      .update({ status: first.status, updated_at: new Date().toISOString() })
+      .eq('id', first.id)
+      .select('id');
+    return { rader: data?.length ?? 0, fel: error?.message ?? null };
+  };
+
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   return NextResponse.json({
     servernyckelFinns: hasServiceRole(),
@@ -29,5 +42,7 @@ export async function GET(request: Request) {
     nyckelLangd: key.length,
     medServernyckel: await read(serverSupabase()),
     medAnonNyckel: await read(anon),
+    skrivningServernyckel: await write(serverSupabase()),
+    skrivningAnonNyckel: await write(anon),
   });
 }
