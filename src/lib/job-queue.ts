@@ -6,13 +6,17 @@
 // Startar servern om mitt i tas påbörjade uppslag tillbaka efter tio minuter.
 import { serverSupabase, SERVER_IMAGES_BUCKET } from './supabase-server';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from './character-check';
-import { BookFormat, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
+import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
+import { estimateSeconds, narrationSegments, synthesize } from './tts';
+import { DEFAULT_VOICE_ID, voiceById } from './tts-voices';
 
 // Så många uppslag illustreras samtidigt. Servern väntar inte på ett svar till
 // webbläsaren längre, så det här handlar bara om Geminis takt.
 const WORKERS = 4;
 // Ett uppslag får ta så här lång tid (bild + granskning + rättningar)
 const ITEM_BUDGET_MS = DEFAULT_QUALITY_BUDGET_MS;
+// Ett uppläst avsnitt (kapitel) får ta så här lång tid
+const AUDIO_BUDGET_MS = 8 * 60 * 1000;
 // Jobb vars puls är äldre än så här anses ha dött med en omstart
 const STALE_MS = 3 * 60 * 1000;
 // Databasanrop som inte svarat på så här länge räknas som tappade
@@ -20,7 +24,7 @@ const DB_TIMEOUT_MS = 30_000;
 // Händer ingenting alls på så här länge har körningen fastnat
 const NO_PROGRESS_MS = 8 * 60 * 1000;
 
-interface JobItemRow { id: string; spread_id: string; label?: string; attempts: number }
+interface JobItemRow { id: string; spread_id: string; label?: string; attempts: number; spread_number?: number }
 // Ett uppslag som tagits men inte blivit klart på så här länge är övergivet
 const STUCK_ITEM_MS = 6 * 60 * 1000;
 // Fler försök än så är lönlöst - då är det något annat som är fel
@@ -52,6 +56,8 @@ type SpreadWithUrl = Spread & { imageUrl?: string };
 
 interface BookForJob {
   id: string;
+  title: string;
+  author?: string;
   styleGuide: string;
   bookFormat?: BookFormat;
   illustrationShape?: IllustrationShape;
@@ -89,7 +95,7 @@ export async function loadBookForJob(bookId: string): Promise<BookForJob | null>
     textRows = data || [];
   }
 
-  let meta: { illustrationShape?: IllustrationShape; compositions?: Record<string, Spread['composition']> } = {};
+  let meta: { illustrationShape?: IllustrationShape; author?: string; compositions?: Record<string, Spread['composition']> } = {};
   if (typeof bookRow.theme === 'string' && bookRow.theme.startsWith('{')) {
     try { meta = JSON.parse(bookRow.theme); } catch { meta = {}; }
   }
@@ -126,6 +132,8 @@ export async function loadBookForJob(bookId: string): Promise<BookForJob | null>
 
   return {
     id: bookId,
+    title: bookRow.title || 'Boken',
+    author: meta.author || bookRow.author_name || undefined,
     styleGuide: bookRow.style || '',
     bookFormat: bookRow.book_format as BookFormat | undefined,
     illustrationShape: meta.illustrationShape,
@@ -234,6 +242,67 @@ export async function createIllustrationJob(bookId: string): Promise<{ jobId: st
   return { jobId: jobRow.id, total: todo.length };
 }
 
+/** Startar ett ljudboksjobb: ett avsnitt (kapitel) i taget läses upp och sparas. */
+export async function createAudiobookJob(bookId: string, voiceId?: string): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
+  const db = serverSupabase();
+  const voice = voiceById(voiceId).id;
+
+  const { data: existingRows } = await db
+    .from('barnbok_jobs')
+    .select('*')
+    .eq('book_id', bookId)
+    .eq('kind', 'audiobook')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const existing = existingRows?.[0];
+  if (existing?.status === 'running') {
+    void runJob(existing.id);
+    return { jobId: existing.id, total: existing.total, alreadyRunning: true };
+  }
+
+  const book = await loadBookForJob(bookId);
+  if (!book) return { error: 'Hittade inte boken i molnet - spara boken och försök igen' };
+  const segments = narrationSegments(bookForNarration(book));
+  if (segments.length === 0) return { error: 'Boken har ingen text att läsa upp' };
+
+  const { data: jobRow, error } = await db
+    .from('barnbok_jobs')
+    .insert({ book_id: bookId, kind: 'audiobook', status: 'running', total: segments.length, payload: { voiceId: voice } })
+    .select()
+    .single();
+  if (error || !jobRow) {
+    return { error: missingTables(error?.message) ? MISSING_TABLES : `Kunde inte starta ljudboken: ${error?.message || 'okänt fel'}` };
+  }
+
+  const { error: itemError } = await db.from('barnbok_job_items').insert(
+    segments.map(seg => ({
+      job_id: jobRow.id,
+      spread_id: crypto.randomUUID(),
+      spread_number: seg.index,
+      label: seg.label.slice(0, 120),
+    }))
+  );
+  if (itemError) return { error: `Kunde inte lägga upp ljudkön: ${itemError.message}` };
+
+  void runJob(jobRow.id);
+  return { jobId: jobRow.id, total: segments.length };
+}
+
+// Bokens text som uppläsningen utgår från
+function bookForNarration(book: BookForJob): BookProject {
+  return {
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    spreads: book.spreads,
+    characters: book.characters,
+    styleGuide: book.styleGuide,
+    bookFormat: book.bookFormat,
+    status: 'done',
+    createdAt: new Date().toISOString(),
+  } as BookProject;
+}
+
 export async function cancelJob(jobId: string): Promise<void> {
   const db = serverSupabase();
   await db.from('barnbok_jobs').update({ status: 'canceled', updated_at: new Date().toISOString() }).eq('id', jobId);
@@ -295,6 +364,9 @@ export async function runJob(jobId: string): Promise<void> {
       return;
     }
     const spreadById = new Map(book.spreads.map(s => [s.id, s]));
+    const isAudiobook = job.kind === 'audiobook';
+    const voiceId = (job.payload as { voiceId?: string } | null)?.voiceId || DEFAULT_VOICE_ID;
+    const segments = isAudiobook ? narrationSegments(bookForNarration(book)) : [];
 
     const worker = async (n: number) => {
       // Trappa igång arbetarna så att de inte träffar bildmodellen samtidigt
@@ -319,6 +391,30 @@ export async function runJob(jobId: string): Promise<void> {
           'Databasen svarade inte'
         ).catch(() => null);
         if (check?.status !== 'running') return;
+
+        if (isAudiobook) {
+          const segment = segments[item.spread_number ?? -1];
+          if (!segment) {
+            await finishItem(item.id, { status: 'error', error: 'Avsnittet finns inte längre' });
+            continue;
+          }
+          try {
+            const mp3 = await withTimeout(synthesize(segment.text, voiceId), AUDIO_BUDGET_MS, 'Uppläsningen tog för lång tid');
+            const url = await uploadFile(`books/${book.id}/audio/${String(segment.index).padStart(3, '0')}.mp3`, mp3, 'audio/mpeg');
+            if (!url) throw new Error('Ljudet kunde inte sparas i molnet');
+            await finishItem(item.id, { status: 'done', image_url: url, quality: { seconds: estimateSeconds(segment.text), label: segment.label } });
+            console.log(`[Jobb] arbetare ${n} läste upp ${segment.label}`);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`[Jobb] ${item.label || segment.label} misslyckades:`, message);
+            await finishItem(item.id, item.attempts >= MAX_ITEM_ATTEMPTS
+              ? { status: 'error', error: message }
+              : { status: 'queued', error: message });
+          }
+          lastProgressAt = Date.now();
+          await withTimeout(db.rpc('barnbok_job_progress', { p_job: jobId }), DB_TIMEOUT_MS, 'Databasen svarade inte').catch(() => null);
+          continue;
+        }
 
         const spread = spreadById.get(item.spread_id);
         if (!spread) {
@@ -389,6 +485,7 @@ export async function runJob(jobId: string): Promise<void> {
       }
       if (left === 0) {
         const failed = after.failed ?? 0;
+        if (isAudiobook) await writeAudioManifest(book, jobId, voiceId);
         await db.from('barnbok_jobs').update({
           status: failed > 0 && failed === after.total ? 'failed' : 'done',
           message: failed > 0 ? `${failed} uppslag behöver göras om` : null,
@@ -420,7 +517,7 @@ async function claimNextItem(jobId: string): Promise<JobItemRow | undefined> {
   for (let round = 0; round < 2; round++) {
     const query = db
       .from('barnbok_job_items')
-      .select('id, spread_id, label, attempts, status')
+      .select('id, spread_id, label, attempts, status, spread_number')
       .eq('job_id', jobId)
       .lt('attempts', MAX_ITEM_ATTEMPTS)
       .order('spread_number')
@@ -441,7 +538,7 @@ async function claimNextItem(jobId: string): Promise<JobItemRow | undefined> {
           .update({ status: 'running', claimed_at: now, attempts: (candidate.attempts ?? 0) + 1, updated_at: now })
           .eq('id', candidate.id)
           .eq('status', candidate.status) // villkoret: någon annan får inte ha hunnit före
-          .select('id, spread_id, label, attempts'),
+          .select('id, spread_id, label, attempts, spread_number'),
         DB_TIMEOUT_MS,
         'Databasen svarade inte när uppslaget skulle tas'
       );
@@ -470,9 +567,42 @@ async function queuedCount(jobId: string): Promise<number> {
 }
 
 async function uploadPng(path: string, base64: string): Promise<string | null> {
+  return uploadFile(path, Buffer.from(base64, 'base64'), 'image/png');
+}
+
+async function uploadFile(path: string, bytes: Buffer, contentType: string): Promise<string | null> {
   const db = serverSupabase();
-  const bytes = Buffer.from(base64, 'base64');
-  const { error } = await db.storage.from(SERVER_IMAGES_BUCKET).upload(path, bytes, { contentType: 'image/png', upsert: true });
+  const { error } = await db.storage.from(SERVER_IMAGES_BUCKET).upload(path, bytes, { contentType, upsert: true });
   if (error) { console.warn('[Jobb] uppladdning misslyckades:', error.message); return null; }
   return db.storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+// Innehållsförteckning för ljudboken, så att appen hittar spåren utan databasändring
+export const audioManifestPath = (bookId: string) => `books/${bookId}/audio/manifest.json`;
+
+async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: string) {
+  const db = serverSupabase();
+  const { data: items } = await db
+    .from('barnbok_job_items')
+    .select('label, spread_number, image_url, quality, status')
+    .eq('job_id', jobId)
+    .order('spread_number');
+  const parts = (items || [])
+    .filter(i => i.status === 'done' && i.image_url)
+    .map(i => ({
+      label: i.label || `Del ${i.spread_number + 1}`,
+      url: i.image_url as string,
+      seconds: (i.quality as { seconds?: number } | null)?.seconds ?? 0,
+    }));
+  if (parts.length === 0) return;
+  const manifest = {
+    bookId: book.id,
+    title: book.title,
+    voice: voiceById(voiceId).name,
+    voiceId,
+    createdAt: new Date().toISOString(),
+    seconds: parts.reduce((n, p) => n + p.seconds, 0),
+    parts,
+  };
+  await uploadFile(audioManifestPath(book.id), Buffer.from(JSON.stringify(manifest)), 'application/json');
 }
