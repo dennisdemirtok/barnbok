@@ -20,7 +20,9 @@ function getClient() {
 }
 
 // Granskaren: snabb Gemini-vision med JSON-schema. Första modellen som svarar används.
-const REVIEW_MODELS = [process.env.GEMINI_REVIEW_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash']
+// Granskare: senaste Flash, och om den svarar tomt en gång till med fast version.
+// gemini-2.5-flash är nedlagd för nya konton och fick hela reserven att falla.
+const REVIEW_MODELS = [process.env.GEMINI_REVIEW_MODEL, 'gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.6-flash']
   .filter((m, i, arr): m is string => !!m && arr.indexOf(m) === i);
 
 export interface CheckIssue {
@@ -532,7 +534,7 @@ export async function reviewPageImage(
         },
       });
       const text = responseText(response);
-      if (!text) throw new Error('Tomt svar från granskaren');
+      if (!text) throw new Error(`Tomt svar från granskaren (${response.candidates?.[0]?.finishReason ?? 'okänd orsak'})`);
       const raw = JSON.parse(text) as RawReview;
       return normalizeReview(raw, required, optional, isComic, model);
     } catch (err) {

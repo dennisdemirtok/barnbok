@@ -6,7 +6,43 @@ import { describeLettering, letteringCaps } from './comic';
 import { withReferenceImages } from './character-refs';
 import { picturedCharacters } from './scene-characters';
 
-const MODEL = 'gemini-3.1-flash-image-preview';
+// Bildmodellen: den stabila versionen först, förhandsversionen som reserv om
+// den stabila inte finns för kontot. Förhandsversioner stängs efter ett tag.
+const IMAGE_MODELS = ['gemini-3.1-flash-image', 'gemini-3.1-flash-image-preview'];
+let imageModelIndex = 0;
+
+type ImageRequest = Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>;
+
+async function generateWithImageModel(ai: GoogleGenAI, request: ImageRequest) {
+  for (;;) {
+    try {
+      return await ai.models.generateContent({ ...request, model: IMAGE_MODELS[imageModelIndex] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const missing = /NOT_FOUND|"code":404|no longer available|not found/i.test(message);
+      if (missing && imageModelIndex < IMAGE_MODELS.length - 1) {
+        console.warn(`[Bild] ${IMAGE_MODELS[imageModelIndex]} finns inte - byter till ${IMAGE_MODELS[imageModelIndex + 1]}`);
+        imageModelIndex++;
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+// Svartvita stilar görs svartvita på riktigt efteråt: bildmodellen slinker
+// ibland in en färgklick, och det är gratis och säkert att ta bort den här
+// i stället för att göra om bilden.
+async function toGrayscale(base64: string): Promise<string> {
+  try {
+    const sharp = (await import('sharp')).default;
+    const out = await sharp(Buffer.from(base64, 'base64')).grayscale().png().toBuffer();
+    return out.toString('base64');
+  } catch (err) {
+    console.warn('[Bild] kunde inte göra bilden svartvit:', err instanceof Error ? err.message : err);
+    return base64;
+  }
+}
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -148,9 +184,9 @@ CONSISTENCY RULES (CRITICAL):
 
 This reference sheet will be used as the definitive guide for drawing this character consistently throughout an entire book.`;
 
+  const monochromeSheet = isMonochromeStyle(styleGuide);
   return withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: MODEL,
+    const response = await generateWithImageModel(ai, {
       contents: [{ text: prompt }],
       config: {
         responseModalities: ['TEXT', 'IMAGE'],
@@ -163,7 +199,9 @@ This reference sheet will be used as the definitive guide for drawing this chara
 
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) {
-        return part.inlineData.data as string;
+        // Svartvit bok: bladet utan färg, så att sidbilderna inte lockas till färg
+        const sheet = part.inlineData.data as string;
+        return monochromeSheet ? toGrayscale(sheet) : sheet;
       }
     }
 
@@ -426,7 +464,8 @@ ${formatInstructions}
 ${textSection}
 
 IMAGE DESCRIPTION:
-${spread.imagePrompt}
+${spread.imagePrompt}${!includeTextOnImage && !isCover && !comicPage ? `
+(Any writing the description mentions - names, dates, labels, prices - is drawn as illegible scribbles or wavy lines, never as readable letters or digits.)` : ''}
 ${characterPresenceSection}
 
 CHARACTER CONSISTENCY:
@@ -455,8 +494,7 @@ ${corrections.map(c => `- ${c}`).join('\n')}`,
 
   // Use retry logic for resilience
   return withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: MODEL,
+    const response = await generateWithImageModel(ai, {
       contents,
       config: {
         responseModalities: ['TEXT', 'IMAGE'],
@@ -474,7 +512,8 @@ ${corrections.map(c => `- ${c}`).join('\n')}`,
 
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) {
-        return part.inlineData.data as string;
+        const image = part.inlineData.data as string;
+        return monochrome ? toGrayscale(image) : image;
       }
     }
 
