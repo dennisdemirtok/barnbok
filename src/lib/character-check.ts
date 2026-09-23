@@ -669,6 +669,8 @@ export interface QualityLoopOptions {
   maxAttempts?: number;
   // Absolut tidpunkt (ms) då loopen ska sluta starta nya försök
   deadline?: number;
+  // En bild som redan finns (från batchläget) räknas som första försöket
+  initialImage?: string;
 }
 
 export const MAX_QUALITY_ATTEMPTS = 3;
@@ -738,7 +740,10 @@ export async function generatePageWithQualityCheck(
     let image: string;
     const genStart = Date.now();
 
-    if (n === 1) {
+    if (n === 1 && loop.initialImage) {
+      // Bilden kom redan från batchen - den granskas som första försöket
+      image = loop.initialImage;
+    } else if (n === 1) {
       // Första bilden: fel här ska fortfarande nå anroparen - det finns ingen bild att leverera.
       // Tidsgränsen är viktig: ett anrop som hänger skulle annars blockera för alltid.
       const remaining = deadline - Date.now();

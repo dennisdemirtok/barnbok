@@ -7,6 +7,9 @@
 import { serverSupabase, SERVER_IMAGES_BUCKET } from './supabase-server';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from './character-check';
 import { imageSizeFor } from './image-size';
+import { buildPageImageRequest, extractImage, isMonochromeStyle } from './gemini';
+import { cancelImageBatch, checkImageBatch, fileReference, imageMimeType, submitImageBatch, uploadReferenceSheets, UploadedRef } from './image-batch';
+import { withReferenceImages } from './character-refs';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
 import { applyPronunciations, estimateSeconds, isQuality, narrationSegments, synthesize, textStamp, TtsQuality } from './tts';
 import { loadPronunciations } from './pronunciations';
@@ -19,6 +22,16 @@ const WORKERS = 4;
 const ITEM_BUDGET_MS = DEFAULT_QUALITY_BUDGET_MS;
 // Ett uppläst avsnitt (kapitel) får ta så här lång tid
 const AUDIO_BUDGET_MS = 8 * 60 * 1000;
+// Sparläget: så ofta tittar jobbet efter levererade bilder hos Google,
+// och så många bilder läggs i varje batch (svaren hämtas en batch i taget)
+const BATCH_POLL_MS = 60_000;
+const BATCH_SIZE = 10;
+
+interface BatchPayload {
+  mode?: 'fast' | 'batch';
+  refs?: Record<string, UploadedRef>;
+  batches?: { name: string; itemIds: string[]; submittedAt: string; state: string }[];
+}
 // Jobb vars puls är äldre än så här anses ha dött med en omstart
 const STALE_MS = 3 * 60 * 1000;
 // Databasanrop som inte svarat på så här länge räknas som tappade
@@ -36,7 +49,7 @@ export interface JobItemView {
   spreadId: string;
   spreadNumber: number;
   label: string;
-  status: 'queued' | 'running' | 'done' | 'error';
+  status: 'queued' | 'running' | 'batched' | 'done' | 'error';
   imageUrl?: string;
   quality?: SpreadQualityCheck;
   error?: string;
@@ -45,6 +58,7 @@ export interface JobItemView {
 export interface JobView {
   id: string;
   bookId: string;
+  mode?: 'fast' | 'batch';
   status: 'running' | 'done' | 'failed' | 'canceled';
   total: number;
   done: number;
@@ -183,6 +197,7 @@ async function buildView(job: Record<string, unknown>): Promise<JobView> {
   return {
     id: job.id as string,
     bookId: job.book_id as string,
+    mode: ((job.payload as { mode?: 'fast' | 'batch' } | null)?.mode) || 'fast',
     status: job.status as JobView['status'],
     total: (job.total as number) ?? 0,
     done: (job.done as number) ?? 0,
@@ -201,7 +216,9 @@ async function buildView(job: Record<string, unknown>): Promise<JobView> {
   };
 }
 
-export async function createIllustrationJob(bookId: string): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
+export type IllustrationMode = 'fast' | 'batch';
+
+export async function createIllustrationJob(bookId: string, mode: IllustrationMode = 'fast'): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
   const db = serverSupabase();
 
   // Ett pågående jobb för boken räcker
@@ -223,7 +240,7 @@ export async function createIllustrationJob(bookId: string): Promise<{ jobId: st
 
   const { data: jobRow, error } = await db
     .from('barnbok_jobs')
-    .insert({ book_id: bookId, kind: 'illustrate', status: 'running', total: todo.length })
+    .insert({ book_id: bookId, kind: 'illustrate', status: 'running', total: todo.length, payload: { mode } })
     .select()
     .single();
   if (error || !jobRow) {
@@ -315,8 +332,23 @@ function bookForNarration(book: BookForJob): BookProject {
 
 export async function cancelJob(jobId: string): Promise<void> {
   const db = serverSupabase();
+  // Bilder som ligger i Googles batchkö avbryts också, så att de inte kostar
+  const { data: job } = await db.from('barnbok_jobs').select('payload').eq('id', jobId).maybeSingle();
+  for (const batch of ((job?.payload as BatchPayload | null)?.batches || [])) {
+    if (batch.state !== 'done') await cancelImageBatch(batch.name);
+  }
+  await db.from('barnbok_job_items').update({ status: 'error', error: 'Avbrutet' }).eq('job_id', jobId).eq('status', 'batched');
   await db.from('barnbok_jobs').update({ status: 'canceled', updated_at: new Date().toISOString() }).eq('id', jobId);
   await db.from('barnbok_job_items').update({ status: 'error', error: 'Avbrutet' }).eq('job_id', jobId).eq('status', 'queued');
+}
+
+// Vid serverstart: alla jobb som var igång tas upp direkt, även om ingen har
+// appen öppen (en ny version startar om servern mitt i jobben)
+export async function resumeRunningJobs(): Promise<number> {
+  const { data } = await serverSupabase().from('barnbok_jobs').select('id').eq('status', 'running').limit(20);
+  for (const job of data || []) void runJob(job.id);
+  if (data?.length) console.log(`[Jobb] serverstart: tar upp ${data.length} pågående jobb`);
+  return data?.length ?? 0;
 }
 
 // Jobb som tappades vid en omstart startas om, t.ex. när någon öppnar appen igen
@@ -381,6 +413,21 @@ export async function runJob(jobId: string): Promise<void> {
     const segments = isAudiobook ? narrationSegments(bookForNarration(book)) : [];
     // Bokens uttalslista gäller varje kapitel som läses in
     const pronunciations = isAudiobook ? await loadPronunciations(book.id) : [];
+
+    const finishItem = async (id: string, patch: Record<string, unknown>) => {
+      await withTimeout(
+        db.from('barnbok_job_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id),
+        DB_TIMEOUT_MS,
+        'Databasen svarade inte när uppslaget skulle bockas av'
+      ).catch(err => console.warn('[Jobb] kunde inte spara resultatet:', err instanceof Error ? err.message : err));
+    };
+
+    // Sparläget: nya bilder läggs i Googles batchkö, levererade bilder granskas
+    if (!isAudiobook && (payload as { mode?: string } | null)?.mode === 'batch') {
+      await db.from('barnbok_jobs').update({ heartbeat_at: new Date().toISOString() }).eq('id', jobId);
+      await batchTick(jobId, job.payload as BatchPayload, book, spreadById, finishItem);
+      lastProgressAt = Date.now();
+    }
 
     const worker = async (n: number) => {
       // Trappa igång arbetarna så att de inte träffar bildmodellen samtidigt
@@ -468,14 +515,6 @@ export async function runJob(jobId: string): Promise<void> {
       }
     };
 
-    const finishItem = async (id: string, patch: Record<string, unknown>) => {
-      await withTimeout(
-        db.from('barnbok_job_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id),
-        DB_TIMEOUT_MS,
-        'Databasen svarade inte när uppslaget skulle bockas av'
-      ).catch(err => console.warn('[Jobb] kunde inte spara resultatet:', err instanceof Error ? err.message : err));
-    };
-
     // Puls medan jobbet lever, så att en omstart kan upptäckas. Händer inget
     // alls på länge slutar pulsen - då räknas jobbet som stannat och tas upp igen.
     await db.from('barnbok_jobs').update({ heartbeat_at: new Date().toISOString() }).eq('id', jobId);
@@ -494,7 +533,12 @@ export async function runJob(jobId: string): Promise<void> {
     const { data: after } = await db.from('barnbok_jobs').select('*').eq('id', jobId).single();
     if (after?.status === 'running') {
       const left = await queuedCount(jobId);
-      if (left > 0) {
+      const waitingOnGoogle = left > 0 ? await batchedCount(jobId) : 0;
+      if (waitingOnGoogle > 0) {
+        // Sparläget: bilderna ligger hos Google - titta till dem om en minut
+        console.log(`[Jobb] ${jobId}: ${waitingOnGoogle} bilder väntar i Googles batchkö`);
+        setTimeout(() => { void runJob(jobId); }, BATCH_POLL_MS);
+      } else if (left > 0) {
         // Något tog slut i förtid (t.ex. ett uppslag som fastnade) - fortsätt snart
         console.log(`[Jobb] ${jobId}: ${left} uppslag kvar, tar nytt tag om en stund`);
         setTimeout(() => { void runJob(jobId); }, 15_000);
@@ -578,12 +622,163 @@ async function queuedCount(jobId: string): Promise<number> {
     .from('barnbok_job_items')
     .select('id', { count: 'exact', head: true })
     .eq('job_id', jobId)
-    .in('status', ['queued', 'running']);
+    .in('status', ['queued', 'running', 'batched']);
+  return count ?? 0;
+}
+
+async function batchedCount(jobId: string): Promise<number> {
+  const { count } = await serverSupabase()
+    .from('barnbok_job_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('job_id', jobId)
+    .eq('status', 'batched');
   return count ?? 0;
 }
 
 async function uploadPng(path: string, base64: string): Promise<string | null> {
-  return uploadFile(path, Buffer.from(base64, 'base64'), 'image/png');
+  const mime = imageMimeType(base64);
+  const fixedPath = mime === 'image/jpeg' ? path.replace(/\.png$/, '.jpg') : path;
+  return uploadFile(fixedPath, Buffer.from(base64, 'base64'), mime);
+}
+
+// ── Sparläget ──
+
+async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) await fn(items[next++]);
+  }));
+}
+
+/**
+ * Ett varv i sparläget:
+ * 1. Uppslag som aldrig provats skickas till Googles batchkö (halva priset).
+ * 2. Batcher som Google levererat plockas upp. Varje bild granskas direkt och
+ *    rättas vid behov med ett vanligt anrop, så att boken blir klar så fort
+ *    batchen är levererad. Misslyckas en batch görs bilderna på vanligt sätt.
+ */
+async function batchTick(
+  jobId: string,
+  payload: BatchPayload | null,
+  book: BookForJob,
+  spreadById: Map<string, SpreadWithUrl>,
+  finishItem: (id: string, patch: Record<string, unknown>) => Promise<void>,
+): Promise<void> {
+  const db = serverSupabase();
+  const state: BatchPayload = { mode: 'batch', ...(payload || {}), batches: [...(payload?.batches || [])] };
+  const save = () => db.from('barnbok_jobs').update({ payload: state, updated_at: new Date().toISOString() }).eq('id', jobId);
+  const characters = await withReferenceImages(book.characters);
+  const monochrome = isMonochromeStyle(book.styleGuide);
+
+  // 1. Skicka nya uppslag
+  const { data: fresh } = await db
+    .from('barnbok_job_items')
+    .select('id, spread_id, label')
+    .eq('job_id', jobId)
+    .eq('status', 'queued')
+    .eq('attempts', 0)
+    .order('spread_number');
+  if (fresh && fresh.length > 0) {
+    try {
+      state.refs = await uploadReferenceSheets(characters, state.refs);
+    } catch (err) {
+      console.warn('[Sparläge] referensbladen kunde inte laddas upp - bladen skickas med i stället:', err instanceof Error ? err.message : err);
+    }
+    for (let i = 0; i < fresh.length; i += BATCH_SIZE) {
+      const chunk = fresh.slice(i, i + BATCH_SIZE);
+      const requests = [];
+      const ids: string[] = [];
+      for (const item of chunk) {
+        const spread = spreadById.get(item.spread_id);
+        if (!spread) { await finishItem(item.id, { status: 'error', error: 'Uppslaget finns inte längre' }); continue; }
+        requests.push(await buildPageImageRequest(
+          spread, characters, book.styleGuide, book.bookFormat,
+          { shape: book.illustrationShape, imageSize: imageSizeFor(spread) },
+          fileReference(state.refs || {}),
+        ));
+        ids.push(item.id);
+      }
+      if (ids.length === 0) continue;
+      try {
+        const name = await submitImageBatch(requests, `${book.title} ${jobId.slice(0, 8)} ${i / BATCH_SIZE + 1}`);
+        await db.from('barnbok_job_items')
+          .update({ status: 'batched', attempts: 1, claimed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .in('id', ids);
+        state.batches!.push({ name, itemIds: ids, submittedAt: new Date().toISOString(), state: 'pending' });
+        await save(); // namnet får aldrig tappas bort, annars hittas bilderna inte
+        console.log(`[Sparläge] ${ids.length} bilder skickade till Google (${name})`);
+      } catch (err) {
+        // Kunde inte skicka: bilderna görs på vanligt sätt i stället
+        console.warn('[Sparläge] batchen kunde inte skickas - bilderna görs direkt:', err instanceof Error ? err.message : err);
+        await db.from('barnbok_job_items').update({ attempts: 1, updated_at: new Date().toISOString() }).in('id', ids);
+      }
+    }
+  }
+
+  // 2. Hämta levererade batcher
+  for (const batch of state.batches!) {
+    if (batch.state === 'done') continue;
+    let result;
+    try {
+      result = await checkImageBatch(batch.name);
+    } catch (err) {
+      console.warn(`[Sparläge] kunde inte läsa ${batch.name}:`, err instanceof Error ? err.message : err);
+      continue;
+    }
+    batch.state = result.state;
+    if (result.state === 'pending' || result.state === 'running') continue;
+
+    if (result.state === 'failed') {
+      console.warn(`[Sparläge] ${batch.name} misslyckades (${result.message}) - bilderna görs direkt`);
+      await db.from('barnbok_job_items').update({ status: 'queued', updated_at: new Date().toISOString() })
+        .in('id', batch.itemIds).eq('status', 'batched');
+      batch.state = 'done';
+      await save();
+      continue;
+    }
+
+    const { data: waiting } = await db
+      .from('barnbok_job_items')
+      .select('id, spread_id, label')
+      .in('id', batch.itemIds)
+      .eq('status', 'batched');
+    console.log(`[Sparläge] ${batch.name} levererad - granskar ${waiting?.length ?? 0} bilder`);
+
+    await mapLimit(waiting || [], 3, async item => {
+      const spread = spreadById.get(item.spread_id);
+      const response = result.responses?.[batch.itemIds.indexOf(item.id)];
+      if (!spread) { await finishItem(item.id, { status: 'error', error: 'Uppslaget finns inte längre' }); return; }
+      let initialImage: string | undefined;
+      try {
+        initialImage = await extractImage(response?.response as Parameters<typeof extractImage>[0], monochrome);
+      } catch {
+        // Ingen bild i svaret - görs på vanligt sätt
+      }
+      if (!initialImage) {
+        await finishItem(item.id, { status: 'queued', error: response?.error || 'Ingen bild från batchen' });
+        return;
+      }
+      try {
+        const quality = await withTimeout(generatePageWithQualityCheck(
+          spread, book.characters, book.styleGuide, book.bookFormat,
+          { shape: book.illustrationShape, imageSize: imageSizeFor(spread) },
+          { deadline: Date.now() + ITEM_BUDGET_MS, initialImage },
+        ), ITEM_BUDGET_MS + 60_000, 'Granskningen tog för lång tid');
+        const url = await uploadPng(`books/${book.id}/${spread.id}-${Date.now().toString(36)}.png`, quality.image);
+        if (!url) throw new Error('Bilden kunde inte sparas i molnet');
+        await db.from('barnbok_spreads').update({ image_url: url, image_status: 'done' }).eq('id', spread.id);
+        await finishItem(item.id, { status: 'done', image_url: url, quality: quality.qualityCheck });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[Sparläge] ${item.label || item.spread_id} kunde inte slutföras:`, message);
+        await finishItem(item.id, { status: 'queued', error: message });
+      }
+      await withTimeout(db.rpc('barnbok_job_progress', { p_job: jobId }), DB_TIMEOUT_MS, 'Databasen svarade inte').catch(() => null);
+    });
+    batch.state = 'done';
+    await save();
+  }
+  await save();
 }
 
 async function uploadFile(path: string, bytes: Buffer, contentType: string, cacheControl?: string): Promise<string | null> {

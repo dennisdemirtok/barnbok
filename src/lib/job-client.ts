@@ -6,7 +6,9 @@ import { SpreadQualityCheck } from './types';
 // Den här filen pratar bara med /api/jobs - inga direkta anrop till databasen.
 
 export type JobStatus = 'running' | 'done' | 'failed' | 'canceled';
-export type JobItemStatus = 'queued' | 'running' | 'done' | 'error';
+// 'batched' = ligger i Googles batchkö (sparläget)
+export type JobItemStatus = 'queued' | 'running' | 'batched' | 'done' | 'error';
+export type IllustrationMode = 'fast' | 'batch';
 
 export interface JobItem {
   spreadId: string;
@@ -21,6 +23,7 @@ export interface JobItem {
 export interface IllustrationJob {
   id: string;
   bookId: string;
+  mode?: IllustrationMode;
   status: JobStatus;
   total: number;
   done: number;
@@ -48,12 +51,13 @@ async function readJson<T>(res: Response): Promise<T> {
 // Startar (eller hakar på) illustreringen av en bok. Boken måste vara sparad i
 // molnet först - servern läser text, karaktärer och stil därifrån.
 export async function startIllustrationJob(
-  bookId: string
+  bookId: string,
+  mode: IllustrationMode = 'fast'
 ): Promise<{ jobId: string; total: number; alreadyRunning?: boolean }> {
   const res = await fetch('/api/jobs/illustrate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bookId }),
+    body: JSON.stringify({ bookId, mode }),
   });
   return readJson<{ jobId: string; total: number; alreadyRunning?: boolean }>(res);
 }
@@ -175,4 +179,23 @@ export function notifyBookIllustrated(title: string): void {
 export function estimateMinutesLeft(remaining: number): number {
   if (remaining <= 0) return 0;
   return Math.max(1, Math.round((remaining * SECONDS_PER_IMAGE) / PARALLEL_IMAGES / 60));
+}
+
+// Senast valda sätt att illustrera, så att valet ligger kvar till nästa bok
+const MODE_KEY = 'barnbok:illustration-mode';
+
+export function readIllustrationMode(): IllustrationMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'batch' ? 'batch' : 'fast';
+  } catch {
+    return 'fast';
+  }
+}
+
+export function writeIllustrationMode(mode: IllustrationMode): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    // Lagring blockerad - valet gäller bara den här gången
+  }
 }

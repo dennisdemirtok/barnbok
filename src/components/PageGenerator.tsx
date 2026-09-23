@@ -18,6 +18,9 @@ import {
   publishJob,
   startIllustrationJob,
   writeJobRef,
+  IllustrationMode,
+  readIllustrationMode,
+  writeIllustrationMode,
 } from '@/lib/job-client';
 
 // Uppslag kan ha bilden antingen som base64 (nygenererad i webbläsaren) eller
@@ -90,6 +93,9 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
   const [starting, setStarting] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Snabbt eller sparläge (Googles batchkö, halva priset på bilderna)
+  const [mode, setMode] = useState<IllustrationMode>('fast');
+  useEffect(() => { setMode(readIllustrationMode()); }, []);
 
   const jobRunning = job?.status === 'running';
   const isBusy = jobRunning || starting || !!regeneratingId;
@@ -110,6 +116,9 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 
   const remainingSpreads = pendingCount + generatingCount;
   const estimatedMinutes = estimateMinutesLeft(remainingSpreads);
+  // Uppslag vars bild ligger hos Google i sparläget
+  const batchedIds = new Set((job?.items || []).filter(i => i.status === 'batched').map(i => i.spreadId));
+  const batchMode = (job?.mode ?? mode) === 'batch';
 
   const applyJob = useCallback((fresh: IllustrationJob) => {
     setSpreads(prev => {
@@ -172,7 +181,8 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         }
       }
 
-      const started = await startIllustrationJob(book.id);
+      writeIllustrationMode(mode);
+      const started = await startIllustrationJob(book.id, mode);
       writeJobRef({ jobId: started.jobId, bookId: book.id, title: book.title });
       setSpreads(prev => prev.map(s => (s.status === 'error' ? { ...s, status: 'pending' as const, error: undefined } : s)));
       setJob(prev =>
@@ -181,6 +191,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           : {
               id: started.jobId,
               bookId: book.id,
+              mode,
               status: 'running' as const,
               total: started.total,
               done: 0,
@@ -195,7 +206,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
     } finally {
       setStarting(false);
     }
-  }, [book.id, book.title, onEnsureSaved]);
+  }, [book.id, book.title, onEnsureSaved, mode]);
 
   // ── Vid start: haka på ett pågående jobb, annars starta en helt ny bok ──
   useEffect(() => {
@@ -223,10 +234,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
         }
       }
 
-      // Helt ny bok där inget uppslag har bild: sätt igång direkt
-      if (spreads.length > 0 && spreads.every(s => s.status === 'pending')) {
-        void startJob();
-      }
+      // Ingen autostart: man väljer först snabbt eller sparläge
     })();
 
     return () => {
@@ -341,12 +349,14 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                   : starting
                   ? 'Startar illustreringen...'
                   : jobRunning
-                  ? 'Servern illustrerar din bok'
+                  ? batchMode ? 'Sparläge: bilderna görs hos Google' : 'Servern illustrerar din bok'
                   : 'Redo att illustrera'}
               </p>
               <p className="text-sm text-ink/55">
                 {completedSpreads} av {totalSpreads} klara
-                {jobRunning && remainingSpreads > 0 && ` · ungefär ${estimatedMinutes} min kvar`}
+                {jobRunning && remainingSpreads > 0 && (batchMode
+                  ? ' · brukar ta några minuter, som längst ett dygn'
+                  : ` · ungefär ${estimatedMinutes} min kvar`)}
               </p>
             </div>
           </div>
@@ -370,9 +380,14 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               <span className="spinner !w-3.5 !h-3.5" /> {generatingCount} ritas nu
             </span>
           )}
-          {pendingCount > 0 && (
+          {batchedIds.size > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 text-amber-800">
+              <Icon name="savings" size={15} /> {batchedIds.size} i sparkön hos Google
+            </span>
+          )}
+          {pendingCount - batchedIds.size > 0 && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ink/[0.05] text-ink/55">
-              <Icon name="schedule" size={15} /> {pendingCount} i kö
+              <Icon name="schedule" size={15} /> {pendingCount - batchedIds.size} i kö
             </span>
           )}
           {failedCount > 0 && (
@@ -393,11 +408,50 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           </div>
         )}
 
+        {/* Snabbt eller sparläge */}
+        {!jobRunning && !starting && !allDone && (
+          <div>
+            <p className="text-sm font-semibold text-ink">Hur ska bilderna göras?</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {([
+                {
+                  id: 'fast' as const,
+                  icon: 'bolt',
+                  title: 'Snabbt',
+                  text: `Klart på ungefär ${estimateMinutesLeft(missingCount || totalSpreads)} minuter.`,
+                },
+                {
+                  id: 'batch' as const,
+                  icon: 'savings',
+                  title: 'Sparläge',
+                  text: 'Halva priset på bilderna. Google gör dem när det finns plats: oftast inom några minuter, som längst ett dygn.',
+                },
+              ]).map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => setMode(option.id)}
+                  aria-pressed={mode === option.id}
+                  className={`flex items-start gap-2.5 p-3 rounded-2xl border text-left transition-all ${
+                    mode === option.id ? 'border-brand bg-brand/5 ring-2 ring-brand/15' : 'border-line bg-white hover:border-ink/25'
+                  }`}
+                >
+                  <Icon name={option.icon} filled={mode === option.id} size={20} className={mode === option.id ? 'text-brand shrink-0 mt-0.5' : 'text-ink/40 shrink-0 mt-0.5'} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-ink">{option.title}</span>
+                    <span className="block text-xs text-ink/55 leading-snug">{option.text}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-ink/45">Kvaliteten är densamma. Du kan stänga sidan i båda lägena och får besked här när boken är klar.</p>
+          </div>
+        )}
+
         {/* Controls */}
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 pt-1">
           {!jobRunning ? (
             <button
-              onClick={startJob}
+              onClick={() => void startJob()}
               disabled={allDone || starting || !!regeneratingId}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -474,6 +528,11 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                         Försök igen
                       </button>
                     )}
+                  </div>
+                ) : batchedIds.has(spread.id) ? (
+                  <div className="text-center text-amber-700/80 px-2">
+                    <Icon name="savings" size={26} className="mb-1" />
+                    <p className="text-sm">I sparkön hos Google</p>
                   </div>
                 ) : (
                   <div className="text-center text-ink/40">

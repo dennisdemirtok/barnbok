@@ -10,6 +10,7 @@ import { picturedCharacters } from './scene-characters';
 // den stabila inte finns för kontot. Förhandsversioner stängs efter ett tag.
 const IMAGE_MODELS = ['gemini-3.1-flash-image', 'gemini-3.1-flash-image-preview'];
 let imageModelIndex = 0;
+export const currentImageModel = () => IMAGE_MODELS[imageModelIndex];
 
 type ImageRequest = Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>;
 
@@ -320,6 +321,26 @@ export function isMonochromeStyle(styleGuide: string): boolean {
 }
 
 
+export type ImagePart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
+  | { fileData: { fileUri: string; mimeType: string } };
+
+// En färdig bildbeställning: samma innehåll oavsett om den skickas direkt
+// eller läggs i Googles batchkö (halva priset, levereras senare)
+export interface PageImageRequest {
+  contents: ImagePart[];
+  aspectRatio: string;
+  imageSize: '1K' | '2K';
+  monochrome: boolean;
+}
+
+// Hur ett referensblad skickas med: som bild direkt (standard) eller som en
+// fil som laddats upp till Google en gång (batchläget)
+export type ReferencePart = (char: Character) => ImagePart | Promise<ImagePart>;
+
+const inlineReference: ReferencePart = char => ({ inlineData: { mimeType: 'image/png', data: char.referenceImage! } });
+
 export async function generatePageImage(
   spread: Spread,
   characters: Character[],
@@ -329,9 +350,46 @@ export async function generatePageImage(
 ): Promise<string> {
   await rateLimitedDelay();
   const ai = getClient();
+  const request = await buildPageImageRequest(spread, characters, styleGuide, bookFormat, options);
 
-  // Build the contents array with reference images and prompt
-  const contents: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+  return withRetry(async () => {
+    const response = await generateWithImageModel(ai, {
+      contents: [{ role: 'user', parts: request.contents }],
+      config: {
+        responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: { aspectRatio: request.aspectRatio, imageSize: request.imageSize },
+        ...(options.timeoutMs ? { httpOptions: { timeout: options.timeoutMs } } : {}),
+      },
+    });
+    return extractImage(response, request.monochrome);
+  }, options.maxRetries ?? 3);
+}
+
+// Plockar ut bilden ur ett svar från bildmodellen (direkt eller ur en batch)
+export async function extractImage(
+  response: { candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[] } | undefined,
+  monochrome: boolean,
+): Promise<string> {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!parts) throw new Error('Inget svar från Gemini');
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      const image = part.inlineData.data;
+      return monochrome ? toGrayscale(image) : image;
+    }
+  }
+  throw new Error('Ingen bild genererades');
+}
+
+export async function buildPageImageRequest(
+  spread: Spread,
+  characters: Character[],
+  styleGuide: string,
+  bookFormat?: BookFormat,
+  options: PageImageOptions = {},
+  referencePart: ReferencePart = inlineReference,
+): Promise<PageImageRequest> {
+  const contents: ImagePart[] = [];
 
   // Detect which characters are in this specific scene. Bilder som ligger i molnet hämtas hem.
   const withRefs = await withReferenceImages(characters);
@@ -346,12 +404,7 @@ export async function generatePageImage(
     contents.push({
       text: `Reference image for character "${char.name}"${char.heroName ? ` (${char.heroName})` : ''} - THIS CHARACTER APPEARS IN THIS SCENE. This sheet defines who ${char.name} IS: draw exactly this face (face shape, eyes, eyebrows, nose, mouth and teeth, freckles or marks, ears), this hair color and hairstyle, skin tone, age and body proportions. Clothes may change only when the scene calls for it; the face never changes.${char.faceNotes ? ` FACE: ${char.faceNotes}` : ''} ${char.appearance}`,
     });
-    contents.push({
-      inlineData: {
-        mimeType: 'image/png',
-        data: char.referenceImage!,
-      },
-    });
+    contents.push(await referencePart(char));
   }
 
   // Referensblad skickas bara för figurerna som är med. Blad för andra figurer
@@ -492,33 +545,7 @@ ${corrections.map(c => `- ${c}`).join('\n')}`,
     });
   }
 
-  // Use retry logic for resilience
-  return withRetry(async () => {
-    const response = await generateWithImageModel(ai, {
-      contents,
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'],
-        imageConfig: {
-          aspectRatio,
-          imageSize: options.imageSize || '1K',
-        },
-        ...(options.timeoutMs ? { httpOptions: { timeout: options.timeoutMs } } : {}),
-      },
-    });
-
-    if (!response.candidates?.[0]?.content?.parts) {
-      throw new Error('Inget svar från Gemini');
-    }
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) {
-        const image = part.inlineData.data as string;
-        return monochrome ? toGrayscale(image) : image;
-      }
-    }
-
-    throw new Error('Ingen bild genererades');
-  }, options.maxRetries ?? 3);
+  return { contents, aspectRatio, imageSize: options.imageSize || '1K', monochrome };
 }
 
 export async function regeneratePageImage(
