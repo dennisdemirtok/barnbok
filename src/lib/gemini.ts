@@ -532,7 +532,9 @@ ${composition === 'spread'
 - Make sure character proportions, hair, clothing, and features match their reference sheets
 - Every character must be recognizably the SAME person on every page - same face (shape, eyes, nose, mouth, freckles/marks), same hair color and hairstyle, same age and proportions. Only the clothes may change, and only when the scene motivates it (pajamas in bed, a jacket outside); otherwise use their normal clothes
 - NEVER duplicate a character - each person appears EXACTLY ONCE ${perPanel ? 'in each panel' : 'in the image'}
-- NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image`;
+- NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image${!includeTextOnImage && !isCover && !comicPage ? `
+
+FINAL CHECK before you finish: there are no letters, words or digits anywhere in the picture. Door signs, boxes, papers, notebooks, posters, screens and labels are blank or carry only a few wavy lines.` : ''}`;
 
   contents.push({ text: mainPrompt });
 
