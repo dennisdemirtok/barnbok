@@ -12,6 +12,8 @@ import AudiobookPanel from './AudiobookPanel';
 import PageEditor from './PageEditor';
 import Workshop from './Workshop';
 import BookReader from './BookReader';
+import TextCorrections from './TextCorrections';
+import { updateSpreadTextInCloud } from '@/lib/cloud-text';
 
 const spreadName = (s: Spread) =>
   s.pages === 'omslag' ? 'Omslag' : s.pages === 'slutsida' ? 'Slutsida' : `Sida ${s.pages}`;
@@ -30,11 +32,16 @@ interface Props {
   onUpdateSpread: (updatedSpread: Spread) => void;
   onSaveBook: (book: BookProject) => void;
   onBack: () => void;
+  // Öppnad från bokhandeln för att rättas: börja i "Rätta text" och gå tillbaka till bokhandeln
+  fromBookstore?: boolean;
 }
 
-export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }: Props) {
+const textChanged = (a: Spread | undefined, b: Spread) =>
+  !a || a.textBlocks.length !== b.textBlocks.length || a.textBlocks.some((t, i) => t.text !== b.textBlocks[i]?.text);
+
+export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack, fromBookstore }: Props) {
   const [selectedSpread, setSelectedSpread] = useState<Spread | null>(null);
-  const [viewMode, setViewMode] = useState<'workshop' | 'grid' | 'book'>('book');
+  const [viewMode, setViewMode] = useState<'workshop' | 'grid' | 'book' | 'text'>(fromBookstore ? 'text' : 'book');
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [exporting, setExporting] = useState(false);
@@ -214,8 +221,42 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     }
   };
 
-  const handleSaveSpread = (updatedSpread: Spread) => {
+  // ── Texträttelser: sparas lokalt direkt och i molnet om boken finns där ──
+  const inCloud = cloudState === 'public' || cloudState === 'private';
+
+  // Skickar bara texten till molnet (bilder och ägare rörs inte).
+  // Returnerar ett felmeddelande, eller null när det gick bra.
+  const syncTextToCloud = async (spread: Spread): Promise<string | null> => {
+    if (!inCloud) return null;
+    try {
+      const result = await updateSpreadTextInCloud(book.id, spread);
+      if (result === 'saved') return null;
+      if (result === 'partial') return 'Bara en del av texten kom upp i molnet. Spara boken i molnet via Mer för att få med allt.';
+      return 'Rättelsen är sparad på den här enheten, men inte i molnet. Du kanske inte har behörighet att ändra boken där.';
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Kunde inte spara texten i molnet';
+    }
+  };
+
+  const handleSaveSpreadText = async (spread: Spread): Promise<string | null> => {
+    onUpdateSpread(spread);
+    const problem = await syncTextToCloud(spread);
+    if (!problem && inCloud) showNotice({ tone: 'success', text: 'Rättelsen är sparad i molnet och syns i Bokhandeln.' });
+    return problem;
+  };
+
+  // Verkstaden och sidredigeraren: ändrad text följer också med till molnet
+  const updateSpreadAndSyncText = (updatedSpread: Spread) => {
+    const before = book.spreads.find(s => s.id === updatedSpread.id);
     onUpdateSpread(updatedSpread);
+    if (!inCloud || !textChanged(before, updatedSpread)) return;
+    void syncTextToCloud(updatedSpread).then(problem => {
+      showNotice(problem ? { tone: 'error', text: problem } : { tone: 'success', text: 'Texten är sparad i molnet.' });
+    });
+  };
+
+  const handleSaveSpread = (updatedSpread: Spread) => {
+    updateSpreadAndSyncText(updatedSpread);
     setSelectedSpread(null);
   };
 
@@ -328,10 +369,13 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
     <div className="space-y-6">
       {/* Header */}
       <StepHeader
-        eyebrow="Steg 4 av 4 · Färdig bok"
-        title="Din bok är klar att läsas"
-        description="Bläddra i den satta boken precis som den blir i PDF:en. Redigera text eller bilder och dela när du är nöjd."
+        eyebrow={fromBookstore ? 'Redigera boken' : 'Steg 4 av 4 · Färdig bok'}
+        title={fromBookstore ? 'Rätta boken' : 'Din bok är klar att läsas'}
+        description={fromBookstore
+          ? 'Sök upp ordet, rätta texten och spara. Rättelsen sparas direkt i molnet och syns i Bokhandeln.'
+          : 'Bläddra i den satta boken precis som den blir i PDF:en. Redigera text eller bilder och dela när du är nöjd.'}
         onBack={onBack}
+        backLabel={fromBookstore ? 'Tillbaka till Bokhandeln' : undefined}
       />
 
       {/* Book info + Action buttons */}
@@ -511,9 +555,10 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       )}
 
       {/* Vyer */}
-      <div className="grid grid-cols-3 sm:inline-grid sm:w-auto gap-1 p-1 glass rounded-full">
+      <div className="grid grid-cols-2 sm:grid-cols-4 sm:inline-grid sm:w-auto gap-1 p-1 glass rounded-3xl sm:rounded-full">
         {([
           { key: 'book', label: 'Läs boken', icon: 'auto_stories' },
+          { key: 'text', label: 'Rätta text', icon: 'spellcheck' },
           { key: 'workshop', label: 'Redigera', icon: 'edit_note' },
           { key: 'grid', label: 'Alla sidor', icon: 'grid_view' },
         ] as const).map((v) => (
@@ -537,8 +582,19 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack }
       )}
 
       {/* ─── Verkstad (redigera text och bilder) ─── */}
+      {/* ─── Rätta text (bara texten, bilderna rörs inte) ─── */}
+      {viewMode === 'text' && (
+        <TextCorrections
+          book={book}
+          onSaveSpread={handleSaveSpreadText}
+          saveHint={inCloud
+            ? 'Rättelser sparas direkt i molnet.'
+            : cloudState === 'loading' ? undefined : 'Rättelser sparas på den här enheten tills boken sparas i molnet.'}
+        />
+      )}
+
       {viewMode === 'workshop' && (
-        <Workshop book={book} onUpdateSpread={onUpdateSpread} />
+        <Workshop book={book} onUpdateSpread={updateSpreadAndSyncText} />
       )}
 
       {/* ─── Alla uppslag ─── */}

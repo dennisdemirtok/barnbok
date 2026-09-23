@@ -23,6 +23,20 @@ interface Chapter {
   characters: number;
   seconds: number;
   url?: string;
+  // Inläst, men texten eller uttalslistan har ändrats sedan dess
+  stale?: boolean;
+}
+
+// Uttalsregel: ordet i boken och hur rösten ska säga det
+interface PronunciationRule {
+  word: string;
+  sayAs: string;
+}
+
+// I vilka kapitel ordet förekommer
+interface PronunciationUsage {
+  word: string;
+  chapters: { index: number; label: string }[];
 }
 
 interface Audiobook {
@@ -154,6 +168,22 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   // Sant när nästa del ska börja spela av sig själv (klick i listan eller slutet på förra delen)
   const autoPlay = useRef(false);
 
+  // Uttalslistan: ord som rösten ska säga på ett annat sätt
+  const [pronOpen, setPronOpen] = useState(false);
+  const [rules, setRules] = useState<PronunciationRule[]>([]);
+  const [usage, setUsage] = useState<PronunciationUsage[]>([]);
+  const [pronSaving, setPronSaving] = useState(false);
+  const [pronError, setPronError] = useState('');
+  const [pronSaved, setPronSaved] = useState(false);
+  const [newWord, setNewWord] = useState('');
+  const [newSayAs, setNewSayAs] = useState('');
+  // Vad som läses upp just nu ('ny' = formuläret, annars regelns ord) och meningen som lästes
+  const [sayingKey, setSayingKey] = useState<string | null>(null);
+  const [heard, setHeard] = useState<{ key: string; sentence: string } | null>(null);
+  const sayRef = useRef<HTMLAudioElement>(null);
+  const sayUrl = useRef('');
+  useEffect(() => () => { if (sayUrl.current) URL.revokeObjectURL(sayUrl.current); }, []);
+
   // Städa bort provlyssningens blob-adress när panelen stängs
   useEffect(() => () => { if (previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
@@ -189,6 +219,21 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
+
+  // Uttalslistan hämtas direkt, så att antalet regler syns på knappen
+  useEffect(() => {
+    if (!bookId || !canCreate) return;
+    let cancelled = false;
+    fetch(`/api/audio/pronunciations?bookId=${encodeURIComponent(bookId)}`, { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: { rules?: PronunciationRule[]; usage?: PronunciationUsage[] } | null) => {
+        if (cancelled || !data) return;
+        setRules(data.rules || []);
+        setUsage(data.usage || []);
+      })
+      .catch(() => { /* listan går att öppna ändå - den är då tom */ });
+    return () => { cancelled = true; };
+  }, [bookId, canCreate]);
 
   // Ett jobb som redan var igång när sidan laddades om
   useEffect(() => {
@@ -343,6 +388,104 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     }
   };
 
+  // ── Rätta uttal ──
+  const sameWord = (a: string, b: string) => a.trim().toLocaleLowerCase('sv-SE') === b.trim().toLocaleLowerCase('sv-SE');
+
+  // Läser upp första meningen i boken där ordet står, med det nya uttalet
+  const sayWord = async (key: string, word: string, sayAs: string) => {
+    if (!bookId || !word.trim()) return;
+    setPronError('');
+    setSayingKey(key);
+    setHeard(null);
+    try {
+      const res = await fetch('/api/audio/say', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId, word: word.trim(), sayAs: sayAs.trim() || word.trim(), voiceId, quality }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error || 'Kunde inte läsa upp ordet just nu');
+      }
+      const blob = await res.blob();
+      let sentence = '';
+      try { sentence = decodeURIComponent(res.headers.get('X-Sentence') || ''); } catch { sentence = ''; }
+      if (sayUrl.current) URL.revokeObjectURL(sayUrl.current);
+      sayUrl.current = URL.createObjectURL(blob);
+      setHeard({ key, sentence });
+      const player = sayRef.current;
+      if (player) {
+        player.src = sayUrl.current;
+        await player.play().catch(() => { /* webbläsaren kan kräva ett klick till */ });
+      }
+    } catch (err) {
+      setPronError(err instanceof Error ? err.message : 'Kunde inte läsa upp ordet just nu');
+    } finally {
+      setSayingKey(null);
+    }
+  };
+
+  // Hela listan skickas varje gång och ersätter den gamla
+  const saveRules = async (next: PronunciationRule[]): Promise<boolean> => {
+    if (!bookId) return false;
+    setPronSaving(true);
+    setPronError('');
+    setPronSaved(false);
+    try {
+      const res = await fetch('/api/audio/pronunciations', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId, rules: next }),
+      });
+      const data = await res.json().catch(() => null) as { rules?: PronunciationRule[]; usage?: PronunciationUsage[]; error?: string } | null;
+      if (!res.ok || !data) throw new Error(data?.error || 'Uttalslistan kunde inte sparas');
+      setRules(data.rules || []);
+      setUsage(data.usage || []);
+      setPronSaved(true);
+      // Kapitel som läses med det gamla uttalet märks som ändrade
+      await loadAudiobook().catch(() => null);
+      return true;
+    } catch (err) {
+      setPronError(err instanceof Error ? err.message : 'Uttalslistan kunde inte sparas');
+      return false;
+    } finally {
+      setPronSaving(false);
+    }
+  };
+
+  const addRule = async () => {
+    const word = newWord.trim();
+    const sayAs = newSayAs.trim();
+    if (!word || !sayAs) {
+      setPronError('Skriv både ordet och hur det ska låta.');
+      return;
+    }
+    if (word === sayAs) {
+      setPronError('Skriv ordet på ett annat sätt, så som det ska låta.');
+      return;
+    }
+    // Samma ord igen ersätter den gamla regeln
+    const ok = await saveRules([...rules.filter(r => !sameWord(r.word, word)), { word, sayAs }]);
+    if (ok) {
+      setNewWord('');
+      setNewSayAs('');
+      if (heard?.key === 'ny') setHeard(null);
+    }
+  };
+
+  const removeRule = (word: string) => {
+    if (heard?.key === word) setHeard(null);
+    void saveRules(rules.filter(r => !sameWord(r.word, word)));
+  };
+
+  const editRule = (rule: PronunciationRule) => {
+    setNewWord(rule.word);
+    setNewSayAs(rule.sayAs);
+    setPronError('');
+  };
+
+  const usageFor = (word: string) => usage.find(u => sameWord(u.word, word))?.chapters;
+
   // ── Delar att spela: den färdiga ljudboken, annars det jobbet hunnit läsa in ──
   const liveParts: AudioPart[] = (job?.items || [])
     .filter(i => i.status === 'done' && i.imageUrl)
@@ -382,6 +525,9 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const credits = (characters: number) => (quality === 'economy' ? Math.round(characters / 2) : characters);
 
   const doneChapters = chapters.filter(c => c.url);
+  // Inlästa kapitel där texten eller uttalet ändrats sedan inläsningen
+  const staleChapters = doneChapters.filter(c => c.stale);
+  const staleCharacters = staleChapters.reduce((n, c) => n + c.characters, 0);
   const leftChapters = chapters.filter(c => !c.url);
   const leftCharacters = leftChapters.reduce((n, c) => n + c.characters, 0);
   const leftSeconds = leftChapters.reduce((n, c) => n + c.seconds, 0);
@@ -389,6 +535,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const selectedChapters = chapters.filter(c => selected.includes(c.index));
   const selectedCharacters = selectedChapters.reduce((n, c) => n + c.characters, 0);
   const showChapters = Boolean(canCreate && bookId) && chapters.length > 0;
+  const showPronunciation = Boolean(canCreate && bookId);
   // Röst och läge behövs så länge det finns något kvar att läsa in
   const showSetup = !running && !allRead;
   const settingsOpen = parts.length === 0 || showVoice;
@@ -411,6 +558,19 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     autoPlay.current = false;
     el.play().catch(() => { /* webbläsaren kan kräva ett klick - spelaren står redo */ });
   }, [partIndex, current?.url]);
+
+  // Läser om de inlästa kapitel som inte längre stämmer med texten eller uttalet
+  const rereadStaleButton = (
+    <button
+      onClick={() => startJob(staleChapters.map(c => c.index))}
+      disabled={running || starting || staleChapters.length === 0}
+      className="btn-action !py-2 !text-sm shrink-0"
+      title={`Cirka ${thousands(credits(staleCharacters))} krediter`}
+    >
+      {starting ? <span className="spinner !w-4 !h-4" /> : <Icon name="refresh" size={17} />}
+      Läs om ändrade kapitel ({staleChapters.length})
+    </button>
+  );
 
   const onPartEnded = () => {
     if (partIndex + 1 < parts.length) selectPart(partIndex + 1);
@@ -559,10 +719,20 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
             <h4 className="text-sm font-semibold text-ink">Kapitel</h4>
             <p className="text-xs text-ink/50 shrink-0">{doneChapters.length} av {chapters.length} inlästa</p>
           </div>
+          {staleChapters.length > 0 && !running && (
+            <div className="mt-2 note-warning flex flex-col gap-2 sm:flex-row sm:items-center">
+              <p className="flex-1 text-sm">
+                {staleChapters.length === 1 ? 'Ett inläst kapitel' : `${staleChapters.length} inlästa kapitel`} stämmer inte längre med texten eller uttalet.
+              </p>
+              {rereadStaleButton}
+            </div>
+          )}
           <ul className="mt-2 divide-y divide-line rounded-2xl border border-line overflow-hidden bg-white">
             {chapters.map(chapter => {
               const read = Boolean(chapter.url);
-              const inQueue = running && !read && (jobChapters.length === 0 || jobChapters.includes(chapter.index));
+              // Hela boken läser bara in det som saknas, valda kapitel läses in eller om
+              const inQueue = running && (jobChapters.length === 0 ? !read : jobChapters.includes(chapter.index));
+              const stale = read && Boolean(chapter.stale);
               return (
                 <li key={chapter.index} className="flex items-center gap-2.5 px-3 py-2.5">
                   <input
@@ -577,8 +747,13 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                     <p className="text-sm font-medium text-ink truncate">{chapter.label}</p>
                     <p className="text-[11px] text-ink/45 tabular-nums">
                       {clock(chapter.seconds)} · {thousands(chapter.characters)} tecken
-                      {read ? ' · Inläst' : inQueue ? ' · Läses in' : ''}
+                      {inQueue ? ' · Läses in' : read ? ' · Inläst' : ''}
                     </p>
+                    {stale && !inQueue && (
+                      <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                        <Icon name="error" size={13} /> Texten eller uttalet har ändrats
+                      </p>
+                    )}
                   </div>
                   {read ? (
                     <>
@@ -593,7 +768,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                       <button
                         onClick={() => startJob([chapter.index])}
                         disabled={running || starting}
-                        className="btn-icon shrink-0 disabled:opacity-40"
+                        className={`btn-icon shrink-0 disabled:opacity-40 ${stale ? 'text-amber-700' : ''}`}
                         title={`Läs om ${chapter.label}`}
                         aria-label={`Läs om ${chapter.label}`}
                       >
@@ -625,6 +800,168 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
               <span className="text-xs text-ink/55">
                 cirka {thousands(credits(selectedCharacters))} krediter
               </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Rätta uttal: ord som rösten säger konstigt ─── */}
+      {showPronunciation && (
+        <div className="mt-5 rounded-2xl border border-line bg-white">
+          <button
+            onClick={() => setPronOpen(o => !o)}
+            aria-expanded={pronOpen}
+            aria-controls="ratta-uttal"
+            className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left"
+          >
+            <Icon name="record_voice_over" size={20} className="text-ink/55 shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-ink">Rätta uttal</span>
+              <span className="block text-xs text-ink/50">
+                {rules.length === 0 ? 'Säger rösten ett ord konstigt? Rätta det här.' : `${rules.length} ord med eget uttal`}
+              </span>
+            </span>
+            <Icon name={pronOpen ? 'expand_less' : 'expand_more'} size={22} className="text-ink/45 shrink-0" />
+          </button>
+
+          {pronOpen && (
+            <div id="ratta-uttal" className="border-t border-line px-3.5 pb-4 pt-3 space-y-4">
+              <p className="text-sm text-ink/65 leading-relaxed">
+                Säger rösten ett ord konstigt? Skriv ordet och hur det ska låta, t.ex. <span className="font-medium text-ink">Gunbritt</span> → <span className="font-medium text-ink">Gunn-britt</span>. Det gäller hela boken, även med stor bokstav och genitiv-s.
+              </p>
+
+              {/* Befintliga regler */}
+              {rules.length > 0 && (
+                <ul className="divide-y divide-line rounded-2xl border border-line overflow-hidden">
+                  {rules.map(rule => {
+                    const found = usageFor(rule.word);
+                    const saying = sayingKey === rule.word;
+                    return (
+                      <li key={rule.word} className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                          <div className="min-w-0 flex-1 basis-40">
+                            <p className="text-sm text-ink break-words">
+                              <span className="font-semibold">{rule.word}</span>
+                              <span className="text-ink/40"> → </span>
+                              <span>{rule.sayAs}</span>
+                            </p>
+                            <p
+                              className={`text-[11px] ${found && found.length === 0 ? 'text-amber-700' : 'text-ink/45'}`}
+                              title={found?.map(c => c.label).join(', ') || undefined}
+                            >
+                              {!found ? '' : found.length === 0 ? 'Ordet finns inte i boken' : `i ${found.length} kapitel`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => sayWord(rule.word, rule.word, rule.sayAs)}
+                              disabled={sayingKey !== null}
+                              className="btn-ghost !py-1.5 !px-2.5 !text-xs disabled:opacity-40"
+                            >
+                              {saying ? <span className="spinner !w-3.5 !h-3.5" /> : <Icon name="volume_up" size={15} />}
+                              Hör
+                            </button>
+                            <button
+                              onClick={() => editRule(rule)}
+                              disabled={pronSaving}
+                              className="btn-icon disabled:opacity-40"
+                              title={`Ändra ${rule.word}`}
+                              aria-label={`Ändra ${rule.word}`}
+                            >
+                              <Icon name="edit" size={18} />
+                            </button>
+                            <button
+                              onClick={() => removeRule(rule.word)}
+                              disabled={pronSaving}
+                              className="btn-icon disabled:opacity-40"
+                              title={`Ta bort ${rule.word}`}
+                              aria-label={`Ta bort ${rule.word}`}
+                            >
+                              <Icon name="delete" size={18} />
+                            </button>
+                          </div>
+                        </div>
+                        {heard?.key === rule.word && heard.sentence && (
+                          <p className="mt-1.5 text-xs text-ink/60 leading-relaxed">Läste: ”{heard.sentence}”</p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {/* Ny regel */}
+              <div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="block min-w-0">
+                    <span className="text-xs font-medium text-ink/55">Ordet i boken</span>
+                    <input
+                      value={newWord}
+                      onChange={e => setNewWord(e.target.value)}
+                      placeholder="Gunbritt"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="field !py-2 !text-sm mt-1"
+                    />
+                  </label>
+                  <label className="block min-w-0">
+                    <span className="text-xs font-medium text-ink/55">Säg som</span>
+                    <input
+                      value={newSayAs}
+                      onChange={e => setNewSayAs(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') void addRule(); }}
+                      placeholder="Gunn-britt"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="field !py-2 !text-sm mt-1"
+                    />
+                  </label>
+                </div>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => sayWord('ny', newWord, newSayAs)}
+                    disabled={!newWord.trim() || sayingKey !== null}
+                    className="btn-ghost !py-2 !text-sm disabled:opacity-40"
+                  >
+                    {sayingKey === 'ny' ? <span className="spinner !w-4 !h-4" /> : <Icon name="volume_up" size={17} />}
+                    {sayingKey === 'ny' ? 'Läser upp...' : 'Hör hur det låter'}
+                  </button>
+                  <button
+                    onClick={addRule}
+                    disabled={pronSaving || !newWord.trim() || !newSayAs.trim()}
+                    className="btn-action !py-2 !text-sm"
+                  >
+                    {pronSaving ? <span className="spinner !w-4 !h-4" /> : <Icon name="check" size={17} />}
+                    {pronSaving ? 'Sparar...' : 'Spara'}
+                  </button>
+                </div>
+                {heard?.key === 'ny' && heard.sentence && (
+                  <p className="mt-2 text-xs text-ink/60 leading-relaxed">Läste: ”{heard.sentence}”</p>
+                )}
+                <p className="mt-2 text-[11px] text-ink/45 leading-snug">
+                  Tips: bindestreck eller dubbla bokstäver brukar hjälpa (Plurrett), och du kan skriva ordet precis som det låter.
+                  {' '}Hör kostar bara den mening som läses upp.
+                </p>
+              </div>
+
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <audio ref={sayRef} className="hidden" />
+
+              {pronSaved && !pronError && (
+                staleChapters.length > 0 && !running ? (
+                  <div className="note-warning flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <p className="flex-1 text-sm">
+                      Sparat. {staleChapters.length === 1 ? 'Ett inläst kapitel' : `${staleChapters.length} inlästa kapitel`} läses fortfarande med det gamla uttalet.
+                    </p>
+                    {rereadStaleButton}
+                  </div>
+                ) : (
+                  <p className="note-success text-sm">Uttalslistan är sparad och används nästa gång boken läses in.</p>
+                )
+              )}
+              {pronError && <div className="note-error">{pronError}</div>}
             </div>
           )}
         </div>

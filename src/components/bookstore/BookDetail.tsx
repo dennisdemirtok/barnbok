@@ -22,9 +22,11 @@ interface Props {
   onOpenBook: (id: string) => void;
   onOpenCharacter: (character: PublicCharacter) => void;
   onDescription: (bookId: string, description: string) => void;
+  // Finns bara för den som får ändra boken: öppnar den för att rätta texten
+  onEdit?: () => Promise<void>;
 }
 
-export default function BookDetail({ details, likes, moreByAuthor, openingId, onBack, onOpenAuthor, onOpenBook, onOpenCharacter, onDescription }: Props) {
+export default function BookDetail({ details, likes, moreByAuthor, openingId, onBack, onOpenAuthor, onOpenBook, onOpenCharacter, onDescription, onEdit }: Props) {
   const { book, summary, characters } = details;
   const readerRef = useRef<HTMLDivElement>(null);
   const [description, setDescription] = useState(summary.description || '');
@@ -32,6 +34,8 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [editError, setEditError] = useState('');
   const [showPrint, setShowPrint] = useState<'print' | 'audio' | null>(null);
   // Ljudbokspanelen fälls ut under knappraden i stället för "kommer snart"-rutan
   const [showAudio, setShowAudio] = useState(false);
@@ -63,6 +67,18 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
       setDownloadError(err instanceof Error ? `Kunde inte skapa PDF: ${err.message}` : 'Kunde inte skapa PDF');
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const edit = async () => {
+    if (!onEdit) return;
+    setOpening(true);
+    setEditError('');
+    try {
+      await onEdit();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Boken kunde inte öppnas för redigering');
+      setOpening(false);
     }
   };
 
@@ -181,8 +197,15 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
               <button onClick={() => setShowPrint('print')} className="btn-ghost">
                 <Icon name="print" size={19} /> Beställ tryckt bok
               </button>
+              {onEdit && (
+                <button onClick={edit} disabled={opening} className="btn-ghost">
+                  {opening ? <span className="spinner !w-4 !h-4" /> : <Icon name="edit" size={19} />}
+                  {opening ? 'Öppnar boken...' : 'Redigera boken'}
+                </button>
+              )}
             </div>
             {downloadError && <div className="note-error mt-3">{downloadError}</div>}
+            {editError && <div className="note-error mt-3">{editError}</div>}
 
             {showAudio && (
               <div ref={audioRef} className="mt-5 scroll-mt-6">

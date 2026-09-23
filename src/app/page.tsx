@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BookProject, Character, Spread, BookFormat } from '@/lib/types';
 import { saveBook, loadBook } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
+import { loadBookFromCloud } from '@/lib/supabase-db';
 import BookLibrary from '@/components/BookLibrary';
 import BookImporter, { EMPTY_DRAFT, ImportMode, ManuscriptDraft } from '@/components/BookImporter';
 import CharacterStudio from '@/components/CharacterStudio';
@@ -32,6 +33,8 @@ export default function Home() {
   const [showRefManager, setShowRefManager] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [sharedBookId, setSharedBookId] = useState<string | null>(null);
+  // Bok som öppnats från bokhandeln för att rättas - "Tillbaka" går då till bokens sida där
+  const [bookstoreEditId, setBookstoreEditId] = useState<string | null>(null);
   const { user, signOut, loading: authLoading } = useAuth();
 
   // Referensdatabasen är ett internt verktyg. Visas för e-postadresser i
@@ -103,6 +106,7 @@ export default function Home() {
   const handleLoadBook = (loadedBook: BookProject) => {
     setBook(loadedBook);
     setIsClonedBook(false);
+    setBookstoreEditId(null);
     // Go to the appropriate step based on book status
     switch (loadedBook.status) {
       case 'importing':
@@ -196,6 +200,7 @@ export default function Home() {
   const handleNewBook = () => {
     setBook(null);
     setIsClonedBook(false);
+    setBookstoreEditId(null);
     // Reset all import state for a fresh start
     setImportDraft(EMPTY_DRAFT);
     setImportMode('choose');
@@ -234,7 +239,27 @@ export default function Home() {
   const handleBackToLibrary = () => {
     setBook(null);
     setIsClonedBook(false);
+    setBookstoreEditId(null);
     setStep('library');
+  };
+
+  // "Redigera boken" i bokhandeln: hämta boken ur molnet och öppna den i granskningssteget
+  const handleEditFromBookstore = async (bookId: string) => {
+    const loaded = await loadBookFromCloud(bookId);
+    if (!loaded) throw new Error('Boken kunde inte hämtas från molnet. Försök igen om en stund.');
+    // Delningslänken hör till bokhandelns sida, inte till redigeringen
+    try { window.history.replaceState(null, '', window.location.pathname); } catch { /* ignoreras */ }
+    handleLoadBook({ ...loaded, status: loaded.status === 'done' ? 'done' : 'reviewing' });
+    setBookstoreEditId(bookId);
+  };
+
+  // Tillbaka till bokens sida i bokhandeln, som läser in den rättade boken från molnet
+  const handleBackToBookstore = () => {
+    const id = bookstoreEditId;
+    setBook(null);
+    setBookstoreEditId(null);
+    setSharedBookId(id);
+    setStep('bookstore');
   };
 
   const steps: { key: Step; label: string; icon: string }[] = [
@@ -343,6 +368,8 @@ export default function Home() {
           <Bookstore
             onBack={() => setStep('library')}
             initialBookId={sharedBookId || undefined}
+            isAdmin={isAdmin}
+            onEditBook={handleEditFromBookstore}
           />
         )}
 
@@ -421,7 +448,8 @@ export default function Home() {
             book={book}
             onUpdateSpread={handleUpdateSpread}
             onSaveBook={handleSaveBook}
-            onBack={() => setStep('generate')}
+            onBack={bookstoreEditId ? handleBackToBookstore : () => setStep('generate')}
+            fromBookstore={!!bookstoreEditId}
           />
         )}
       </div>

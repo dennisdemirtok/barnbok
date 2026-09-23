@@ -17,6 +17,10 @@ interface Props {
   onBack: () => void;
   // Bok-id från en delningslänk (/?bok=<id>) - öppnas direkt på bokens sida
   initialBookId?: string;
+  // Admin får rätta alla böcker
+  isAdmin?: boolean;
+  // Öppnar boken i granskningssteget för att rättas (kastar ett fel om det inte går)
+  onEditBook?: (bookId: string) => Promise<void>;
 }
 
 type SortKey = 'nyast' | 'gillade' | 'titel';
@@ -27,7 +31,7 @@ type View =
   | { kind: 'author'; userId: string; name: string }
   | { kind: 'character'; character: PublicCharacter; bookId: string; bookTitle: string };
 
-export default function Bookstore({ onBack, initialBookId }: Props) {
+export default function Bookstore({ onBack, initialBookId, isAdmin = false, onEditBook }: Props) {
   const { user } = useAuth();
   const [books, setBooks] = useState<PublicBookSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,6 +192,8 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
     const { details } = view;
     const authorId = details.summary.userId;
     const moreByAuthor = authorId ? books.filter(b => b.userId === authorId && b.id !== details.book.id) : [];
+    // Får ändra: skaparen, admin, eller alla när boken saknar ägare (testläget)
+    const canEdit = !!onEditBook && (isAdmin || !authorId || authorId === user?.id);
     return (
       <>
         {openError && <div className="note-error mb-4">{openError}</div>}
@@ -202,6 +208,7 @@ export default function Bookstore({ onBack, initialBookId }: Props) {
           onOpenBook={openBook}
           onOpenCharacter={c => openCharacter(c, details.book.id, details.book.title)}
           onDescription={handleDescription}
+          onEdit={canEdit && onEditBook ? () => onEditBook(details.book.id) : undefined}
         />
         {likeToast}
       </>
