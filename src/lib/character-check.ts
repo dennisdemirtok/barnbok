@@ -8,7 +8,8 @@ import {
   SpreadQualityCheck,
   QualityIssueCategory,
 } from './types';
-import { generatePageImage, resolveIllustrationShape, textInImage, PageImageOptions } from './gemini';
+import { generatePageImage, resolveIllustrationShape, textInImage, PageImageOptions, isMonochromeStyle } from './gemini';
+import { picturedCharacters, mentionsCharacter as sceneMentions, isGroupCharacter } from './scene-characters';
 import { textSideForSpread } from './styles';
 import { describeLettering, letteringCaps, scriptPanelCount } from './comic';
 
@@ -131,31 +132,15 @@ RESPOND WITH ONLY THE JSON, no other text.`;
 //  Granskning av en sidbild mot scenens inställningar
 // ═══════════════════════════════════════════
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Helordsmatchning (Unicode) - "Bo" ska inte träffa "book", men "Otis's" ska träffa "Otis"
-function mentionsTerm(text: string, term: string): boolean {
-  const t = term.trim();
-  if (t.length < 2) return false;
-  return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(t)}s?($|[^\\p{L}\\p{N}])`, 'iu').test(text);
-}
-
-function mentionsCharacter(text: string, char: Character): boolean {
-  const terms = [char.name, ...char.name.split(/\s+/), char.heroName || ''];
-  return terms.some(term => mentionsTerm(text, term));
-}
-
 // Vilka figurer ska synas? Namn i bildprompten = krävs. Namn bara i berättartexten = får synas.
 export function expectedCharactersForSpread(spread: Spread, characters: Character[]): {
   required: Character[];
   optional: Character[];
 } {
-  const promptText = spread.imagePrompt || '';
+  // Samma regel som bildmotorn: bildbeskrivningen avgör vem som ska synas
   const storyText = (spread.textBlocks || []).map(tb => tb.text).join(' ');
-  const required = characters.filter(c => mentionsCharacter(promptText, c));
-  const optional = characters.filter(c => !required.includes(c) && mentionsCharacter(storyText, c));
+  const required = picturedCharacters(spread.imagePrompt || '', characters);
+  const optional = characters.filter(c => !required.includes(c) && sceneMentions(storyText, c, characters));
   return { required, optional };
 }
 
@@ -164,6 +149,7 @@ export interface ReviewContext {
   characters: Character[];
   bookFormat?: BookFormat;
   shape?: IllustrationShape;
+  styleGuide?: string;
 }
 
 export interface ReviewIssue {
@@ -273,7 +259,8 @@ function describeCharacter(c: Character, hasReference: boolean): string {
     c.normalClothes ? `normal clothes: ${c.normalClothes}` : '',
     c.heroCostume ? `hero costume: ${c.heroCostume}` : '',
   ].filter(Boolean).join('; ');
-  return `- ${c.name}${c.heroName ? ` (hero name: ${c.heroName})` : ''} - ${details} [${hasReference ? 'reference sheet attached' : 'no reference sheet'}]`;
+  const group = isGroupCharacter(c) ? ' [this entry is TWO people (e.g. twins) - two figures is correct, not a duplicate]' : '';
+  return `- ${c.name}${c.heroName ? ` (hero name: ${c.heroName})` : ''} - ${details} [${hasReference ? 'reference sheet attached' : 'no reference sheet'}]${group}`;
 }
 
 function buildReviewPrompt(ctx: ReviewContext, required: Character[], optional: Character[], withRef: Set<Character>): string {
@@ -355,7 +342,9 @@ Major unwanted_text: English text, empty speech bubbles or empty text boxes, inv
 
   return `You are the art director doing final quality control of one illustration for a printed Swedish children's book. Compare the IMAGE TO REVIEW with the brief below and with the attached character reference sheets. Be precise and concrete, report only problems you can actually see, and do not invent problems. Stylization dictated by the art style (simplified hands, big heads, etc.) is NOT an error.
 
-FORMAT: ${formatLine}
+FORMAT: ${formatLine}${isMonochromeStyle(ctx.styleGuide || '') ? `
+
+ART STYLE: black ink on white paper, NO color by design. Missing color is never an issue. Judge hair and clothes only by shape and by light versus dark (a "dark brown" hair may be solid black, hatched or left white as line art - all fine). Colored areas in the image are a style error -> minor.` : ''}
 
 BRIEF - IMAGE DESCRIPTION THE ILLUSTRATOR RECEIVED:
 """
@@ -379,7 +368,7 @@ CHECKLIST:
 2. MISSING: a character that should be visible but is not -> major missing_character.
 3. DUPLICATES: the same character drawn twice or more in one ${scene} -> major duplicate_character. Books often have twins, siblings or classmates who are SUPPOSED to look alike: two similar-looking children are only a duplicate if the brief names one character there; when the brief names two different characters who resemble each other, that is correct, not a duplicate.${isComic ? ' The same character in DIFFERENT panels (also normal clothes vs hero costume in different panels) is normal comic storytelling - not an issue.' : ''} Unexplained twin/clone figures, or unnamed figures that look like a copy of a book character -> major extra_figure. Background extras that the brief calls for are fine.
 4. IDENTITY (most important): the reference sheet decides who the character IS. Compare the FACE feature by feature: face shape, eye shape and color, eyebrows, nose, mouth/teeth (e.g. buck teeth), freckles, moles or dimples, ears, hairline, hair color and hairstyle, skin tone, apparent age and body proportions. If the face reads as a different child/person - even when the hair and clothes are right - that is major wrong_appearance with a correction naming the exact features to restore (e.g. "Otis must have the round face, big green eyes, freckles across the nose and two front buck teeth from his reference sheet"). A slightly different expression or angle is fine.
-5. CLOTHES: the reference sheets contain labels and color swatches - those are not part of the character. Clothes MAY change when the scene motivates it (pajamas in bed, a jacket outdoors, swimwear, the hero costume) - that is never an error as long as the face and hair are the same person. Unmotivated different clothes -> minor; clothes that contradict the brief -> major wrong_appearance. Wrong species or clearly wrong age/size -> major wrong_appearance. Small shade or accessory differences -> minor.
+5. CLOTHES: the reference sheets contain labels and color swatches - those are not part of the character. Clothes MAY change when the scene motivates it (pajamas in bed, a jacket outdoors, swimwear, the hero costume) - that is never an error as long as the face and hair are the same person. Different clothes are ALWAYS minor wrong_appearance (a reader barely notices a sweater), unless the brief makes the garment the point of the scene (a costume reveal, the yellow raincoat everyone recognizes her by) -> then major. Wrong species or clearly wrong age/size -> major wrong_appearance. Small shade or accessory differences -> minor.
 6. SCENE ELEMENTS: identify the few elements the brief makes essential to this moment (the action, important props, animals, places, time of day). An essential element missing or clearly wrong -> major missing_element. A missing background detail -> minor.
 7. TEXT: apply TEXT RULES.
 8. ANATOMY: clearly visible extra or missing fingers, extra/missing limbs, fused or merged bodies, two heads, badly broken faces -> major anatomy.
@@ -396,6 +385,11 @@ For each issue:
 score: 0-100 overall quality against the brief (95-100 flawless, 80-94 only minor issues, below 70 when there is any major issue).
 problems_sv: very short Swedish past-tense summary of the MAJOR problems only (max 12 words, no trailing period, e.g. "Allie saknades, Otis ritades två gånger"), or "" if there are none.`;
 }
+
+// Fel som är värda en ny bild automatiskt
+const RETRY_CATEGORIES = new Set<QualityIssueCategory>([
+  'missing_character', 'duplicate_character', 'wrong_appearance', 'anatomy', 'unwanted_text', 'cropped_character',
+]);
 
 function normalizeReview(raw: RawReview, required: Character[], optional: Character[], isComic: boolean, model: string): ImageReview {
   const issues: ReviewIssue[] = (raw.issues || []).map(i => ({
@@ -447,7 +441,8 @@ function normalizeReview(raw: RawReview, required: Character[], optional: Charac
       });
       problemsExtra.push(`${c.name} såg ut som en annan person`);
     }
-    if (entry.max_count_in_one_scene > 1 && !hasIssue('duplicate_character', c.name)) {
+    const allowedCount = isGroupCharacter(c) ? 2 : 1;
+    if (entry.max_count_in_one_scene > allowedCount && !hasIssue('duplicate_character', c.name)) {
       issues.push({
         category: 'duplicate_character',
         character: c.name,
@@ -459,6 +454,18 @@ function normalizeReview(raw: RawReview, required: Character[], optional: Charac
     }
   }
 
+  // Tvåpersonersposter som modellen ändå kallat dubblett räknas inte
+  for (const issue of issues) {
+    const group = [...required, ...optional].find(c => isGroupCharacter(c) && issue.character && c.name.toLowerCase() === issue.character.toLowerCase());
+    if (group && issue.category === 'duplicate_character') issue.severity = 'minor';
+  }
+  // Allvarligt = något en läsare direkt ser är fel med bokens personer eller
+  // bilden i sig. Saknad rekvisita, extra statister, klädnyanser och
+  // kompositionsdetaljer blir anteckningar i stället - de kostar en ny bild
+  // men gör sällan boken sämre, och författaren kan själv välja att göra om.
+  for (const issue of issues) {
+    if (issue.severity === 'major' && !RETRY_CATEGORIES.has(issue.category)) issue.severity = 'minor';
+  }
   const majors = issues.filter(i => i.severity === 'major');
   const passed = majors.length === 0;
   const rawScore = typeof raw.score === 'number' ? raw.score : passed ? 80 : 50;
@@ -655,7 +662,7 @@ export async function generatePageWithQualityCheck(
   const startedAt = Date.now();
   const deadline = loop.deadline ?? startedAt + DEFAULT_QUALITY_BUDGET_MS;
   const maxAttempts = Math.min(MAX_QUALITY_ATTEMPTS, Math.max(1, loop.maxAttempts ?? MAX_QUALITY_ATTEMPTS));
-  const ctx: ReviewContext = { spread, characters, bookFormat, shape: options.shape };
+  const ctx: ReviewContext = { spread, characters, bookFormat, shape: options.shape, styleGuide };
   const label = `Uppslag ${spread.pages}`;
 
   const attempts: Attempt[] = [];
@@ -753,7 +760,7 @@ export async function generatePageWithQualityCheck(
     passed: check.passed,
     summary,
     autoFixed,
-    issues: check.issues.map(i => ({ character: i.character, issue: i.issue, severity: i.severity, category: i.category })),
+    issues: check.issues.map(i => ({ character: i.character, issue: i.issue, severity: i.severity, category: i.category, correction: i.correction })),
     attempts: totalAttempts,
     score: best.review?.score,
     reviewed: !!best.review,

@@ -43,6 +43,8 @@ function mergeItem(spread: Spread, item: JobItem): Spread {
 
   if (item.status === 'done' && item.imageUrl) {
     if (current.imageUrl === item.imageUrl && spread.status === 'done') return spread;
+    // Bilden har gjorts om här efter jobbet - den nya bilden får inte bytas tillbaka
+    if (spread.generatedImage && spread.status === 'done') return spread;
     return {
       ...spread,
       imageUrl: item.imageUrl,
@@ -248,7 +250,14 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
   };
 
   // Enstaka omgenerering görs direkt mot bildmotorn - den är snabb nog att vänta på
-  const retrySingle = async (spreadId: string) => {
+  // Behåll bilden som den är - anteckningen försvinner
+  const keepImage = (spreadId: string) => {
+    setSpreads(prev => prev.map(s =>
+      s.id === spreadId && s.qualityCheck ? { ...s, qualityCheck: { ...s.qualityCheck, accepted: true } } : s
+    ));
+  };
+
+  const retrySingle = async (spreadId: string, fixInstructions?: string) => {
     const spread = spreads.find(s => s.id === spreadId);
     if (!spread) return;
 
@@ -268,6 +277,8 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
           bookFormat: book.bookFormat,
           illustrationShape: book.illustrationShape,
           isRegenerate: true,
+          // Med en rättelse görs en enda ny bild enligt den - utan ny granskningsloop
+          ...(fixInstructions ? { customInstructions: fixInstructions } : {}),
         }),
       });
 
@@ -286,7 +297,8 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               imageUrl: undefined,
               status: 'done' as const,
               error: undefined,
-              qualityCheck,
+              // En rättad bild har författaren själv beställt - ingen ny anteckning
+              qualityCheck: fixInstructions ? undefined : qualityCheck,
             } as Spread
           : s
       ));
@@ -494,7 +506,12 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                   <p className="text-xs text-ink/55 mt-1">{spread.chapter}</p>
                 )}
                 {spread.status === 'done' && spread.qualityCheck && (
-                  <QualityNote check={spread.qualityCheck} />
+                  <QualityNote
+                    check={spread.qualityCheck}
+                    busy={isBusy}
+                    onRedo={fix => retrySingle(spread.id, fix)}
+                    onKeep={() => keepImage(spread.id)}
+                  />
                 )}
               </div>
             </div>
@@ -506,22 +523,49 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
 }
 
 // Resultatet av den automatiska granskningen: godkänd, rättad eller behöver ses över
-function QualityNote({ check }: { check: SpreadQualityCheck }) {
-  const unreviewed = check.reviewed === false;
-  const tone = unreviewed ? 'text-ink/45' : check.passed ? 'text-emerald-700' : 'text-amber-700';
-  const icon = unreviewed ? 'help' : check.passed ? 'verified' : 'report';
-  const majors = (check.issues ?? []).filter(i => i.severity === 'major');
+// Fel som är värda att visa. Äldre granskningar kunde kalla småsaker (saknad
+// rekvisita, en statist i bakgrunden) för allvarliga - de visas inte längre.
+const WORTH_A_LOOK = new Set(['missing_character', 'duplicate_character', 'wrong_appearance', 'anatomy', 'unwanted_text', 'cropped_character']);
+
+// Visas bara när det finns något värt att titta på - och då går det att göra något åt
+function QualityNote({ check, busy, onRedo, onKeep }: {
+  check: SpreadQualityCheck;
+  busy: boolean;
+  onRedo: (fix: string) => void;
+  onKeep: () => void;
+}) {
+  if (check.accepted || check.reviewed === false || check.passed) return null;
+  const notes = (check.issues ?? []).filter(i => i.severity === 'major' && (!i.category || WORTH_A_LOOK.has(i.category)));
+  if (notes.length === 0) return null;
+
+  const fix = notes
+    .map(i => i.correction || `Rätta detta: ${i.issue}`)
+    .join('\n');
+
   return (
-    <div className={`text-xs mt-1.5 ${tone}`}>
-      <p className="flex items-start gap-1">
-        <Icon name={icon} filled size={14} className="mt-px shrink-0" />
-        <span>{unreviewed ? 'Kunde inte granskas automatiskt – titta på bilden' : check.summary}</span>
+    <div className="mt-2 rounded-2xl border border-amber-200/80 bg-amber-50/70 p-2.5">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+        <Icon name="visibility" size={14} className="shrink-0" /> Värt att kolla
       </p>
-      {!check.passed && !unreviewed && majors.length > 0 && (
-        <ul className="mt-1 ml-5 list-disc text-ink/55 space-y-0.5">
-          {majors.slice(0, 3).map((i, n) => <li key={n}>{i.issue}</li>)}
-        </ul>
-      )}
+      <p className="mt-0.5 text-xs leading-snug text-ink/70">
+        {notes[0].issue}
+        {notes.length > 1 && <span className="text-ink/45"> och {notes.length - 1} sak till</span>}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button
+          onClick={() => onRedo(fix)}
+          disabled={busy}
+          className="inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          <Icon name="refresh" size={14} /> Gör om bilden
+        </button>
+        <button
+          onClick={onKeep}
+          className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-ink/70 transition-colors hover:border-ink/25"
+        >
+          <Icon name="check" size={14} /> Den är bra
+        </button>
+      </div>
     </div>
   );
 }

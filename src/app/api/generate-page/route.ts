@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { regeneratePageImage } from '@/lib/gemini';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from '@/lib/character-check';
 import { Character, Spread, BookFormat, IllustrationShape, SpreadQualityCheck } from '@/lib/types';
-
-// Den färdiga boken genereras i tryckupplösning
-const BOOK_IMAGE_SIZE = '2K' as const;
+import { imageSizeFor } from '@/lib/image-size';
 
 // Generera → granska → rätta (max 3 bilder + 3 granskningar per uppslag).
 // Loopen slutar starta nya försök vid DEFAULT_QUALITY_BUDGET_MS (250 s) så att svaret hinner ut.
@@ -48,14 +46,15 @@ async function handleSingle(body: {
   isRegenerate?: boolean;
 }, requestStart: number) {
   const { spread, characters, styleGuide, bookFormat, illustrationShape, customInstructions, isRegenerate } = body;
-  const options = { shape: illustrationShape, imageSize: BOOK_IMAGE_SIZE };
-
   if (!spread || !characters) {
     return NextResponse.json(
       { error: 'Siddata eller karaktärer saknas' },
       { status: 400 }
     );
   }
+
+  // Tryckupplösning efter hur stor bilden blir på sidan
+  const options = { shape: illustrationShape, imageSize: imageSizeFor(spread) };
 
   if (isRegenerate && customInstructions) {
     // Manual regeneration with user instructions - no auto-loop, the user is in control
@@ -87,7 +86,6 @@ async function handleBatch(body: {
   illustrationShape?: IllustrationShape;
 }, requestStart: number) {
   const { spreads, characters, styleGuide, bookFormat, illustrationShape } = body;
-  const options = { shape: illustrationShape, imageSize: BOOK_IMAGE_SIZE };
   const deadline = requestStart + DEFAULT_QUALITY_BUDGET_MS;
 
   if (!spreads || spreads.length === 0 || !characters) {
@@ -124,7 +122,7 @@ async function handleBatch(body: {
 
       try {
         const result = await generatePageWithQualityCheck(
-          spread, characters, styleGuide || '', bookFormat, options, { deadline }
+          spread, characters, styleGuide || '', bookFormat, { shape: illustrationShape, imageSize: imageSizeFor(spread) }, { deadline }
         );
         return {
           id: spread.id,

@@ -830,7 +830,20 @@ async function uploadSpreadImage(
   spreadId: string,
   base64Image: string
 ): Promise<{ url: string | null; error?: string }> {
-  return uploadImage(`books/${bookId}/${spreadId}.png`, base64Image);
+  // Namnet får ett fingeravtryck av bilden: en omgjord bild får en ny adress,
+  // annars kan webbläsare och CDN visa den gamla bilden i upp till en timme
+  return uploadImage(`books/${bookId}/${spreadId}-${quickHash(base64Image)}.png`, base64Image);
+}
+
+// Snabb, deterministisk kontrollsumma (FNV-1a) - bara för att skilja bilder åt
+function quickHash(text: string): string {
+  let h = 0x811c9dc5;
+  const step = Math.max(1, Math.floor(text.length / 20000));
+  for (let i = 0; i < text.length; i += step) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return ((h >>> 0).toString(36) + text.length.toString(36)).slice(0, 12);
 }
 
 // Laddar upp en base64-bild till bokbilderna och ger tillbaka den publika adressen

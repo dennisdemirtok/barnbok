@@ -431,7 +431,7 @@ ${splitLines}
    - label: kort svensk rubrik för scenen (t.ex. "Drömmen i skogen")
    - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick. Beskriv komposition, miljö, ljus och stämning. Skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder) så att figurerna blir likadana på alla bilder.
 
-Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget).`;
+Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget): lappar, kvitton, böcker och skyltar beskrivs utan läsbar text. Nämn bara de namngivna figurer som faktiskt ska synas på bilden.`;
 
   return withModelFallback(model, async (m) => {
     const stream = client.messages.stream({
@@ -542,7 +542,7 @@ ${numbered}
 ${options.title ? `Författarens titel: "${options.title}"` : 'Ingen titel angiven - föreslå en kort, lockande titel på svenska utifrån texten.'}
 
 UPPGIFT:
-1. KARAKTÄRER: Lista högst 8 figurer: huvudpersonerna och de bikaraktärer som är med i flera scener eller syns tydligt på bild. Namngivna statister som bara nämns i förbigående (grannar i en uppräkning, en kassörska, någon som omtalas) ska INTE listas - de ritas ändå utifrån bildprompten. Använd utseendet som står i texten; där det saknas, hitta på ett konkret och konsekvent utseende som passar (ålder, hår, ögon, kroppsbyggnad, kläder).
+1. KARAKTÄRER: Varje namngiven person är en egen post - slå aldrig ihop två personer (t.ex. tvillingar eller syskon) till en. Lista högst 8 figurer: huvudpersonerna och de bikaraktärer som är med i flera scener eller syns tydligt på bild. Namngivna statister som bara nämns i förbigående (grannar i en uppräkning, en kassörska, någon som omtalas) ska INTE listas - de ritas ändå utifrån bildprompten. Använd utseendet som står i texten; där det saknas, hitta på ett konkret och konsekvent utseende som passar (ålder, hår, ögon, kroppsbyggnad, kläder).
 2. OMSLAG: Bildprompt på ENGELSKA för framsidan som fångar bokens stämning och visar huvudkaraktärerna. Titeln ska stå som stor titeltext på svenska.
 3. UPPSLAG: Dela upp HELA manuset i ${options.minSpreads}-${options.maxSpreads} på varandra följande delar. Ange för varje del vilket stycke den börjar på (startParagraph). Första delen börjar på stycke 1 och delarna ska komma i stigande ordning.
 ${isChapterBook
@@ -552,7 +552,7 @@ ${mix ? `   - composition: vilken sorts bild delen får. Boken ska vara rörlig 
 ${compositionGuide(mix)}
 ` : ''}   - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick${mix ? ', skriven för den valda bildtypen (spot: bara figurerna och det de håller i, ingen miljö; panels: beskriv 3-4 rutor i ordning; round: ett centrerat motiv)' : ''}. Beskriv motiv, komposition, miljö, ljus och stämning, och skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder).
 
-Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget).`;
+Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget): lappar, kvitton, böcker och skyltar beskrivs utan läsbar text. Nämn bara de namngivna figurer som faktiskt ska synas på bilden.`;
 
   return withModelFallback(model, async (m) => {
     const stream = client.messages.stream({

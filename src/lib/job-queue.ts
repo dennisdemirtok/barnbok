@@ -6,6 +6,7 @@
 // Startar servern om mitt i tas påbörjade uppslag tillbaka efter tio minuter.
 import { serverSupabase, SERVER_IMAGES_BUCKET } from './supabase-server';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from './character-check';
+import { imageSizeFor } from './image-size';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
 import { applyPronunciations, estimateSeconds, isQuality, narrationSegments, synthesize, textStamp, TtsQuality } from './tts';
 import { loadPronunciations } from './pronunciations';
@@ -443,10 +444,11 @@ export async function runJob(jobId: string): Promise<void> {
             book.characters,
             book.styleGuide,
             book.bookFormat,
-            { shape: book.illustrationShape, imageSize: '2K' },
+            { shape: book.illustrationShape, imageSize: imageSizeFor(spread) },
             { deadline: Date.now() + ITEM_BUDGET_MS }
           ), ITEM_BUDGET_MS + 60_000, 'Uppslaget tog för lång tid');
-          const path = `books/${book.id}/${spread.id}.png`;
+          // Ny adress för varje ny bild, så att ingen cache visar en gammal version
+          const path = `books/${book.id}/${spread.id}-${Date.now().toString(36)}.png`;
           const url = await uploadPng(path, result.image);
           if (!url) throw new Error('Bilden kunde inte sparas i molnet');
           // Bilden hör till boken, inte bara till jobbet

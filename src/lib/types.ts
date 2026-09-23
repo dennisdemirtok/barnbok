@@ -87,10 +87,11 @@ export interface SpreadQualityCheck {
   passed: boolean;
   summary: string;
   autoFixed: boolean; // true if the delivered image came from an automatic correction attempt
-  issues?: { character: string; issue: string; severity: 'minor' | 'major'; category?: QualityIssueCategory }[];
+  issues?: { character: string; issue: string; severity: 'minor' | 'major'; category?: QualityIssueCategory; correction?: string }[];
   attempts?: number; // number of image generations used (1-3)
   score?: number; // reviewer score 0-100 for the delivered image
   reviewed?: boolean; // false if the reviewer could not run - the image is then unchecked
+  accepted?: boolean; // författaren har tittat och valt att behålla bilden som den är
 }
 
 export type QualityIssueCategory =

@@ -4,6 +4,7 @@ import { Character, Spread, BookFormat, IllustrationShape } from './types';
 import { textSideForSpread } from './styles';
 import { describeLettering, letteringCaps } from './comic';
 import { withReferenceImages } from './character-refs';
+import { picturedCharacters } from './scene-characters';
 
 const MODEL = 'gemini-3.1-flash-image-preview';
 
@@ -275,23 +276,11 @@ function getLayoutInstructions(bookFormat: BookFormat | undefined, shape: Illust
 }
 
 // Detect which characters from the list are mentioned in a spread's text/imagePrompt
-export function findCharactersInScene(spread: Spread, characters: Character[]): Character[] {
-  const allText = [
-    ...spread.textBlocks.map(tb => tb.text),
-    spread.imagePrompt,
-  ].join(' ').toLowerCase();
-
-  return characters.filter(char => {
-    // Check name (and parts of the name)
-    const nameParts = char.name.split(/\s+/);
-    for (const part of nameParts) {
-      if (part.length >= 2 && allText.includes(part.toLowerCase())) return true;
-    }
-    // Check hero name
-    if (char.heroName && allText.includes(char.heroName.toLowerCase())) return true;
-    return false;
-  });
+// Stilar som bara är svart tusch på vitt papper (dagbok m.fl.)
+export function isMonochromeStyle(styleGuide: string): boolean {
+  return /(black[- ]and[- ]white|pure black ink|no colou?r|monochrome|black ink only|svartvit)/i.test(styleGuide || '');
 }
+
 
 export async function generatePageImage(
   spread: Spread,
@@ -309,7 +298,8 @@ export async function generatePageImage(
   // Detect which characters are in this specific scene. Bilder som ligger i molnet hämtas hem.
   const withRefs = await withReferenceImages(characters);
   const approvedChars = withRefs.filter(c => c.referenceImage && c.approved);
-  const charsInScene = findCharactersInScene(spread, approvedChars);
+  // Bara figurerna som bildbeskrivningen nämner - inte alla som nämns i texten
+  const charsInScene = picturedCharacters(spread.imagePrompt, approvedChars);
   const mainCharsInScene = charsInScene.filter(c => c.role === 'main');
   const supportingCharsInScene = charsInScene.filter(c => c.role !== 'main');
 
@@ -326,23 +316,9 @@ export async function generatePageImage(
     });
   }
 
-  // Ett par figurer utanför scenen följer med för stilens skull. Fler än så gör
-  // bara anropet tungt och långsamt - en bok kan ha många namngivna figurer.
-  const charsNotInScene = approvedChars
-    .filter(c => !charsInScene.includes(c))
-    .sort((a, b) => (a.role === 'main' ? 0 : 1) - (b.role === 'main' ? 0 : 1))
-    .slice(0, Math.max(0, 3 - charsInScene.length));
-  for (const char of charsNotInScene) {
-    contents.push({
-      text: `Reference for character "${char.name}" (NOT in this scene, for style reference only). ${char.appearance}`,
-    });
-    contents.push({
-      inlineData: {
-        mimeType: 'image/png',
-        data: char.referenceImage!,
-      },
-    });
-  }
+  // Referensblad skickas bara för figurerna som är med. Blad för andra figurer
+  // "som stilreferens" fick modellen att rita in dem i bakgrunden - den vanligaste
+  // orsaken till att bilder underkändes och fick göras om.
 
   // Get format-specific instructions
   const isCover = spread.pages === 'omslag';
@@ -395,22 +371,25 @@ Every word on the image must be Swedish and come from the texts above. Do not ad
 DO NOT write any position labels, metadata, or page numbers. Only the actual story text should appear.`;
   } else {
     const storyText = spread.textBlocks.map(tb => tb.text).join('\n\n');
-    textSection = `STORY CONTEXT (for reference only - DO NOT put this text on the image):
+    textSection = `STORY CONTEXT (for mood only - DO NOT put this text on the image, and do NOT draw people or things that are mentioned only here; draw only what the IMAGE DESCRIPTION asks for):
 ${storyText}
 
-IMPORTANT: Do NOT include any text, letters, words, page numbers, or labels on the illustration. The text will be printed separately.`;
+NO TEXT IN THE PICTURE: no letters, words, numbers, page numbers, labels, speech bubbles or sound effects (no "CHOMP", "BANG" or similar) anywhere. The story text is printed separately. Anything that would normally carry writing - notes, notebooks, receipts, letters, books, signs, posters, screens, packaging, clocks - is drawn blank or with a few wavy lines that cannot be read as letters or digits.`;
   }
 
   // Build explicit character presence instructions
-  let characterPresenceSection = '';
+  const otherBookCharacters = approvedChars.filter(c => !charsInScene.includes(c)).map(c => c.name);
+  let characterPresenceSection = otherBookCharacters.length > 0 && !isCover
+    ? `\nNOT IN THIS PICTURE: ${otherBookCharacters.join(', ')}. Do not draw any of them, not even in the background.${charsInScene.length === 0 ? ' No named book character appears in this picture.' : ''}`
+    : '';
   if (charsInScene.length > 0) {
     const charList = charsInScene.map(c =>
       `- ${c.name}${c.heroName ? ` (${c.heroName})` : ''}: ${c.appearance.substring(0, 100)}`
     ).join('\n');
 
-    characterPresenceSection = `\nCHARACTERS THAT MUST BE VISIBLE IN THIS SCENE:
+    characterPresenceSection = `\nCHARACTERS THAT MUST BE VISIBLE IN THIS SCENE (and no other named book characters):
 ${charList}
-
+${otherBookCharacters.length > 0 ? `\nNOT IN THIS PICTURE: ${otherBookCharacters.join(', ')} - do not draw them, not even in the background. Unnamed extras only if the IMAGE DESCRIPTION asks for them.\n` : ''}
 CRITICAL: There are exactly ${charsInScene.length} character(s) in this scene. Each character must appear EXACTLY ONCE${perPanel ? ' PER PANEL' : ''}.
 ${perPanel ? `IMPORTANT: Within each panel, draw every character at most once.${comicPage ? ' Showing a character in several panels is normal comic storytelling.' : ''}` : 'IMPORTANT: Do NOT draw any character more than once. Each person appears only ONE time in the illustration.'}
 ${mainCharsInScene.length > 1 ? `There are ${mainCharsInScene.length} main characters in this scene - make sure ALL of them are clearly visible and recognizable, but each drawn only ONCE.` : ''}
@@ -430,11 +409,17 @@ ${supportingCharsInScene.length > 0 ? `Supporting characters: ${supportingCharsI
     ? 'a single book page (portrait, 16cm x 21cm)'
     : `a ${composition === 'band' ? 'wide band' : composition === 'panels' ? 'comic panel' : composition === 'round' ? 'round vignette' : 'spot'} illustration for a chapter book page (${aspectRatio})`;
 
+  // Svartvita stilar: färgord i beskrivningar gäller ljus/mörk ton, inte färg
+  const monochrome = isMonochromeStyle(styleGuide);
+  const monochromeRule = monochrome
+    ? `\n\nBLACK AND WHITE ONLY: this book is drawn in black ink on white paper. Use no color at all, not even for hair, clothes or small details. Where a description names a color, show it only as light or dark: light colors stay white, dark colors (black, dark brown, navy) become solid black or dense hatching.`
+    : '';
+
   // Add the main prompt
   const mainPrompt = `Generate an illustration for ${imageSize}.
 
 STYLE GUIDE (this defines the entire look - rendering, line, color AND how faces and bodies are drawn):
-${styleGuide}
+${styleGuide}${monochromeRule}
 
 ${formatInstructions}
 
