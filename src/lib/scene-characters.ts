@@ -30,11 +30,13 @@ function mentions(text: string, term: string): boolean {
 // Namndelar som bara pekar ut just den här figuren
 function distinctiveParts(char: Character, all: Character[]): string[] {
   const others = all.filter(c => c !== char);
-  return char.name
-    .split(/[\s\-–]+/)
-    .map(p => p.trim())
-    .filter(p => p.length >= 3 && !GENERIC.has(p.toLowerCase()))
-    .filter(p => !others.some(o => o.name.split(/[\s\-–]+/).some(q => q.toLowerCase() === p.toLowerCase())));
+  const parts = char.name.split(/[\s\-–]+/).map(p => p.trim()).filter(p => p.length >= 3);
+  const unique = (p: string) => !others.some(o => o.name.split(/[\s\-–]+/).some(q => q.toLowerCase() === p.toLowerCase()));
+  const named = parts.filter(p => !GENERIC.has(p.toLowerCase()) && unique(p));
+  if (named.length > 0) return named;
+  // "Pappa Palmkvist": inget eget förnamn, och efternamnet delas med familjen.
+  // Då får släktordet peka ut honom - så länge ingen annan figur bär det.
+  return parts.filter(p => GENERIC.has(p.toLowerCase()) && p.toLowerCase() !== 'och' && unique(p));
 }
 
 export function mentionsCharacter(text: string, char: Character, all: Character[]): boolean {
