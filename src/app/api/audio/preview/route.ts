@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { hasTtsKey, previewText, synthesize, estimateSeconds, isQuality, TtsQuality } from '@/lib/tts';
+import { applyPronunciations, hasTtsKey, previewText, synthesize, estimateSeconds, isQuality, TtsQuality } from '@/lib/tts';
+import { loadPronunciations } from '@/lib/pronunciations';
 import { voiceById } from '@/lib/tts-voices';
 import { loadBookForJob } from '@/lib/job-queue';
 import { serverSupabase, SERVER_IMAGES_BUCKET } from '@/lib/supabase-server';
@@ -57,7 +58,8 @@ async function deliver(input: { bookId?: string; book?: Partial<BookProject>; vo
     return NextResponse.json({ error: 'Hittade ingen text att läsa upp' }, { status: 400 });
   }
 
-  const text = previewText(book as BookProject, Math.min(Math.max(input.maxWords ?? 280, 60), 600));
+  const rules = input.bookId ? await loadPronunciations(input.bookId).catch(() => []) : [];
+  const text = applyPronunciations(previewText(book as BookProject, Math.min(Math.max(input.maxWords ?? 280, 60), 600)), rules);
   const db = serverSupabase();
   const stamp = createHash('sha1').update(text).digest('hex').slice(0, 8);
   const path = input.bookId

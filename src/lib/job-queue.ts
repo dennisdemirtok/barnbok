@@ -7,7 +7,8 @@
 import { serverSupabase, SERVER_IMAGES_BUCKET } from './supabase-server';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from './character-check';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
-import { estimateSeconds, isQuality, narrationSegments, synthesize, TtsQuality } from './tts';
+import { applyPronunciations, estimateSeconds, isQuality, narrationSegments, synthesize, textStamp, TtsQuality } from './tts';
+import { loadPronunciations } from './pronunciations';
 import { DEFAULT_VOICE_ID, voiceById } from './tts-voices';
 
 // Så många uppslag illustreras samtidigt. Servern väntar inte på ett svar till
@@ -377,6 +378,8 @@ export async function runJob(jobId: string): Promise<void> {
     const voiceId = payload?.voiceId || DEFAULT_VOICE_ID;
     const audioQuality: TtsQuality = isQuality(payload?.quality) ? payload.quality : 'best';
     const segments = isAudiobook ? narrationSegments(bookForNarration(book)) : [];
+    // Bokens uttalslista gäller varje kapitel som läses in
+    const pronunciations = isAudiobook ? await loadPronunciations(book.id) : [];
 
     const worker = async (n: number) => {
       // Trappa igång arbetarna så att de inte träffar bildmodellen samtidigt
@@ -409,10 +412,11 @@ export async function runJob(jobId: string): Promise<void> {
             continue;
           }
           try {
-            const mp3 = await withTimeout(synthesize(segment.text, voiceId, audioQuality), AUDIO_BUDGET_MS, 'Uppläsningen tog för lång tid');
-            const url = await uploadFile(`books/${book.id}/audio/${String(segment.index).padStart(3, '0')}.mp3`, mp3, 'audio/mpeg');
+            const spoken = applyPronunciations(segment.text, pronunciations);
+            const mp3 = await withTimeout(synthesize(spoken, voiceId, audioQuality), AUDIO_BUDGET_MS, 'Uppläsningen tog för lång tid');
+            const url = await uploadFile(`books/${book.id}/audio/${String(segment.index).padStart(3, '0')}-${textStamp(spoken)}.mp3`, mp3, 'audio/mpeg');
             if (!url) throw new Error('Ljudet kunde inte sparas i molnet');
-            await finishItem(item.id, { status: 'done', image_url: url, quality: { seconds: estimateSeconds(segment.text), label: segment.label } });
+            await finishItem(item.id, { status: 'done', image_url: url, quality: { seconds: estimateSeconds(segment.text), label: segment.label, stamp: textStamp(spoken) } });
             console.log(`[Jobb] arbetare ${n} läste upp ${segment.label}`);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -580,12 +584,14 @@ async function uploadPng(path: string, base64: string): Promise<string | null> {
   return uploadFile(path, Buffer.from(base64, 'base64'), 'image/png');
 }
 
-async function uploadFile(path: string, bytes: Buffer, contentType: string): Promise<string | null> {
+async function uploadFile(path: string, bytes: Buffer, contentType: string, cacheControl?: string): Promise<string | null> {
   const db = serverSupabase();
-  const { error } = await db.storage.from(SERVER_IMAGES_BUCKET).upload(path, bytes, { contentType, upsert: true });
+  const { error } = await db.storage.from(SERVER_IMAGES_BUCKET).upload(path, bytes, { contentType, upsert: true, ...(cacheControl ? { cacheControl } : {}) });
   if (error) { console.warn('[Jobb] uppladdning misslyckades:', error.message); return null; }
   return db.storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
 }
+
+interface ManifestPart { index: number; label: string; url: string; seconds: number; stamp?: string }
 
 // Innehållsförteckning för ljudboken, så att appen hittar spåren utan databasändring
 export const audioManifestPath = (bookId: string) => `books/${bookId}/audio/manifest.json`;
@@ -604,17 +610,18 @@ async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: stri
       label: i.label || `Del ${(i.spread_number as number) + 1}`,
       url: i.image_url as string,
       seconds: (i.quality as { seconds?: number } | null)?.seconds ?? 0,
+      stamp: (i.quality as { stamp?: string } | null)?.stamp,
     }));
 
   // Tidigare inlästa kapitel ligger kvar - listan växer när man gör ett i taget
   const existingUrl = db.storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(audioManifestPath(book.id)).data.publicUrl;
-  const existing = await fetch(existingUrl, { cache: 'no-store' })
+  const existing = await fetch(`${existingUrl}?t=${Date.now()}`, { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
-    .catch(() => null) as { parts?: { index?: number; label: string; url: string; seconds: number }[] } | null;
+    .catch(() => null) as { parts?: ManifestPart[] } | null;
 
-  const byIndex = new Map<number, { index: number; label: string; url: string; seconds: number }>();
+  const byIndex = new Map<number, ManifestPart>();
   for (const part of existing?.parts || []) {
-    if (typeof part.index === 'number') byIndex.set(part.index, part as { index: number; label: string; url: string; seconds: number });
+    if (typeof part.index === 'number') byIndex.set(part.index, part);
   }
   for (const part of fresh) byIndex.set(part.index, part);
   const parts = Array.from(byIndex.values()).sort((a, b) => a.index - b.index);
@@ -628,5 +635,6 @@ async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: stri
     seconds: parts.reduce((n, p) => n + p.seconds, 0),
     parts,
   };
-  await uploadFile(audioManifestPath(book.id), Buffer.from(JSON.stringify(manifest)), 'application/json');
+  // Innehållsförteckningen skrivs om när kapitel läggs till - den får aldrig cachas
+  await uploadFile(audioManifestPath(book.id), Buffer.from(JSON.stringify(manifest)), 'application/json', '0');
 }

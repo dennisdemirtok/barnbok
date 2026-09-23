@@ -2,6 +2,7 @@
 //
 // Texten delas i avsnitt (kapitel), och varje avsnitt läses i bitar som hålls
 // ihop av previous_text/next_text så att rösten behåller tonen över skarvarna.
+import { createHash } from 'crypto';
 import { BookProject, Spread } from './types';
 import { DEFAULT_VOICE_ID } from './tts-voices';
 
@@ -102,6 +103,45 @@ export function narrationSegments(book: BookProject): NarrationSegment[] {
     merged.push(segment);
   }
   return merged.map((seg, i) => ({ ...seg, index: i }));
+}
+
+// ── Uttal ──
+// En egen uttalslista per bok: ord som rösten säger konstigt skrivs om till hur
+// de ska låta innan texten skickas till ElevenLabs ("Gunbritt" -> "Gunn-britt").
+// Funkar med alla röster och modeller och kräver inga extra rättigheter.
+export interface PronunciationRule { word: string; sayAs: string }
+
+const LETTER = 'A-Za-zÅÄÖåäöÉéÜü';
+
+function wordPattern(word: string): RegExp {
+  const escaped = word.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Hela ord: inga bokstäver direkt före eller efter
+  // Genitiv-s följer med: "Gunbritts" blir "Gunn-britts"
+  return new RegExp(`(^|[^${LETTER}])(${escaped})(s?)(?=$|[^${LETTER}])`, 'gi');
+}
+
+export function applyPronunciations(text: string, rules: PronunciationRule[]): string {
+  let out = text;
+  for (const rule of rules) {
+    if (!rule.word?.trim() || !rule.sayAs?.trim()) continue;
+    out = out.replace(wordPattern(rule.word), (_m, before: string, found: string, genitive: string) => {
+      // Stor bokstav först i ordet behålls, så att meningar börjar rätt
+      const say = rule.sayAs.trim();
+      const capital = found[0] === found[0].toUpperCase() && found[0] !== found[0].toLowerCase();
+      return before + (capital ? say.charAt(0).toUpperCase() + say.slice(1) : say) + genitive;
+    });
+  }
+  return out;
+}
+
+export function containsWord(text: string, word: string): boolean {
+  return !!word.trim() && wordPattern(word).test(text);
+}
+
+// Fingeravtryck av texten som faktiskt lästes - ändras texten eller uttalet
+// syns det att kapitlet behöver läsas om
+export function textStamp(text: string): string {
+  return createHash('sha1').update(text).digest('hex').slice(0, 10);
 }
 
 // Kapitellista med vad varje avsnitt kostar att läsa upp
