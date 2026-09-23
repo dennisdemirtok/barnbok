@@ -506,26 +506,48 @@ export async function reviewPageImage(
 
   // Referensbilder för figurerna i scenen (max 6 för att hålla nere anropet)
   const refChars = [...required, ...optional].filter(c => !!c.referenceImage).slice(0, 6);
-  const withRef = new Set(refChars);
 
-  const contents: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
-  for (const c of refChars) {
-    contents.push({ text: `Reference sheet for "${c.name}"${c.heroName ? ` (${c.heroName})` : ''}:` });
-    contents.push({ inlineData: { mimeType: detectMimeType(c.referenceImage!), data: c.referenceImage! } });
-  }
-  contents.push({ text: 'IMAGE TO REVIEW:' });
-  contents.push({ inlineData: { mimeType: detectMimeType(imageBase64), data: imageBase64 } });
-  contents.push({ text: buildReviewPrompt(ctx, required, optional, withRef) });
+  const buildContents = (level: ReviewLevel) => {
+    if (level === 'minimal') {
+      return [
+        { text: 'IMAGE TO REVIEW:' },
+        { inlineData: { mimeType: detectMimeType(imageBase64), data: imageBase64 } },
+        { text: minimalReviewPrompt(ctx, required) },
+      ];
+    }
+    const lite = level === 'lite';
+    const withRef = new Set(lite ? [] : refChars);
+    const contents: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+    if (!lite) {
+      for (const c of refChars) {
+        contents.push({ text: `Reference sheet for "${c.name}"${c.heroName ? ` (${c.heroName})` : ''}:` });
+        contents.push({ inlineData: { mimeType: detectMimeType(c.referenceImage!), data: c.referenceImage! } });
+      }
+    }
+    contents.push({ text: 'IMAGE TO REVIEW:' });
+    contents.push({ inlineData: { mimeType: detectMimeType(imageBase64), data: imageBase64 } });
+    const liteCtx = lite ? { ...ctx, spread: { ...ctx.spread, imagePrompt: withoutAges(ctx.spread.imagePrompt || '') } } : ctx;
+    contents.push({ text: buildReviewPrompt(liteCtx, required, optional, withRef) });
+    return contents;
+  };
 
+  // Googles filter kan falsklarma när flera bilder på samma barn (karaktärsbladen)
+  // skickas tillsammans med t.ex. ett sovrum och en ålder. Då granskas bilden i
+  // stället utan karaktärsbladen - identiteten jämförs mot beskrivningarna.
+  // Nivåer: hela granskningen, utan karaktärsblad, och till sist bara tekniska fel
+  const levels: ReviewLevel[] = ['full', 'lite', 'minimal'];
+  let levelIndex = 0;
   let lastError: unknown;
   const startedAt = Date.now();
-  for (const model of REVIEW_MODELS) {
+  for (let n = 0; n < REVIEW_MODELS.length + levels.length - 1; n++) {
+    const model = REVIEW_MODELS[Math.min(n, REVIEW_MODELS.length - 1)];
+    const level = levels[levelIndex];
     const remaining = opts.timeoutMs ? opts.timeoutMs - (Date.now() - startedAt) : undefined;
     if (remaining !== undefined && remaining < 8000) break;
     try {
       const response = await ai.models.generateContent({
         model,
-        contents,
+        contents: buildContents(level),
         config: {
           responseMimeType: 'application/json',
           responseJsonSchema: REVIEW_SCHEMA,
@@ -534,7 +556,15 @@ export async function reviewPageImage(
         },
       });
       const text = responseText(response);
-      if (!text) throw new Error(`Tomt svar från granskaren (${response.candidates?.[0]?.finishReason ?? 'okänd orsak'})`);
+      if (!text) {
+        const blocked = (response as { promptFeedback?: { blockReason?: string } }).promptFeedback?.blockReason;
+        if (blocked && levelIndex < levels.length - 1) {
+          levelIndex++;
+          console.warn(`[Granskning] ${model} blockerade granskningen (${blocked}) - försöker nivå "${levels[levelIndex]}"`);
+          continue;
+        }
+        throw new Error(`Tomt svar från granskaren (${blocked ? `blockerad: ${blocked}` : response.candidates?.[0]?.finishReason ?? 'okänd orsak'})`);
+      }
       const raw = JSON.parse(text) as RawReview;
       return normalizeReview(raw, required, optional, isComic, model);
     } catch (err) {
@@ -543,6 +573,37 @@ export async function reviewPageImage(
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Granskningen misslyckades');
+}
+
+type ReviewLevel = 'full' | 'lite' | 'minimal';
+
+// Sista utvägen när filtret blockerar: inga beskrivningar alls, bara tekniska fel
+function minimalReviewPrompt(ctx: ReviewContext, required: Character[]): string {
+  const textAllowed = ctx.spread.pages === 'omslag' || textInImage(ctx.bookFormat);
+  const names = required.map(c => c.name).join(', ') || '(no named characters)';
+  return `You check one illustration from a Swedish children's book for clear technical defects only. Do not judge the story or the style.
+
+Named characters expected in the picture: ${names}.
+
+Report as issues (severity major) only:
+- ${textAllowed ? 'garbled or English text' : 'any readable letters, words or digits (this picture must have no text)'} -> unwanted_text
+- the same person drawn twice inside one picture${ctx.bookFormat === 'bildbok-text-pa-bild' ? ' panel' : ''} -> duplicate_character
+- broken anatomy: extra or missing fingers or limbs, merged bodies -> anatomy
+- a face cut off by the image edge -> cropped_character
+Everything else is fine.
+
+For "characters": one entry per named character above (should_be_visible true, visible = whether you can see them, max_count_in_one_scene, matches_reference true, same_person_as_reference true, note ""). For each issue: character name or "", description_sv (short Swedish), correction (English). score 0-100. problems_sv: very short Swedish summary of the major issues, or "".`;
+}
+
+// Åldrar ur bildbeskrivningen ("Sigrid, nine,", "a 9-year-old") - bara för
+// granskningen, där de inte behövs och kan trigga filtret i onödan
+function withoutAges(text: string): string {
+  const numbers = '(?:\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)';
+  return text
+    .replace(new RegExp(`,?\\s*\\(?\\b${numbers}\\b\\)?(?=\\s*,)`, 'gi'), '')
+    .replace(new RegExp(`\\b(a|an)?\\s*${numbers}[- ]years?[- ]old\\b`, 'gi'), 'a')
+    .replace(new RegExp(`\\bage[d]?\\s*${numbers}\\b`, 'gi'), '')
+    .replace(/\s{2,}/g, ' ');
 }
 
 /**
