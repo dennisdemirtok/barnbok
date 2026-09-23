@@ -418,7 +418,10 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
                   id: 'fast' as const,
                   icon: 'bolt',
                   title: 'Snabbt',
-                  text: `Klart på ungefär ${estimateMinutesLeft(missingCount || totalSpreads)} minuter.`,
+                  text: (() => {
+                    const minutes = estimateMinutesLeft(missingCount || totalSpreads);
+                    return `Klart på ungefär ${minutes} ${minutes === 1 ? 'minut' : 'minuter'}.`;
+                  })(),
                 },
                 {
                   id: 'batch' as const,
