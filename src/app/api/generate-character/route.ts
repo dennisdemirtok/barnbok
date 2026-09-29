@@ -12,10 +12,10 @@ export async function POST(request: NextRequest) {
 
     // Support both single and batch requests
     if (body.batch && Array.isArray(body.characters)) {
-      return handleBatch(body);
+      return await handleBatch(body);
     }
 
-    return handleSingle(body);
+    return await handleSingle(body);
   } catch (error) {
     console.error('Character generation error:', error);
     const message = error instanceof Error ? error.message : 'Okänt fel';

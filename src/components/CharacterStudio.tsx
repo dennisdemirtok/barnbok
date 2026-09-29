@@ -8,6 +8,7 @@ import { CHARACTER_TEMPLATES, CharacterTemplate } from '@/lib/character-template
 import StyleThumb from './StyleThumb';
 import Icon from './Icon';
 import StepHeader from './StepHeader';
+import PhotoCharacter from './PhotoCharacter';
 
 interface Props {
   onBack: () => void;
@@ -75,6 +76,8 @@ export default function CharacterStudio({ onBack }: Props) {
 
   // Editor
   const [editor, setEditor] = useState<{ draft: StudioCharacter; isNew: boolean; templateId?: string } | null>(null);
+  // Karaktär från foto
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -144,6 +147,7 @@ export default function CharacterStudio({ onBack }: Props) {
 
   const handleSaved = async (saved: StudioCharacter) => {
     setEditor(null);
+    setPhotoOpen(false);
     await load();
     flash(`${saved.name} är sparad`);
   };
@@ -156,9 +160,14 @@ export default function CharacterStudio({ onBack }: Props) {
         description="Skapa figurer med egen referensbild, spara dem och återanvänd dem i vilken bok som helst."
         onBack={onBack}
         actions={
-          <button onClick={() => openNew()} className="btn-action">
-            <Icon name="add" size={20} /> Ny karaktär
-          </button>
+          <>
+            <button onClick={() => setPhotoOpen(true)} className="btn-ghost">
+              <Icon name="photo_camera" size={20} /> Från foto
+            </button>
+            <button onClick={() => openNew()} className="btn-action">
+              <Icon name="add" size={20} /> Ny karaktär
+            </button>
+          </>
         }
       />
 
@@ -209,6 +218,21 @@ export default function CharacterStudio({ onBack }: Props) {
             </p>
             <button onClick={() => openNew()} className="btn-primary mt-6">
               <Icon name="add" size={19} /> Skapa din första karaktär
+            </button>
+
+            {/* Karaktär från foto */}
+            <button
+              onClick={() => setPhotoOpen(true)}
+              className="mt-6 mx-auto w-full max-w-md flex items-center gap-4 p-4 rounded-2xl bg-white border border-line shadow-soft text-left hover:shadow-lift hover:border-ink/25 transition-all"
+            >
+              <span className="w-12 h-12 shrink-0 rounded-2xl bg-brand/10 text-brand flex items-center justify-center">
+                <Icon name="photo_camera" filled size={24} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-heading font-semibold text-ink">Gör ditt barn till en figur</span>
+                <span className="block text-sm text-ink/55 leading-snug">Ladda upp ett foto, så ritar vi barnet i bokens alla stilar.</span>
+              </span>
+              <Icon name="arrow_forward" size={20} className="shrink-0 text-ink/40" />
             </button>
           </div>
         ) : (
@@ -299,6 +323,10 @@ export default function CharacterStudio({ onBack }: Props) {
           onClose={() => setEditor(null)}
           onSaved={handleSaved}
         />
+      )}
+
+      {photoOpen && (
+        <PhotoCharacter onClose={() => setPhotoOpen(false)} onSaved={handleSaved} />
       )}
     </div>
   );
@@ -548,6 +576,13 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
         </div>
       )}
 
+      {draft.fromPhoto && draft.referenceImage ? (
+        // Fotona sparas aldrig, så en ny bild här skulle ritas utan dem och
+        // likheten med barnet försvinna. Ny stil görs via "Från foto".
+        <div className="note-warning text-xs">
+          Den här figuren är ritad efter foton. Vill du ha den i en annan stil eller rita om den: skapa den på nytt med <strong>Från foto</strong>, så blir den lik barnet igen.
+        </div>
+      ) : (
       <button
         onClick={generateImage}
         disabled={!canGenerate}
@@ -562,6 +597,7 @@ function CharacterEditor({ initial, isNew, initialTemplateId, onClose, onSaved }
           <><Icon name="auto_fix_high" filled size={19} /> Skapa bild</>
         )}
       </button>
+      )}
       {!draft.appearance.trim() && (
         <p className="text-xs text-ink/45 text-center">Fyll i utseende för att kunna skapa en bild.</p>
       )}

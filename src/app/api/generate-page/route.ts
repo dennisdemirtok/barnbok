@@ -21,10 +21,10 @@ export async function POST(request: NextRequest) {
 
     // Support both single and batch requests
     if (body.batch && Array.isArray(body.spreads)) {
-      return handleBatch(body, requestStart);
+      return await handleBatch(body, requestStart);
     }
 
-    return handleSingle(body, requestStart);
+    return await handleSingle(body, requestStart);
   } catch (error) {
     console.error('Page generation error:', error);
     const message = error instanceof Error ? error.message : 'Okänt fel';
