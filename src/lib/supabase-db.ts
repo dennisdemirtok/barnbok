@@ -58,7 +58,7 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
     } catch (err) {
       problems.push(err instanceof Error ? err.message : String(err));
     }
-  } else {
+  } else if (!isPrivateBook(book)) {
     const { error: autoError } = await supabase
       .from('barnbok_books')
       .update({ is_public: true, published_at: now })
@@ -293,6 +293,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     // kunde vara härlett från e-postadressen och ska inte visas
     author: meta.author || undefined,
     stylePresetId: meta.stylePresetId,
+    keepPrivate: meta.keepPrivate,
     illustrationShape: meta.illustrationShape,
     targetAge: `${bookRow.age_min}-${bookRow.age_max}`,
     bookFormat: bookRow.book_format,
@@ -1060,12 +1061,19 @@ export async function getStyleProfile(bookSeries: string): Promise<any | null> {
 //  Helpers
 // ═══════════════════════════════════════════
 
+// En bok med en figur ritad efter foton av ett verkligt barn publiceras aldrig
+// automatiskt - och det följer med boken även när den laddas från molnet igen
+export function isPrivateBook(book: BookProject): boolean {
+  return !!book.keepPrivate || book.characters.some(c => c.fromPhoto);
+}
+
 function buildTheme(book: BookProject): string {
   // Bildtyper per uppslag sparas här så att ingen tabelländring behövs
   const compositions = Object.fromEntries(book.spreads.filter(sp => sp.composition).map(sp => [sp.spreadNumber, sp.composition]));
   return JSON.stringify({
     v: 1, stylePresetId: book.stylePresetId, illustrationShape: book.illustrationShape, author: book.author?.trim() || undefined,
     ...(Object.keys(compositions).length > 0 ? { compositions } : {}),
+    ...(isPrivateBook(book) ? { keepPrivate: true } : {}),
   });
 }
 
@@ -1073,11 +1081,11 @@ function spreadLabel(spread: Spread): string {
   return spread.pages === 'omslag' ? 'omslag' : spread.pages === 'slutsida' ? 'slutsida' : `sida ${spread.pages}`;
 }
 
-function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author'> & { compositions?: Record<string, Spread['composition']> } {
+function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author' | 'keepPrivate'> & { compositions?: Record<string, Spread['composition']> } {
   if (typeof theme !== 'string' || !theme.startsWith('{')) return {};
   try {
     const meta = JSON.parse(theme);
-    return { stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author, compositions: meta.compositions };
+    return { stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author, compositions: meta.compositions, keepPrivate: meta.keepPrivate === true || undefined };
   } catch {
     return {};
   }

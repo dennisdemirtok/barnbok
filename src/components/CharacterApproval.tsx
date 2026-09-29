@@ -230,6 +230,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
         role: char.role,
         referenceImage: char.referenceImage,
         faceNotes: char.faceNotes,
+        fromPhoto: char.fromPhoto,
         savedAt: new Date().toISOString(),
         fromBookId: bookId,
         fromBookTitle: bookTitle,
@@ -258,6 +259,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
       role: saved.role,
       referenceImage: saved.referenceImage,
       faceNotes: saved.faceNotes,
+            fromPhoto: saved.fromPhoto,
       approved: !!saved.referenceImage, // Auto-approve if has image
     };
     setChars(prev => [...prev, newChar]);
@@ -283,6 +285,7 @@ export default function CharacterApproval({ characters, styleGuide, bookId, book
             ...c,
             referenceImage: saved.referenceImage,
             faceNotes: saved.faceNotes,
+            fromPhoto: saved.fromPhoto,
             appearance: saved.appearance,
             normalClothes: saved.normalClothes || c.normalClothes,
             heroCostume: saved.heroCostume || c.heroCostume,

@@ -101,6 +101,7 @@ async function attachSavedCharacters(book: BookProject): Promise<BookProject> {
         power: match.power || c.power,
         personality: match.personality || c.personality,
         referenceImage: match.referenceImage || c.referenceImage,
+        fromPhoto: match.fromPhoto || c.fromPhoto,
       };
     }),
   };

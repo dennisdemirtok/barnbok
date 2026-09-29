@@ -27,6 +27,9 @@ export interface BookProject {
   spreads: Spread[];
   styleGuide: string;
   status: 'importing' | 'characters' | 'generating' | 'reviewing' | 'done';
+  // Boken har en figur ritad efter foton av ett verkligt barn: den publiceras
+  // aldrig automatiskt i bokhandeln, bara om författaren själv väljer det
+  keepPrivate?: boolean;
   createdAt: string;
   updatedAt?: string;
 }
@@ -44,6 +47,7 @@ export interface SavedCharacter {
   role: 'main' | 'supporting' | 'villain';
   referenceImage?: string; // base64
   faceNotes?: string; // ansiktets kännetecken från karaktärsbladet
+  fromPhoto?: boolean; // ritad efter foton av en verklig person
   stylePresetId?: string; // stilen referensbilden gjordes i
   savedAt: string;
   fromBookId?: string;
@@ -64,6 +68,7 @@ export interface Character {
   referenceImage?: string; // base64
   referenceImageUrl?: string; // sparad i molnet - servern hämtar bilden härifrån
   faceNotes?: string; // ansiktets kännetecken, avlästa från karaktärsbladet
+  fromPhoto?: boolean; // ritad efter foton av en verklig person - boken publiceras aldrig automatiskt
   approved: boolean;
 }
 

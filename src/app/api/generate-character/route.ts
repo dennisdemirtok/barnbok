@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateCharacterSheet } from '@/lib/gemini';
+import { generateCharacterSheet, LikenessPhoto } from '@/lib/gemini';
 import { describeCharacterFace } from '@/lib/character-check';
 import { Character } from '@/lib/types';
 
@@ -30,8 +30,11 @@ export async function POST(request: NextRequest) {
 async function handleSingle(body: {
   character: Character;
   styleGuide: string;
+  // Foton på barnet karaktären ska likna (skickas bara med, sparas aldrig)
+  photos?: LikenessPhoto[];
 }) {
   const { character, styleGuide } = body;
+  const photos = (body.photos || []).filter(p => p?.data && /^image\/(jpeg|png|webp)$/.test(p.mimeType)).slice(0, 4);
 
   if (!character) {
     return NextResponse.json(
@@ -42,7 +45,8 @@ async function handleSingle(body: {
 
   const imageBase64 = await generateCharacterSheet(
     character,
-    styleGuide || 'Swedish children\'s book, manga/comic style, thick outlines, large expressive eyes'
+    styleGuide || 'Swedish children\'s book, manga/comic style, thick outlines, large expressive eyes',
+    photos
   );
   // Ansiktets kännetecken läses av direkt och följer med boken framåt
   const faceNotes = await describeCharacterFace(character.name, imageBase64);

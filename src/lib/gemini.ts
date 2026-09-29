@@ -103,9 +103,13 @@ function cleanPositionForPrompt(position: string): string {
   return '';
 }
 
+// Foton på en verklig person (t.ex. ens barn) som karaktären ska likna
+export interface LikenessPhoto { data: string; mimeType: string }
+
 export async function generateCharacterSheet(
   character: Character,
-  styleGuide: string
+  styleGuide: string,
+  photos: LikenessPhoto[] = []
 ): Promise<string> {
   await rateLimitedDelay();
   const ai = getClient();
@@ -183,12 +187,20 @@ CONSISTENCY RULES (CRITICAL):
 - Clothing details must be consistent within each outfit (normal clothes consistent across normal views, hero costume consistent across hero views).
 - The character should be easily reproducible from this reference sheet in future illustrations.
 
-This reference sheet will be used as the definitive guide for drawing this character consistently throughout an entire book.`;
+This reference sheet will be used as the definitive guide for drawing this character consistently throughout an entire book.${photos.length > 0 ? `
+
+LIKENESS FROM PHOTOS: the photos above show the real child this character is based on. Draw him or her as an illustrated character in the STYLE GUIDE - never a photo, a photo filter or a traced photo - but so that family and friends instantly recognize the child: the same face shape, hair color, length and style, eyebrows, eye shape and color, nose, smile and teeth (for example missing front teeth), freckles, dimples or marks, ears, skin tone and body proportions for the age. Simplify only the way the style simplifies everyone; keep what makes this child look like this child. If the child's smile is part of what makes them recognizable (missing front teeth, dimples), the front face close-up may show a small open smile so it is visible. Use clothes like in the photos unless normal clothes are described above. Ignore the photos' backgrounds, other people and any text or numbers on clothing.` : ''}`;
 
   const monochromeSheet = isMonochromeStyle(styleGuide);
+  const photoParts: ImagePart[] = photos.length > 0
+    ? [
+        { text: `PHOTOS OF THE REAL CHILD (${photos.length}) - use them only for likeness, as described at the end:` },
+        ...photos.map(p => ({ inlineData: { mimeType: p.mimeType, data: p.data } })),
+      ]
+    : [];
   return withRetry(async () => {
     const response = await generateWithImageModel(ai, {
-      contents: [{ text: prompt }],
+      contents: [{ role: 'user', parts: [...photoParts, { text: prompt }] }],
       config: {
         responseModalities: ['TEXT', 'IMAGE'],
       },
