@@ -7,11 +7,12 @@ export const dynamic = 'force-dynamic';
 // Startar bildjobbet på servern. Boken måste vara sparad i molnet först.
 export async function POST(request: Request) {
   try {
-    const { bookId, mode } = await request.json() as { bookId?: string; mode?: string };
+    const { bookId, mode, quality } = await request.json() as { bookId?: string; mode?: string; quality?: string };
     if (!bookId) return NextResponse.json({ error: 'bookId saknas' }, { status: 400 });
 
     // 'batch' = sparläget (halva priset, Google levererar när det finns plats)
-    const result = await createIllustrationJob(bookId, mode === 'batch' ? 'batch' : 'fast');
+    // 'budget' = enklare bildmodell (halva priset, 1K, bäst för skärm)
+    const result = await createIllustrationJob(bookId, mode === 'batch' ? 'batch' : 'fast', quality === 'budget' ? 'budget' : 'standard');
     if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json(result);
   } catch (err) {

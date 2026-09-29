@@ -14,7 +14,10 @@ export const currentImageModel = () => IMAGE_MODELS[imageModelIndex];
 
 type ImageRequest = Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>;
 
-async function generateWithImageModel(ai: GoogleGenAI, request: ImageRequest) {
+async function generateWithImageModel(ai: GoogleGenAI, request: ImageRequest, quality: ImageQuality = 'standard') {
+  if (quality === 'budget') {
+    return ai.models.generateContent({ ...request, model: BUDGET_IMAGE_MODEL });
+  }
   for (;;) {
     try {
       return await ai.models.generateContent({ ...request, model: IMAGE_MODELS[imageModelIndex] });
@@ -222,9 +225,17 @@ LIKENESS FROM PHOTOS: the photos above show the real child this character is bas
   });
 }
 
+// Bildkvalitet: 'standard' = Gemini Flash Image (tryckkvalitet, 2K där det
+// behövs). 'budget' = Flash Lite Image: halva priset och snabbare, nästan lika
+// bra på figurer och enkla bilder men svagare på stora scener med många
+// personer, och bara 1K - räcker för skärm men inte för helsidor i tryck.
+export type ImageQuality = 'standard' | 'budget';
+export const BUDGET_IMAGE_MODEL = 'gemini-3.1-flash-lite-image';
+
 export interface PageImageOptions {
   // Bildform - annars härleds den från bokformatet
   shape?: IllustrationShape;
+  quality?: ImageQuality;
   // 1K räcker för provningar, 2K för tryckkvalitet i den färdiga boken
   imageSize?: '1K' | '2K';
   // Rättelser från den automatiska granskningen (engelska, en per rad) - läggs sist i prompten
@@ -372,7 +383,7 @@ export async function generatePageImage(
         imageConfig: { aspectRatio: request.aspectRatio, imageSize: request.imageSize },
         ...(options.timeoutMs ? { httpOptions: { timeout: options.timeoutMs } } : {}),
       },
-    });
+    }, options.quality);
     return extractImage(response, request.monochrome);
   }, options.maxRetries ?? 3);
 }
@@ -559,7 +570,13 @@ ${corrections.map(c => `- ${c}`).join('\n')}`,
     });
   }
 
-  return { contents, aspectRatio, imageSize: options.imageSize || '1K', monochrome };
+  return {
+    contents,
+    aspectRatio,
+    // Lite-modellen klarar bara 1K
+    imageSize: options.quality === 'budget' ? '1K' : options.imageSize || '1K',
+    monochrome,
+  };
 }
 
 export async function regeneratePageImage(

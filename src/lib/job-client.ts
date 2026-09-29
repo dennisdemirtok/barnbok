@@ -9,6 +9,7 @@ export type JobStatus = 'running' | 'done' | 'failed' | 'canceled';
 // 'batched' = ligger i Googles batchkö (sparläget)
 export type JobItemStatus = 'queued' | 'running' | 'batched' | 'done' | 'error';
 export type IllustrationMode = 'fast' | 'batch';
+export type ImageQuality = 'standard' | 'budget';
 
 export interface JobItem {
   spreadId: string;
@@ -24,6 +25,7 @@ export interface IllustrationJob {
   id: string;
   bookId: string;
   mode?: IllustrationMode;
+  quality?: ImageQuality;
   status: JobStatus;
   total: number;
   done: number;
@@ -52,12 +54,13 @@ async function readJson<T>(res: Response): Promise<T> {
 // molnet först - servern läser text, karaktärer och stil därifrån.
 export async function startIllustrationJob(
   bookId: string,
-  mode: IllustrationMode = 'fast'
+  mode: IllustrationMode = 'fast',
+  quality: ImageQuality = 'standard'
 ): Promise<{ jobId: string; total: number; alreadyRunning?: boolean }> {
   const res = await fetch('/api/jobs/illustrate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bookId, mode }),
+    body: JSON.stringify({ bookId, mode, quality }),
   });
   return readJson<{ jobId: string; total: number; alreadyRunning?: boolean }>(res);
 }
@@ -197,5 +200,23 @@ export function writeIllustrationMode(mode: IllustrationMode): void {
     localStorage.setItem(MODE_KEY, mode);
   } catch {
     // Lagring blockerad - valet gäller bara den här gången
+  }
+}
+
+const QUALITY_KEY = 'barnbok:image-quality';
+
+export function readImageQuality(): ImageQuality {
+  try {
+    return localStorage.getItem(QUALITY_KEY) === 'budget' ? 'budget' : 'standard';
+  } catch {
+    return 'standard';
+  }
+}
+
+export function writeImageQuality(quality: ImageQuality): void {
+  try {
+    localStorage.setItem(QUALITY_KEY, quality);
+  } catch {
+    // Lagring blockerad
   }
 }

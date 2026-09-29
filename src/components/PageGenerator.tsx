@@ -21,6 +21,9 @@ import {
   IllustrationMode,
   readIllustrationMode,
   writeIllustrationMode,
+  ImageQuality,
+  readImageQuality,
+  writeImageQuality,
 } from '@/lib/job-client';
 
 // Uppslag kan ha bilden antingen som base64 (nygenererad i webbläsaren) eller
@@ -95,7 +98,10 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
   const [error, setError] = useState('');
   // Snabbt eller sparläge (Googles batchkö, halva priset på bilderna)
   const [mode, setMode] = useState<IllustrationMode>('fast');
-  useEffect(() => { setMode(readIllustrationMode()); }, []);
+  // Bildkvalitet: bäst (tryckkvalitet) eller enkel (halva priset, bäst för skärm)
+  const [quality, setQuality] = useState<ImageQuality>('standard');
+  const [showExamples, setShowExamples] = useState(false);
+  useEffect(() => { setMode(readIllustrationMode()); setQuality(readImageQuality()); }, []);
 
   const jobRunning = job?.status === 'running';
   const isBusy = jobRunning || starting || !!regeneratingId;
@@ -182,7 +188,8 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
       }
 
       writeIllustrationMode(mode);
-      const started = await startIllustrationJob(book.id, mode);
+      writeImageQuality(quality);
+      const started = await startIllustrationJob(book.id, mode, quality);
       writeJobRef({ jobId: started.jobId, bookId: book.id, title: book.title });
       setSpreads(prev => prev.map(s => (s.status === 'error' ? { ...s, status: 'pending' as const, error: undefined } : s)));
       setJob(prev =>
@@ -206,7 +213,7 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
     } finally {
       setStarting(false);
     }
-  }, [book.id, book.title, onEnsureSaved, mode]);
+  }, [book.id, book.title, onEnsureSaved, mode, quality]);
 
   // ── Vid start: haka på ett pågående jobb, annars starta en helt ny bok ──
   useEffect(() => {
@@ -447,6 +454,68 @@ export default function PageGenerator({ book, onPagesGenerated, onSpreadsProgres
               ))}
             </div>
             <p className="mt-1.5 text-xs text-ink/45">Kvaliteten är densamma. Du kan stänga sidan i båda lägena och får besked här när boken är klar.</p>
+
+            <p className="mt-4 text-sm font-semibold text-ink">Bildkvalitet</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {([
+                {
+                  id: 'standard' as const,
+                  icon: 'high_quality',
+                  title: 'Bäst',
+                  text: 'Skarpast på stora bilder och scener med många personer. Tryckkvalitet.',
+                },
+                {
+                  id: 'budget' as const,
+                  icon: 'eco',
+                  title: 'Enkel',
+                  text: 'Halva priset och dubbelt så snabbt. Nästan lika bra på figurer och enkla bilder, enklare på stora scener. Räcker för att läsa på skärm, inte för tryck av helsidor.',
+                },
+              ]).map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => setQuality(option.id)}
+                  aria-pressed={quality === option.id}
+                  className={`flex items-start gap-2.5 p-3 rounded-2xl border text-left transition-all ${
+                    quality === option.id ? 'border-brand bg-brand/5 ring-2 ring-brand/15' : 'border-line bg-white hover:border-ink/25'
+                  }`}
+                >
+                  <Icon name={option.icon} filled={quality === option.id} size={20} className={quality === option.id ? 'text-brand shrink-0 mt-0.5' : 'text-ink/40 shrink-0 mt-0.5'} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-ink">{option.title}</span>
+                    <span className="block text-xs text-ink/55 leading-snug">{option.text}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowExamples(v => !v)}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
+            >
+              <Icon name={showExamples ? 'expand_less' : 'compare'} size={15} />
+              {showExamples ? 'Dölj exemplen' : 'Se skillnaden med exempel'}
+            </button>
+            {showExamples && (
+              <div className="mt-3 space-y-3 max-w-xl">
+                {([
+                  { key: 'helsida', label: 'Helsida med många personer - här syns skillnaden' },
+                  { key: 'band', label: 'Band över sidan' },
+                  { key: 'figur', label: 'Figur på vitt papper - nästan ingen skillnad' },
+                ]).map(example => (
+                  <div key={example.key}>
+                    <p className="text-xs text-ink/55 mb-1.5">{example.label}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['bast', 'enkel'] as const).map(level => (
+                        <figure key={level} className="rounded-xl overflow-hidden border border-line bg-white">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={`/kvalitet/${example.key}-${level}.jpg`} alt="" loading="lazy" className="w-full h-auto" />
+                          <figcaption className="px-2 py-1 text-[11px] font-medium text-ink/60">{level === 'bast' ? 'Bäst' : 'Enkel'}</figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

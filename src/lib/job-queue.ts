@@ -7,7 +7,7 @@
 import { serverSupabase, SERVER_IMAGES_BUCKET } from './supabase-server';
 import { generatePageWithQualityCheck, DEFAULT_QUALITY_BUDGET_MS } from './character-check';
 import { imageSizeFor } from './image-size';
-import { buildPageImageRequest, extractImage, isMonochromeStyle } from './gemini';
+import { buildPageImageRequest, extractImage, isMonochromeStyle, ImageQuality, BUDGET_IMAGE_MODEL } from './gemini';
 import { cancelImageBatch, checkImageBatch, fileReference, imageMimeType, submitImageBatch, uploadReferenceSheets, UploadedRef } from './image-batch';
 import { withReferenceImages } from './character-refs';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
@@ -29,6 +29,7 @@ const BATCH_SIZE = 10;
 
 interface BatchPayload {
   mode?: 'fast' | 'batch';
+  quality?: ImageQuality;
   refs?: Record<string, UploadedRef>;
   batches?: { name: string; itemIds: string[]; submittedAt: string; state: string }[];
 }
@@ -59,6 +60,7 @@ export interface JobView {
   id: string;
   bookId: string;
   mode?: 'fast' | 'batch';
+  quality?: ImageQuality;
   status: 'running' | 'done' | 'failed' | 'canceled';
   total: number;
   done: number;
@@ -198,6 +200,7 @@ async function buildView(job: Record<string, unknown>): Promise<JobView> {
     id: job.id as string,
     bookId: job.book_id as string,
     mode: ((job.payload as { mode?: 'fast' | 'batch' } | null)?.mode) || 'fast',
+    quality: ((job.payload as { quality?: ImageQuality } | null)?.quality) || 'standard',
     status: job.status as JobView['status'],
     total: (job.total as number) ?? 0,
     done: (job.done as number) ?? 0,
@@ -218,7 +221,7 @@ async function buildView(job: Record<string, unknown>): Promise<JobView> {
 
 export type IllustrationMode = 'fast' | 'batch';
 
-export async function createIllustrationJob(bookId: string, mode: IllustrationMode = 'fast'): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
+export async function createIllustrationJob(bookId: string, mode: IllustrationMode = 'fast', quality: ImageQuality = 'standard'): Promise<{ jobId: string; total: number; alreadyRunning?: boolean } | { error: string }> {
   const db = serverSupabase();
 
   // Ett pågående jobb för boken räcker
@@ -240,7 +243,7 @@ export async function createIllustrationJob(bookId: string, mode: IllustrationMo
 
   const { data: jobRow, error } = await db
     .from('barnbok_jobs')
-    .insert({ book_id: bookId, kind: 'illustrate', status: 'running', total: todo.length, payload: { mode } })
+    .insert({ book_id: bookId, kind: 'illustrate', status: 'running', total: todo.length, payload: { mode, quality } })
     .select()
     .single();
   if (error || !jobRow) {
@@ -407,6 +410,7 @@ export async function runJob(jobId: string): Promise<void> {
     }
     const spreadById = new Map(book.spreads.map(s => [s.id, s]));
     const isAudiobook = job.kind === 'audiobook';
+    const imageQuality: ImageQuality = (job.payload as { quality?: ImageQuality } | null)?.quality === 'budget' ? 'budget' : 'standard';
     const payload = job.payload as { voiceId?: string; quality?: TtsQuality } | null;
     const voiceId = payload?.voiceId || DEFAULT_VOICE_ID;
     const audioQuality: TtsQuality = isQuality(payload?.quality) ? payload.quality : 'best';
@@ -491,7 +495,7 @@ export async function runJob(jobId: string): Promise<void> {
             book.characters,
             book.styleGuide,
             book.bookFormat,
-            { shape: book.illustrationShape, imageSize: imageSizeFor(spread) },
+            { shape: book.illustrationShape, imageSize: imageSizeFor(spread), quality: imageQuality },
             { deadline: Date.now() + ITEM_BUDGET_MS }
           ), ITEM_BUDGET_MS + 60_000, 'Uppslaget tog för lång tid');
           // Ny adress för varje ny bild, så att ingen cache visar en gammal version
@@ -693,14 +697,18 @@ async function batchTick(
         if (!spread) { await finishItem(item.id, { status: 'error', error: 'Uppslaget finns inte längre' }); continue; }
         requests.push(await buildPageImageRequest(
           spread, characters, book.styleGuide, book.bookFormat,
-          { shape: book.illustrationShape, imageSize: imageSizeFor(spread) },
+          { shape: book.illustrationShape, imageSize: imageSizeFor(spread), quality: state.quality },
           fileReference(state.refs || {}),
         ));
         ids.push(item.id);
       }
       if (ids.length === 0) continue;
       try {
-        const name = await submitImageBatch(requests, `${book.title} ${jobId.slice(0, 8)} ${i / BATCH_SIZE + 1}`);
+        const name = await submitImageBatch(
+          requests,
+          `${book.title} ${jobId.slice(0, 8)} ${i / BATCH_SIZE + 1}`,
+          state.quality === 'budget' ? BUDGET_IMAGE_MODEL : undefined,
+        );
         await db.from('barnbok_job_items')
           .update({ status: 'batched', attempts: 1, claimed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .in('id', ids);
@@ -761,7 +769,7 @@ async function batchTick(
       try {
         const quality = await withTimeout(generatePageWithQualityCheck(
           spread, book.characters, book.styleGuide, book.bookFormat,
-          { shape: book.illustrationShape, imageSize: imageSizeFor(spread) },
+          { shape: book.illustrationShape, imageSize: imageSizeFor(spread), quality: state.quality },
           { deadline: Date.now() + ITEM_BUDGET_MS, initialImage },
         ), ITEM_BUDGET_MS + 60_000, 'Granskningen tog för lång tid');
         const url = await uploadPng(`books/${book.id}/${spread.id}-${Date.now().toString(36)}.png`, quality.image);

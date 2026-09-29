@@ -53,9 +53,9 @@ export function fileReference(refs: Record<string, UploadedRef>) {
   };
 }
 
-export async function submitImageBatch(requests: PageImageRequest[], displayName: string): Promise<string> {
+export async function submitImageBatch(requests: PageImageRequest[], displayName: string, model = currentImageModel()): Promise<string> {
   const job = await ai().batches.create({
-    model: currentImageModel(),
+    model,
     src: requests.map(r => ({
       contents: [{ role: 'user', parts: r.contents }],
       config: {
