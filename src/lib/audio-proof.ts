@@ -89,6 +89,9 @@ export async function proofreadAudio(mp3: Buffer, text: string, notes: string[] 
   const ai = new GoogleGenAI({ apiKey });
 
   for (const model of MODELS) {
+    // Tillfälliga fel (för många anrop, överbelastat) väntar och försöker igen -
+    // annars blir kapitel okontrollerade bara för att anropen kom tätt
+    for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await ai.models.generateContent({
         model,
@@ -111,7 +114,11 @@ export async function proofreadAudio(mp3: Buffer, text: string, notes: string[] 
       return { issues, overall: (raw.overall || '').trim() };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[Korrektur] ${model} misslyckades:`, message.slice(0, 200));
+      const transient = /429|RESOURCE_EXHAUSTED|503|UNAVAILABLE|500|INTERNAL|deadline|timed? ?out|fetch failed|ECONNRESET/i.test(message);
+      console.warn(`[Korrektur] ${model} misslyckades (försök ${attempt + 1}):`, message.slice(0, 200));
+      if (!transient || attempt === 2) break;
+      await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 8000 : 20000));
+    }
     }
   }
   return null;
