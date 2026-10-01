@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAudiobookJob, audioManifestPath, loadBookForJob, syncAudioMeta } from '@/lib/job-queue';
-import { applyPronunciations, containsWord, estimateSeconds, hasTtsKey, isQuality, narrationSegments, textStamp } from '@/lib/tts';
+import { containsWord, estimateSeconds, hasTtsKey, isQuality, narrationSegments, spokenText, textStamp } from '@/lib/tts';
 import { loadPronunciations } from '@/lib/pronunciations';
 import { serverSupabase, SERVER_IMAGES_BUCKET } from '@/lib/supabase-server';
 
@@ -38,7 +38,10 @@ export async function GET(request: Request) {
   const audiobook = res?.ok ? await res.json().catch(() => null) : null;
 
   let estimate: { segments: number; characters: number; seconds: number } | null = null;
-  let chapters: { index: number; label: string; characters: number; seconds: number; url?: string; stale?: boolean }[] = [];
+  let chapters: {
+    index: number; label: string; characters: number; seconds: number; url?: string; stale?: boolean;
+    credits?: number; proof?: unknown;
+  }[] = [];
   const [book, rules] = await Promise.all([
     loadBookForJob(bookId).catch(() => null),
     loadPronunciations(bookId).catch(() => []),
@@ -49,20 +52,23 @@ export async function GET(request: Request) {
       characters: book.characters, styleGuide: book.styleGuide, bookFormat: book.bookFormat,
       status: 'done', createdAt: new Date().toISOString(),
     } as never);
-    const parts = new Map<number, { url: string; stamp?: string }>(
-      ((audiobook?.parts || []) as { index?: number; url: string; stamp?: string }[])
+    const parts = new Map<number, { url: string; stamp?: string; credits?: number; proof?: unknown }>(
+      ((audiobook?.parts || []) as { index?: number; url: string; stamp?: string; credits?: number; proof?: unknown }[])
         .filter(p => typeof p.index === 'number')
         .map(p => [p.index as number, p])
     );
     chapters = segments.map(seg => {
       const part = parts.get(seg.index);
-      const spoken = applyPronunciations(seg.text, rules);
+      const spoken = spokenText(seg.text, rules);
       return {
         index: seg.index,
         label: seg.label,
         characters: spoken.length,
         seconds: estimateSeconds(seg.text),
         url: part?.url,
+        credits: part?.credits,
+        // Korrekturlyssningens resultat för kapitlet (saknas för äldre inläsningar)
+        proof: part?.proof,
         // Gamla inläsningar saknar fingeravtryck: de räknas som inaktuella bara
         // om ett ord i uttalslistan finns i kapitlet
         stale: !!part && (part.stamp

@@ -6,6 +6,7 @@ import { createHash } from 'crypto';
 import { BookProject } from './types';
 import { DEFAULT_VOICE_ID } from './tts-voices';
 import { estimateSeconds, narrationSegments } from './narration';
+import { prepareForSpeech } from './swedish-speech';
 
 // Avsnittsindelningen bor i narration.ts (delas med sidan) - samma namn som förut här
 export { estimateSeconds, narrationSegments };
@@ -13,20 +14,24 @@ export type { NarrationSegment } from './narration';
 
 const API = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Tre lägen att läsa i. Kvoten hos ElevenLabs räknas per tecken: de två första
-// kostar ett tecken per tecken, det snabba läget hälften.
-export type TtsQuality = 'best' | 'expressive' | 'economy';
+// Lägen att läsa i. Kvoten hos ElevenLabs räknas per tecken: de flesta kostar
+// ett tecken per tecken, det snabba läget hälften. v4 (september 2026) är
+// ElevenLabs nyaste modell: jämnare röst genom långa texter.
+export type TtsQuality = 'best' | 'expressive' | 'economy' | 'v4';
 const MODELS: Record<TtsQuality, string> = {
   best: 'eleven_multilingual_v2',
   expressive: 'eleven_v3',
   economy: 'eleven_flash_v2_5',
+  v4: 'eleven_v4',
 };
-export const CREDIT_FACTOR: Record<TtsQuality, number> = { best: 1, expressive: 1, economy: 0.5 };
-export const QUALITY_IDS: TtsQuality[] = ['best', 'expressive', 'economy'];
+export const CREDIT_FACTOR: Record<TtsQuality, number> = { best: 1, expressive: 1, economy: 0.5, v4: 1 };
+export const QUALITY_IDS: TtsQuality[] = ['best', 'expressive', 'economy', 'v4'];
 export const isQuality = (value: unknown): value is TtsQuality =>
   typeof value === 'string' && (QUALITY_IDS as string[]).includes(value);
-// Max tecken per anrop. Kortare bitar ger snabbare svar och mindre att göra om
-const CHUNK_CHARS = 2200;
+// Max tecken per anrop. Korta bitar gör att ett fel kan rättas genom att bara
+// den biten läses om (ungefär en minut ljud), och bitarna hålls ihop av
+// tidigare inläsningar så att skarvarna inte hörs.
+const CHUNK_CHARS = 1200;
 const REQUEST_TIMEOUT_MS = 120_000;
 
 export function hasTtsKey(): boolean {
@@ -60,6 +65,11 @@ export function applyPronunciations(text: string, rules: PronunciationRule[]): s
     });
   }
   return out;
+}
+
+/** Det som faktiskt skickas till rösten: bokens uttalslista först, sedan svensk textförberedelse. */
+export function spokenText(text: string, rules: PronunciationRule[]): string {
+  return prepareForSpeech(applyPronunciations(text, rules));
 }
 
 export function containsWord(text: string, word: string): boolean {
@@ -152,13 +162,36 @@ class TtsBusyError extends Error {
   constructor(message: string, public retryAfterMs = 0) { super(message); }
 }
 
+// Röstinställningar. Version 1 gav mer variation mellan kapitel (lägre stabilitet
+// och stil på 0,2, som ElevenLabs avråder från). En bok läses alltid klart med
+// samma version, så att kapitel som läses om låter som resten.
+export type VoiceSettingsVersion = 1 | 2;
+export const CURRENT_VOICE_SETTINGS: VoiceSettingsVersion = 2;
+const VOICE_SETTINGS: Record<VoiceSettingsVersion, { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean }> = {
+  1: { stability: 0.45, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true },
+  2: { stability: 0.55, similarity_boost: 0.75, style: 0, use_speaker_boost: true },
+};
+export const isVoiceSettingsVersion = (value: unknown): value is VoiceSettingsVersion => value === 1 || value === 2;
+
 // Så länge väntar vi när ElevenLabs säger "för många anrop" eller är överbelastat
 const RETRY_DELAYS_MS = [3000, 8000, 15000, 30000];
 
-async function speak(text: string, voiceId: string, around: { before?: string; after?: string }, quality: TtsQuality): Promise<Buffer> {
+// Sammanhanget runt en bit: texten före och efter, och de närmaste tidigare och
+// senare inläsningarna. ElevenLabs lyssnar på inläsningarna ("request stitching")
+// och håller samma röst och ton som i dem - text räcker inte för det.
+interface SpeechContext {
+  before?: string;
+  after?: string;
+  previousRequestIds?: string[];
+  nextRequestIds?: string[];
+}
+
+interface SpeechResult { audio: Buffer; requestId: string | null; credits: number }
+
+async function speak(text: string, voiceId: string, context: SpeechContext, quality: TtsQuality, settings: VoiceSettingsVersion): Promise<SpeechResult> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await withSlot(() => speakOnce(text, voiceId, around, quality));
+      return await withSlot(() => speakOnce(text, voiceId, context, quality, settings));
     } catch (err) {
       if (!(err instanceof TtsBusyError) || attempt >= RETRY_DELAYS_MS.length) throw err;
       const wait = Math.max(RETRY_DELAYS_MS[attempt], err.retryAfterMs);
@@ -168,19 +201,30 @@ async function speak(text: string, voiceId: string, around: { before?: string; a
   }
 }
 
-async function speakOnce(text: string, voiceId: string, around: { before?: string; after?: string }, quality: TtsQuality): Promise<Buffer> {
+// Modeller som inte tar emot tidigare inläsningar (eleven_v3 gör det inte enligt
+// ElevenLabs, och fler kan visa sig). Upptäcks det skickas bara texten.
+const noStitching = new Set<string>(['eleven_v3']);
+
+async function speakOnce(text: string, voiceId: string, context: SpeechContext, quality: TtsQuality, settings: VoiceSettingsVersion): Promise<SpeechResult> {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new Error('ElevenLabs-nyckeln saknas på servern (ELEVENLABS_API_KEY)');
 
+  const model = MODELS[quality];
+  const stitch = !noStitching.has(model);
+  const previousIds = stitch ? (context.previousRequestIds || []).filter(Boolean).slice(-3) : [];
+  const nextIds = stitch ? (context.nextRequestIds || []).filter(Boolean).slice(0, 3) : [];
   const body = {
     text,
-    model_id: MODELS[quality],
+    model_id: model,
     // Säg alltid att texten är svensk - annars drar rösterna åt engelskt uttal
     language_code: 'sv',
-    // Sammanhanget gör att tonen hänger ihop mellan bitarna
-    previous_text: around.before?.slice(-500) || undefined,
-    next_text: around.after?.slice(0, 500) || undefined,
-    voice_settings: { stability: 0.45, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true },
+    // Sammanhanget gör att tonen hänger ihop mellan bitarna. Finns tidigare
+    // inläsningar används de i stället för texten (ElevenLabs ignorerar då texten).
+    previous_text: context.before?.slice(-500) || undefined,
+    next_text: context.after?.slice(0, 500) || undefined,
+    previous_request_ids: previousIds.length > 0 ? previousIds : undefined,
+    next_request_ids: nextIds.length > 0 ? nextIds : undefined,
+    voice_settings: VOICE_SETTINGS[settings],
   };
 
   const res = await fetch(`${API}/${voiceId}?output_format=mp3_44100_128`, {
@@ -199,9 +243,21 @@ async function speakOnce(text: string, voiceId: string, around: { before?: strin
       const retryAfter = Number(res.headers.get('retry-after')) * 1000 || 0;
       throw new TtsBusyError(ttsErrorMessage(res.status, detail), retryAfter);
     }
+    // Avvisas de tidigare inläsningarna (för gamla, eller modellen tar inte emot
+    // dem) läses biten utan dem i stället för att hela kapitlet misslyckas
+    if ((res.status === 400 || res.status === 422) && (previousIds.length > 0 || nextIds.length > 0)) {
+      if (/model|not supported|not available/i.test(detail)) noStitching.add(model);
+      console.warn(`[Ljud] tidigare inläsningar avvisades (${res.status}) - läser utan dem`);
+      return speakOnce(text, voiceId, { before: context.before, after: context.after }, quality, settings);
+    }
     throw new Error(ttsErrorMessage(res.status, detail));
   }
-  return Buffer.from(await res.arrayBuffer());
+  return {
+    audio: Buffer.from(await res.arrayBuffer()),
+    requestId: res.headers.get('request-id'),
+    // Det ElevenLabs faktiskt drog från kvoten
+    credits: Number(res.headers.get('character-cost')) || text.length,
+  };
 }
 
 function ttsErrorMessage(status: number, detail: string): string {
@@ -211,14 +267,109 @@ function ttsErrorMessage(status: number, detail: string): string {
   return `ElevenLabs svarade ${status}${detail ? `: ${detail.slice(0, 200)}` : ''}`;
 }
 
+// Varje bit från ElevenLabs är en egen mp3-fil med ID3-tagg och en Info-ruta som
+// anger bitens längd. Hopsatta som de är kan en spelare tro att filen är lika lång
+// som första biten. Utan dem blir filen en ren ström som alla spelare räknar rätt på.
+export function stripMp3Headers(mp3: Buffer): Buffer {
+  let offset = 0;
+  if (mp3.length > 10 && mp3.toString('latin1', 0, 3) === 'ID3') {
+    const size = ((mp3[6] & 0x7f) << 21) | ((mp3[7] & 0x7f) << 14) | ((mp3[8] & 0x7f) << 7) | (mp3[9] & 0x7f);
+    offset = 10 + size + ((mp3[5] & 0x10) ? 10 : 0);
+  }
+  // Första ramen: hoppa över den om den bara bär en Xing/Info-rubrik
+  if (offset + 4 < mp3.length && mp3[offset] === 0xff && (mp3[offset + 1] & 0xe0) === 0xe0) {
+    const header = mp3.readUInt32BE(offset);
+    const versionBits = (header >> 19) & 3; // 3 = MPEG1
+    const bitrateIndex = (header >> 12) & 15;
+    const rateIndex = (header >> 10) & 3;
+    const padding = (header >> 9) & 1;
+    const mono = ((header >> 6) & 3) === 3;
+    const mpeg1 = versionBits === 3;
+    const bitrates = mpeg1
+      ? [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0]
+      : [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0];
+    const rates = mpeg1 ? [44100, 48000, 32000] : versionBits === 2 ? [22050, 24000, 16000] : [11025, 12000, 8000];
+    const bitrate = bitrates[bitrateIndex] * 1000;
+    const rate = rates[rateIndex];
+    if (bitrate && rate) {
+      const frameLength = Math.floor(((mpeg1 ? 144 : 72) * bitrate) / rate) + padding;
+      const sideInfo = mpeg1 ? (mono ? 17 : 32) : (mono ? 9 : 17);
+      const tag = mp3.toString('latin1', offset + 4 + sideInfo, offset + 8 + sideInfo);
+      if (tag === 'Xing' || tag === 'Info') offset += frameLength;
+    }
+  }
+  return offset > 0 && offset < mp3.length ? mp3.subarray(offset) : mp3;
+}
+
+export interface TakeChunk {
+  text: string;
+  audio: Buffer;
+  requestId: string | null;
+}
+
+export interface Take {
+  audio: Buffer;
+  chunks: TakeChunk[];
+  // ElevenLabs id för varje bit i ordning - nästa kapitel kan läsas "efter" dem
+  requestIds: string[];
+  // Krediter som gick åt, även för bitar som lästes om
+  credits: number;
+}
+
+function assemble(chunks: TakeChunk[], credits: number): Take {
+  return {
+    audio: Buffer.concat(chunks.map(c => c.audio)),
+    chunks,
+    requestIds: chunks.map(c => c.requestId).filter((id): id is string => !!id),
+    credits,
+  };
+}
+
+type TakeOptions = { settings?: VoiceSettingsVersion; previousRequestIds?: string[]; nextRequestIds?: string[] };
+
+/**
+ * Läser upp ett avsnitt i bitar. Varje bit lyssnar på bitarna före, och första
+ * biten på slutet av förra kapitlet (om det lästes in nyss), så att rösten
+ * håller samma ton genom hela boken.
+ */
+export async function synthesizeTake(text: string, voiceId = DEFAULT_VOICE_ID, quality: TtsQuality = 'best', options: TakeOptions = {}): Promise<Take> {
+  const settings = options.settings ?? CURRENT_VOICE_SETTINGS;
+  const texts = chunkText(text);
+  const chunks: TakeChunk[] = [];
+  let credits = 0;
+  for (let i = 0; i < texts.length; i++) {
+    const earlier = [...(options.previousRequestIds || []), ...chunks.map(c => c.requestId).filter((id): id is string => !!id)];
+    const result = await speak(texts[i], voiceId, {
+      before: texts[i - 1],
+      after: texts[i + 1],
+      previousRequestIds: earlier.slice(-3),
+      nextRequestIds: i === texts.length - 1 ? options.nextRequestIds : undefined,
+    }, quality, settings);
+    chunks.push({ text: texts[i], audio: stripMp3Headers(result.audio), requestId: result.requestId });
+    credits += result.credits;
+  }
+  return assemble(chunks, credits);
+}
+
+/** Läser om en bit i en tagning, med bitarna runt omkring som sammanhang. */
+export async function rereadChunk(take: Take, index: number, voiceId: string, quality: TtsQuality, options: TakeOptions = {}): Promise<Take> {
+  const settings = options.settings ?? CURRENT_VOICE_SETTINGS;
+  const ids = (list: TakeChunk[]) => list.map(c => c.requestId).filter((id): id is string => !!id);
+  const before = [...(options.previousRequestIds || []), ...ids(take.chunks.slice(0, index))];
+  const after = [...ids(take.chunks.slice(index + 1)), ...(options.nextRequestIds || [])];
+  const result = await speak(take.chunks[index].text, voiceId, {
+    before: take.chunks[index - 1]?.text,
+    after: take.chunks[index + 1]?.text,
+    previousRequestIds: before.slice(-3),
+    nextRequestIds: after.slice(0, 3),
+  }, quality, settings);
+  const chunks = take.chunks.map((c, i) => (i === index ? { text: c.text, audio: stripMp3Headers(result.audio), requestId: result.requestId } : c));
+  return assemble(chunks, take.credits + result.credits);
+}
+
 /** Läser upp en text och ger tillbaka en mp3. Långa texter läses i bitar. */
 export async function synthesize(text: string, voiceId = DEFAULT_VOICE_ID, quality: TtsQuality = 'best'): Promise<Buffer> {
-  const chunks = chunkText(text);
-  const parts: Buffer[] = [];
-  for (let i = 0; i < chunks.length; i++) {
-    parts.push(await speak(chunks[i], voiceId, { before: chunks[i - 1], after: chunks[i + 1] }, quality));
-  }
-  return Buffer.concat(parts);
+  return (await synthesizeTake(text, voiceId, quality)).audio;
 }
 
 // Kort mening att välja röst på. Samma text för alla röster, så att de går att jämföra.

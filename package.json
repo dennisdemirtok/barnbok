@@ -13,6 +13,7 @@
     "@google/genai": "^1.0.0",
     "@supabase/supabase-js": "^2.99.1",
     "jspdf": "^2.5.2",
+    "mpg123-decoder": "^1.0.3",
     "next": "^14.2.35",
     "react": "^18",
     "react-dom": "^18",

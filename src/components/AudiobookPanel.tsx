@@ -16,6 +16,25 @@ interface AudioPart {
   index?: number;
 }
 
+// Ett fel som korrekturlyssningen hittade
+interface ProofIssue {
+  time: string;
+  word: string;
+  sentence: string;
+  heard: string;
+  kind: string;
+  severity: 'minor' | 'major';
+  sayAs?: string;
+}
+
+interface ChapterProof {
+  floor?: number;
+  issues: ProofIssue[];
+  checked: boolean;
+  fixed: number;
+  overall?: string;
+}
+
 // Ett kapitel som går att läsa in för sig. url finns när det redan är inläst.
 interface Chapter {
   index: number;
@@ -25,7 +44,34 @@ interface Chapter {
   url?: string;
   // Inläst, men texten eller uttalslistan har ändrats sedan dess
   stale?: boolean;
+  // Krediter inläsningen kostade (saknas för äldre inläsningar)
+  credits?: number;
+  proof?: ChapterProof;
 }
+
+type Mode = 'best' | 'expressive' | 'economy' | 'v4';
+
+const KIND_LABEL: Record<string, string> = {
+  mispronounced: 'uttal',
+  cut_off_ending: 'ordslut',
+  skipped: 'överhoppat',
+  added_or_repeated: 'tillagt',
+  wrong_stress: 'betoning',
+  unclear: 'otydligt',
+  noise_or_glitch: 'brus',
+  odd_pause: 'paus',
+};
+
+// "02:47" -> 167
+const issueSeconds = (time: string) => {
+  const m = time.match(/(\d+):(\d{1,2})/);
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 0;
+};
+
+// Namn och ord som rösten säger fel varje gång rättas bäst med uttalslistan
+const fitsPronunciationList = (issue: ProofIssue) =>
+  (issue.kind === 'mispronounced' || issue.kind === 'wrong_stress') &&
+  (!!issue.sayAs || /^[A-ZÅÄÖ]/.test(issue.word.trim()));
 
 // Uttalsregel: ordet i boken och hur rösten ska säga det
 interface PronunciationRule {
@@ -44,6 +90,7 @@ interface Audiobook {
   title: string;
   voice: string;
   voiceId: string;
+  mode?: Mode;
   seconds: number;
   createdAt: string;
   parts: AudioPart[];
@@ -151,8 +198,13 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const [error, setError] = useState('');
 
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
-  // 'best' = bästa uttalet, 'economy' = halva kvoten hos ElevenLabs
-  const [quality, setQuality] = useState<'best' | 'expressive' | 'economy'>('best');
+  // 'best' = bästa uttalet, 'economy' = halva kvoten hos ElevenLabs, 'v4' = nyaste modellen
+  const [quality, setQuality] = useState<Mode>('best');
+  // Korrekturlyssning av kapitel som redan är inlästa
+  const [proofing, setProofing] = useState<{ done: number; total: number } | null>(null);
+  const [openProof, setOpenProof] = useState<number | null>(null);
+  // Hoppa till en tid i kapitlet när det börjar spelas
+  const pendingSeek = useRef<number | null>(null);
   // Röstprov: några sekunder av vald röst, så att valet går att höra
   const [sampleId, setSampleId] = useState('');
   const [customVoice, setCustomVoice] = useState('');
@@ -206,6 +258,8 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     // Kapitel som blivit inlästa ska inte ligga kvar kryssade
     setSelected(prev => prev.filter(i => !(data.chapters || []).some(c => c.index === i && c.url)));
     if (data.audiobook?.voiceId) setVoiceId(data.audiobook.voiceId);
+    // Omläsningar ska låta som resten av boken: samma läge som den lästes med
+    if (data.audiobook?.mode && ['best', 'expressive', 'economy', 'v4'].includes(data.audiobook.mode)) setQuality(data.audiobook.mode);
     const list = data.chapters || [];
     changeRef.current?.({
       complete: list.length > 0 && list.every(c => c.url),
@@ -529,10 +583,52 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     setPartIndex(index);
   };
 
-  // Hoppa till ett inläst kapitel i spelaren
-  const playChapter = (chapterIndex: number) => {
+  // Hoppa till ett inläst kapitel i spelaren, och valfritt till en tid i det
+  const playChapter = (chapterIndex: number, seconds?: number) => {
     const at = parts.findIndex(p => p.index === chapterIndex);
-    if (at >= 0) selectPart(at);
+    if (at < 0) return;
+    pendingSeek.current = typeof seconds === 'number' ? Math.max(0, seconds) : null;
+    if (at === partIndex && playerRef.current) {
+      if (pendingSeek.current !== null) playerRef.current.currentTime = pendingSeek.current;
+      pendingSeek.current = null;
+      playerRef.current.play().catch(() => { /* kräver ett klick till */ });
+      return;
+    }
+    selectPart(at);
+  };
+
+  // Korrekturlyssna inlästa kapitel som inte är kontrollerade - kostar inga krediter
+  const proofreadChapters = async (indexes: number[]) => {
+    if (!bookId || indexes.length === 0) return;
+    setError('');
+    setProofing({ done: 0, total: indexes.length });
+    let failed = 0;
+    for (let i = 0; i < indexes.length; i++) {
+      try {
+        const res = await fetch('/api/audio/proofread', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookId, index: indexes[i] }),
+        });
+        const data = await res.json().catch(() => null) as { proof?: ChapterProof } | null;
+        if (!res.ok || !data?.proof) failed++;
+        else setChapters(prev => prev.map(c => (c.index === indexes[i] ? { ...c, proof: data.proof } : c)));
+      } catch {
+        failed++;
+      }
+      setProofing({ done: i + 1, total: indexes.length });
+    }
+    setProofing(null);
+    if (failed > 0) setError(`${failed} kapitel kunde inte korrekturlyssnas just nu. Försök igen om en stund.`);
+  };
+
+  // Lägg ett namn som rösten säger fel i uttalslistan
+  const suggestPronunciation = (issue: ProofIssue) => {
+    setPronOpen(true);
+    setNewWord(issue.word.trim().split(/\s+/)[0]);
+    setNewSayAs(issue.sayAs?.trim() || '');
+    setPronError('');
+    setTimeout(() => document.getElementById('ratta-uttal')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
   };
 
   const toggleChapter = (chapterIndex: number, on: boolean) =>
@@ -550,6 +646,11 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const leftSeconds = leftChapters.reduce((n, c) => n + c.seconds, 0);
   const allRead = chapters.length > 0 && leftChapters.length === 0;
   const selectedChapters = chapters.filter(c => selected.includes(c.index));
+  // Korrekturlyssningen: kontrollerade kapitel, saker att lyssna på, och kapitel som inte är kontrollerade
+  const proofedChapters = doneChapters.filter(c => c.proof?.checked && !c.stale);
+  const unproofed = doneChapters.filter(c => !c.proof?.checked && !c.stale);
+  const issueCount = proofedChapters.reduce((n, c) => n + (c.proof?.issues.length || 0), 0);
+  const usedCredits = doneChapters.reduce((n, c) => n + (c.credits || 0), 0);
   const selectedCharacters = selectedChapters.reduce((n, c) => n + c.characters, 0);
   const showChapters = Boolean(canCreate && bookId) && chapters.length > 0;
   const showPronunciation = Boolean(canCreate && bookId);
@@ -573,6 +674,13 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     const el = playerRef.current;
     if (!el || !autoPlay.current) return;
     autoPlay.current = false;
+    const seek = pendingSeek.current;
+    pendingSeek.current = null;
+    if (seek !== null) {
+      const jump = () => { el.currentTime = seek; };
+      if (el.readyState >= 1) jump();
+      else el.addEventListener('loadedmetadata', jump, { once: true });
+    }
     el.play().catch(() => { /* webbläsaren kan kräva ett klick - spelaren står redo */ });
   }, [partIndex, current?.url]);
 
@@ -642,7 +750,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const voice = NARRATOR_VOICES.find(v => v.id === voiceId);
 
   // Väljer röst och spelar upp provet direkt
-  const playSample = (id: string, mode: 'best' | 'expressive' | 'economy') => {
+  const playSample = (id: string, mode: Mode) => {
     setSampleId(id);
     const player = sampleRef.current;
     if (!player) return;
@@ -656,7 +764,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   };
 
   // Byter man läge spelas samma röst upp igen, så skillnaden hörs direkt
-  const changeQuality = (mode: 'best' | 'expressive' | 'economy') => {
+  const changeQuality = (mode: Mode) => {
     setQuality(mode);
     if (sampleId) playSample(sampleId, mode);
   };
@@ -752,8 +860,46 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
         <div className="mt-5">
           <div className="flex items-baseline justify-between gap-2">
             <h4 className="text-sm font-semibold text-ink">Kapitel</h4>
-            <p className="text-xs text-ink/50 shrink-0">{doneChapters.length} av {chapters.length} inlästa</p>
+            <p className="text-xs text-ink/50 shrink-0">
+              {doneChapters.length} av {chapters.length} inlästa{usedCredits > 0 ? ` · ${thousands(usedCredits)} krediter` : ''}
+            </p>
           </div>
+
+          {/* Korrekturlyssning: Gemini jämför uppläsningen med texten */}
+          {doneChapters.length > 0 && (
+            <div className={`mt-2 rounded-2xl border px-3.5 py-3 flex flex-col gap-2 sm:flex-row sm:items-center ${
+              issueCount > 0 ? 'border-amber-200 bg-amber-50/60' : 'border-line bg-white'
+            }`}>
+              <Icon
+                name={proofing ? 'hearing' : issueCount > 0 ? 'error' : proofedChapters.length > 0 && unproofed.length === 0 ? 'verified' : 'hearing'}
+                filled={!proofing && issueCount === 0 && proofedChapters.length > 0 && unproofed.length === 0}
+                size={20}
+                className={`shrink-0 ${issueCount > 0 ? 'text-amber-700' : proofedChapters.length > 0 && unproofed.length === 0 ? 'text-emerald-600' : 'text-ink/50'}`}
+              />
+              <p className="flex-1 text-sm text-ink/75 leading-snug">
+                {proofing
+                  ? `Korrekturlyssnar kapitel ${Math.min(proofing.done + 1, proofing.total)} av ${proofing.total}...`
+                  : proofedChapters.length === 0
+                  ? 'Låt korrekturlyssnaren gå igenom uppläsningen: varje ord jämförs med texten.'
+                  : issueCount > 0
+                  ? `Korrekturlyssnat ${proofedChapters.length} av ${doneChapters.length} kapitel. ${issueCount} ${issueCount === 1 ? 'sak' : 'saker'} att lyssna på - öppna kapitlen nedan.`
+                  : unproofed.length > 0
+                  ? `Korrekturlyssnat ${proofedChapters.length} av ${doneChapters.length} kapitel utan fel.`
+                  : 'Korrekturlyssnat - inga fel hittades.'}
+              </p>
+              {unproofed.length > 0 && canCreate && !running && (
+                <button
+                  onClick={() => void proofreadChapters(unproofed.map(c => c.index))}
+                  disabled={!!proofing}
+                  className="btn-ghost !py-1.5 !px-3 !text-xs shrink-0 disabled:opacity-50"
+                  title="Kostar inga krediter hos ElevenLabs"
+                >
+                  {proofing ? <span className="spinner !w-3.5 !h-3.5" /> : <Icon name="hearing" size={16} />}
+                  Korrekturlyssna {unproofed.length === doneChapters.length ? 'boken' : `${unproofed.length} kapitel`}
+                </button>
+              )}
+            </div>
+          )}
           {staleChapters.length > 0 && !running && (
             <div className="mt-2 note-warning flex flex-col gap-2 sm:flex-row sm:items-center">
               <p className="flex-1 text-sm">
@@ -769,7 +915,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
               const inQueue = running && (jobChapters.length === 0 ? !read : jobChapters.includes(chapter.index));
               const stale = read && Boolean(chapter.stale);
               return (
-                <li key={chapter.index} className="flex items-center gap-2.5 px-3 py-2.5">
+                <li key={chapter.index} className={`flex gap-2.5 px-3 py-2.5 ${openProof === chapter.index ? 'items-start' : 'items-center'}`}>
                   <input
                     type="checkbox"
                     checked={selected.includes(chapter.index)}
@@ -788,6 +934,51 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                       <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-amber-700">
                         <Icon name="error" size={13} /> Texten eller uttalet har ändrats
                       </p>
+                    )}
+                    {read && !stale && !inQueue && chapter.proof?.checked && (
+                      chapter.proof.issues.length === 0 ? (
+                        <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                          <Icon name="verified" size={13} /> Korrekturlyssnat{chapter.proof.fixed > 0 ? ` · ${chapter.proof.fixed} ${chapter.proof.fixed === 1 ? 'bit' : 'bitar'} omlästa` : ''}
+                        </p>
+                      ) : (
+                        <button
+                          onClick={() => setOpenProof(openProof === chapter.index ? null : chapter.index)}
+                          aria-expanded={openProof === chapter.index}
+                          className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-800"
+                        >
+                          <Icon name="hearing" size={13} />
+                          {chapter.proof.issues.length} {chapter.proof.issues.length === 1 ? 'sak' : 'saker'} att lyssna på
+                          <Icon name={openProof === chapter.index ? 'expand_less' : 'expand_more'} size={14} />
+                        </button>
+                      )
+                    )}
+                    {openProof === chapter.index && chapter.proof && chapter.proof.issues.length > 0 && (
+                      <ul className="mt-2 space-y-1.5">
+                        {chapter.proof.issues.map((issue, n) => (
+                          <li key={`${issue.time}-${n}`} className="rounded-xl bg-paper px-2.5 py-2">
+                            <p className="text-xs text-ink leading-snug">
+                              <span className="font-semibold tabular-nums">{issue.time}</span>
+                              <span className="text-ink/45"> · {KIND_LABEL[issue.kind] || issue.kind} · </span>
+                              <span className="font-semibold">{issue.word}</span>
+                              {issue.heard ? <span className="text-ink/60"> lät som &quot;{issue.heard}&quot;</span> : null}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-ink/50 leading-snug line-clamp-2">{issue.sentence}</p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              <button
+                                onClick={() => playChapter(chapter.index, issueSeconds(issue.time) - 2)}
+                                className="btn-ghost !py-1 !px-2 !text-[11px]"
+                              >
+                                <Icon name="play_arrow" size={14} /> Spela härifrån
+                              </button>
+                              {canCreate && fitsPronunciationList(issue) && (
+                                <button onClick={() => suggestPronunciation(issue)} className="btn-ghost !py-1 !px-2 !text-[11px]">
+                                  <Icon name="record_voice_over" size={14} /> Rätta uttalet
+                                </button>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                   {read ? (
@@ -1018,6 +1209,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
                 { id: 'best' as const, label: 'Naturlig', hint: 'lugn uppläsning · full kvot' },
                 { id: 'expressive' as const, label: 'Levande', hint: 'mer inlevelse · full kvot' },
                 { id: 'economy' as const, label: 'Snabb', hint: 'halva kvoten' },
+                { id: 'v4' as const, label: 'v4 · nyast', hint: 'jämnast röst i långa böcker' },
               ]).map(option => (
                 <button
                   key={option.id}

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { applyPronunciations, containsWord, hasTtsKey, isQuality, narrationSegments, synthesize, TtsQuality } from '@/lib/tts';
+import { containsWord, hasTtsKey, isQuality, narrationSegments, spokenText, synthesize, TtsQuality } from '@/lib/tts';
 import { loadBookForJob } from '@/lib/job-queue';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     if (!sentence) sentence = word;
     if (!sentence) return NextResponse.json({ error: 'Skriv ett ord att prova' }, { status: 400 });
 
-    const spoken = word ? applyPronunciations(sentence, [{ word, sayAs }]) : sentence;
+    const spoken = spokenText(sentence, word ? [{ word, sayAs }] : []);
     const mp3 = await synthesize(spoken, body.voiceId, quality);
     return new NextResponse(new Uint8Array(mp3), {
       headers: {

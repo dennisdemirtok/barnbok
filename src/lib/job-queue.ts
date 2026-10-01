@@ -11,7 +11,8 @@ import { buildPageImageRequest, extractImage, isMonochromeStyle, ImageQuality, B
 import { cancelImageBatch, checkImageBatch, fileReference, imageMimeType, submitImageBatch, uploadReferenceSheets, UploadedRef } from './image-batch';
 import { withReferenceImages } from './character-refs';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
-import { applyPronunciations, estimateSeconds, isQuality, narrationSegments, synthesize, textStamp, TtsQuality, TtsQuotaError } from './tts';
+import { CURRENT_VOICE_SETTINGS, estimateSeconds, isQuality, isVoiceSettingsVersion, narrationSegments, spokenText, textStamp, TtsQuality, TtsQuotaError, VoiceSettingsVersion } from './tts';
+import { readChapter } from './audiobook-reader';
 import { loadPronunciations } from './pronunciations';
 import { DEFAULT_VOICE_ID, voiceById } from './tts-voices';
 
@@ -20,11 +21,14 @@ import { DEFAULT_VOICE_ID, voiceById } from './tts-voices';
 const WORKERS = 4;
 // Ett uppslag får ta så här lång tid (bild + granskning + rättningar)
 const ITEM_BUDGET_MS = DEFAULT_QUALITY_BUDGET_MS;
-// Ett uppläst avsnitt (kapitel) får ta så här lång tid
-const AUDIO_BUDGET_MS = 8 * 60 * 1000;
-// Kapitel som läses samtidigt. ElevenLabs tillåter bara några anrop åt gången
-// per konto, och tts.ts släpper ändå bara fram två i hela servern.
-const AUDIO_WORKERS = 2;
+// Ett uppläst avsnitt (kapitel) får ta så här lång tid, med korrekturlyssning
+// och omläsning av bitar som hade fel
+const AUDIO_BUDGET_MS = 14 * 60 * 1000;
+// Kapitlen läses ett i taget och i ordning: varje kapitel lyssnar på slutet av
+// det förra, så att rösten håller samma ton genom hela boken
+const AUDIO_WORKERS = 1;
+// ElevenLabs kan bara lyssna på inläsningar som är högst två timmar gamla
+const STITCH_MAX_AGE_MS = 110 * 60 * 1000;
 // Sparläget: så ofta tittar jobbet efter levererade bilder hos Google,
 // och så många bilder läggs i varje batch (svaren hämtas en batch i taget)
 const BATCH_POLL_MS = 60_000;
@@ -298,9 +302,17 @@ export async function createAudiobookJob(
   const segments = wanted ? all.filter(s => wanted.has(s.index)) : all;
   if (segments.length === 0) return { error: 'Boken har ingen text att läsa upp' };
 
+  // Röstinställningarna följer boken: läses bara vissa kapitel om används samma
+  // version som resten, så att de låter likadant. Hela boken får den nyaste.
+  const manifest = await readAudioManifest(bookId);
+  const wholeBook = segments.length === all.length;
+  const settings: VoiceSettingsVersion = wholeBook || !manifest?.parts?.length
+    ? CURRENT_VOICE_SETTINGS
+    : isVoiceSettingsVersion(manifest.settings) ? manifest.settings : 1;
+
   const { data: jobRow, error } = await db
     .from('barnbok_jobs')
-    .insert({ book_id: bookId, kind: 'audiobook', status: 'running', total: segments.length, payload: { voiceId: voice, quality, segments: segments.map(s => s.index) } })
+    .insert({ book_id: bookId, kind: 'audiobook', status: 'running', total: segments.length, payload: { voiceId: voice, quality, settings, segments: segments.map(s => s.index) } })
     .select()
     .single();
   if (error || !jobRow) {
@@ -415,12 +427,17 @@ export async function runJob(jobId: string): Promise<void> {
     const spreadById = new Map(book.spreads.map(s => [s.id, s]));
     const isAudiobook = job.kind === 'audiobook';
     const imageQuality: ImageQuality = (job.payload as { quality?: ImageQuality } | null)?.quality === 'budget' ? 'budget' : 'standard';
-    const payload = job.payload as { voiceId?: string; quality?: TtsQuality } | null;
+    const payload = job.payload as { voiceId?: string; quality?: TtsQuality; settings?: number } | null;
     const voiceId = payload?.voiceId || DEFAULT_VOICE_ID;
     const audioQuality: TtsQuality = isQuality(payload?.quality) ? payload.quality : 'best';
+    // Jobb från före versionerna lästes med de gamla inställningarna
+    const voiceSettings: VoiceSettingsVersion = isVoiceSettingsVersion(payload?.settings) ? payload.settings : 1;
     const segments = isAudiobook ? narrationSegments(bookForNarration(book)) : [];
     // Bokens uttalslista gäller varje kapitel som läses in
     const pronunciations = isAudiobook ? await loadPronunciations(book.id) : [];
+    const pronunciationNotes = pronunciations.map(r => `"${r.word}" sägs som "${r.sayAs}"`);
+    // Kapitel som redan är inlästa: deras inläsningar (för att hålla tonen) och brusnivå
+    const readParts = isAudiobook ? await knownAudioParts(book.id, jobId) : new Map<number, KnownPart>();
 
     const finishItem = async (id: string, patch: Record<string, unknown>) => {
       await withTimeout(
@@ -468,12 +485,51 @@ export async function runJob(jobId: string): Promise<void> {
             continue;
           }
           try {
-            const spoken = applyPronunciations(segment.text, pronunciations);
-            const mp3 = await withTimeout(synthesize(spoken, voiceId, audioQuality), AUDIO_BUDGET_MS, 'Uppläsningen tog för lång tid');
-            const url = await uploadFile(`books/${book.id}/audio/${String(segment.index).padStart(3, '0')}-${textStamp(spoken)}.mp3`, mp3, 'audio/mpeg');
+            const spoken = spokenText(segment.text, pronunciations);
+            const fresh = (part?: KnownPart) => (part && Date.now() - part.at < STITCH_MAX_AGE_MS ? part : undefined);
+            const previous = fresh(readParts.get(segment.index - 1));
+            const next = fresh(readParts.get(segment.index + 1));
+            const otherFloors = Array.from(readParts.entries())
+              .filter(([index, part]) => index !== segment.index && typeof part.floor === 'number')
+              .map(([, part]) => part.floor as number);
+            const reading = await withTimeout(readChapter({
+              spoken,
+              original: segment.text,
+              notes: pronunciationNotes,
+              voiceId,
+              quality: audioQuality,
+              settings: voiceSettings,
+              previousRequestIds: previous?.lastRequestId ? [previous.lastRequestId] : undefined,
+              nextRequestIds: next?.firstRequestId ? [next.firstRequestId] : undefined,
+              otherFloors,
+            }), AUDIO_BUDGET_MS, 'Uppläsningen tog för lång tid');
+            const { take, quality: proof } = reading;
+            const url = await uploadFile(`books/${book.id}/audio/${String(segment.index).padStart(3, '0')}-${textStamp(spoken)}.mp3`, take.audio, 'audio/mpeg');
             if (!url) throw new Error('Ljudet kunde inte sparas i molnet');
-            await finishItem(item.id, { status: 'done', image_url: url, quality: { seconds: estimateSeconds(segment.text), label: segment.label, stamp: textStamp(spoken) } });
-            console.log(`[Jobb] arbetare ${n} läste upp ${segment.label}`);
+            const known: KnownPart = {
+              at: Date.now(),
+              firstRequestId: take.requestIds[0],
+              lastRequestId: take.requestIds[take.requestIds.length - 1],
+              floor: proof.floor,
+            };
+            readParts.set(segment.index, known);
+            await finishItem(item.id, {
+              status: 'done',
+              image_url: url,
+              quality: {
+                seconds: estimateSeconds(segment.text),
+                label: segment.label,
+                stamp: textStamp(spoken),
+                credits: take.credits,
+                settings: voiceSettings,
+                mode: audioQuality,
+                firstRequestId: known.firstRequestId,
+                lastRequestId: known.lastRequestId,
+                at: new Date(known.at).toISOString(),
+                proof,
+              },
+            });
+            console.log(`[Jobb] arbetare ${n} läste upp ${segment.label} (${take.credits} krediter, ${proof.issues.length} saker att lyssna på, ${proof.fixed} bitar omlästa)`);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             console.warn(`[Jobb] ${item.label || segment.label} misslyckades:`, message);
@@ -823,7 +879,83 @@ async function uploadFile(path: string, bytes: Buffer, contentType: string, cach
   return db.storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-interface ManifestPart { index: number; label: string; url: string; seconds: number; stamp?: string }
+interface ManifestPart {
+  index: number;
+  label: string;
+  url: string;
+  seconds: number;
+  stamp?: string;
+  // Kvalitetskontrollen och det som behövs för att nästa kapitel ska låta likadant
+  credits?: number;
+  settings?: number;
+  mode?: string;
+  firstRequestId?: string;
+  lastRequestId?: string;
+  at?: string;
+  proof?: { floor?: number; issues: unknown[]; checked: boolean; fixed: number; overall?: string };
+}
+
+interface AudioManifest {
+  bookId: string;
+  title?: string;
+  voice?: string;
+  voiceId?: string;
+  mode?: string;
+  settings?: number;
+  createdAt?: string;
+  seconds?: number;
+  parts: ManifestPart[];
+}
+
+// Ett inläst kapitel som andra kapitel kan hålla tonen mot
+interface KnownPart { at: number; firstRequestId?: string; lastRequestId?: string; floor?: number }
+
+export async function readAudioManifest(bookId: string): Promise<AudioManifest | null> {
+  const url = serverSupabase().storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(audioManifestPath(bookId)).data.publicUrl;
+  return fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .catch(() => null) as Promise<AudioManifest | null>;
+}
+
+/** Ändrar ett kapitel i innehållsförteckningen (t.ex. korrekturlyssningens resultat). */
+export async function patchAudioManifestPart(bookId: string, index: number, patch: Partial<ManifestPart>): Promise<boolean> {
+  const manifest = await readAudioManifest(bookId);
+  const part = manifest?.parts.find(p => p.index === index);
+  if (!manifest || !part) return false;
+  Object.assign(part, patch);
+  const url = await uploadFile(audioManifestPath(bookId), Buffer.from(JSON.stringify(manifest)), 'application/json', '0');
+  return !!url;
+}
+
+// Inlästa kapitel ur innehållsförteckningen och ur det här jobbet (om servern
+// startade om mitt i jobbet finns de klara kapitlen bara i jobbets rader)
+async function knownAudioParts(bookId: string, jobId: string): Promise<Map<number, KnownPart>> {
+  const known = new Map<number, KnownPart>();
+  const manifest = await readAudioManifest(bookId);
+  for (const part of manifest?.parts || []) {
+    known.set(part.index, {
+      at: part.at ? Date.parse(part.at) : 0,
+      firstRequestId: part.firstRequestId,
+      lastRequestId: part.lastRequestId,
+      floor: part.proof?.floor,
+    });
+  }
+  const { data: items } = await serverSupabase()
+    .from('barnbok_job_items')
+    .select('spread_number, quality, status')
+    .eq('job_id', jobId)
+    .eq('status', 'done');
+  for (const item of items || []) {
+    const q = (item.quality || {}) as { at?: string; firstRequestId?: string; lastRequestId?: string; proof?: { floor?: number } };
+    known.set(item.spread_number as number, {
+      at: q.at ? Date.parse(q.at) : 0,
+      firstRequestId: q.firstRequestId,
+      lastRequestId: q.lastRequestId,
+      floor: q.proof?.floor,
+    });
+  }
+  return known;
+}
 
 // Innehållsförteckning för ljudboken, så att appen hittar spåren utan databasändring
 export const audioManifestPath = (bookId: string) => `books/${bookId}/audio/manifest.json`;
@@ -835,21 +967,28 @@ async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: stri
     .select('label, spread_number, image_url, quality, status')
     .eq('job_id', jobId)
     .order('spread_number');
-  const fresh = (items || [])
+  const fresh: ManifestPart[] = (items || [])
     .filter(i => i.status === 'done' && i.image_url)
-    .map(i => ({
-      index: i.spread_number as number,
-      label: i.label || `Del ${(i.spread_number as number) + 1}`,
-      url: i.image_url as string,
-      seconds: (i.quality as { seconds?: number } | null)?.seconds ?? 0,
-      stamp: (i.quality as { stamp?: string } | null)?.stamp,
-    }));
+    .map(i => {
+      const q = (i.quality || {}) as Partial<ManifestPart> & { seconds?: number };
+      return {
+        index: i.spread_number as number,
+        label: i.label || `Del ${(i.spread_number as number) + 1}`,
+        url: i.image_url as string,
+        seconds: q.seconds ?? 0,
+        stamp: q.stamp,
+        credits: q.credits,
+        settings: q.settings,
+        mode: q.mode,
+        firstRequestId: q.firstRequestId,
+        lastRequestId: q.lastRequestId,
+        at: q.at,
+        proof: q.proof,
+      };
+    });
 
   // Tidigare inlästa kapitel ligger kvar - listan växer när man gör ett i taget
-  const existingUrl = db.storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(audioManifestPath(book.id)).data.publicUrl;
-  const existing = await fetch(`${existingUrl}?t=${Date.now()}`, { cache: 'no-store' })
-    .then(r => (r.ok ? r.json() : null))
-    .catch(() => null) as { parts?: ManifestPart[] } | null;
+  const existing = await readAudioManifest(book.id);
 
   const byIndex = new Map<number, ManifestPart>();
   for (const part of existing?.parts || []) {
@@ -858,11 +997,15 @@ async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: stri
   for (const part of fresh) byIndex.set(part.index, part);
   const parts = Array.from(byIndex.values()).sort((a, b) => a.index - b.index);
   if (parts.length === 0) return;
-  const manifest = {
+  const latest = fresh[fresh.length - 1];
+  const manifest: AudioManifest = {
     bookId: book.id,
     title: book.title,
     voice: voiceById(voiceId).name,
     voiceId,
+    // Läge och röstinställningar som boken läses med - omläsningar använder samma
+    mode: latest?.mode ?? existing?.mode,
+    settings: latest?.settings ?? existing?.settings,
     createdAt: new Date().toISOString(),
     seconds: parts.reduce((n, p) => n + p.seconds, 0),
     parts,
@@ -872,7 +1015,7 @@ async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: stri
 
   const segments = narrationSegments(bookForNarration(book));
   await syncAudioMeta(book.id, {
-    seconds: manifest.seconds,
+    seconds: manifest.seconds ?? 0,
     parts: parts.length,
     complete: segments.length > 0 && segments.every(seg => byIndex.has(seg.index)),
   }).catch(err => console.warn('[Jobb] kunde inte notera ljudboken på boken:', err instanceof Error ? err.message : err));
