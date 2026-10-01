@@ -80,6 +80,13 @@ export function prepareForSpeech(text: string): string {
     return before + (spoken ? keepCase(word, `${spoken}${ending}`) : `${word}${ending}`);
   });
 
+  // En bokstav med ändelse: "sina O:n" -> "sina o-n"
+  out = out.replace(new RegExp(`(^|[^${L}])([${L}]):([a-zåäö]{1,3})(?=$|[^${L}])`, 'g'), (match, before: string, letter: string, ending: string) =>
+    `${before}${letter.toLowerCase()}-${ending}`);
+
+  // Hyschande: "Sch!" läses annars med ett k på slutet
+  out = out.replace(new RegExp(`(^|[^${L}])(S)ch(?=$|[^${L}])`, 'gi'), (match, before: string, s: string) => `${before}${s}chhh`);
+
   // "1:a", "3:e", "21:a" och "1:an", "3:an"
   out = out.replace(/\b(\d{1,2}):(a|e)\b/g, (match, num: string) => ordinal(parseInt(num, 10)) ?? match);
   out = out.replace(/\b(\d{1,2}):an\b/g, (match, num: string) => NUMBER_NAMES[parseInt(num, 10)] ?? match);
