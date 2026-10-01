@@ -90,6 +90,8 @@ export default function AudiobookCreator({ book, onBookChange, onBack, backLabel
   const [targetAge, setTargetAge] = useState(book?.targetAge || '6-9');
   const [text, setText] = useState(() => (book ? audiobookTextFromSpreads(book.spreads) : ''));
   const [showInStore, setShowInStore] = useState(!book?.keepPrivate);
+  const showInStoreRef = useRef(showInStore);
+  showInStoreRef.current = showInStore;
 
   // Omslag
   const [styleId, setStyleId] = useState(book?.stylePresetId || DEFAULT_STYLE);
@@ -150,8 +152,9 @@ export default function AudiobookCreator({ book, onBookChange, onBack, backLabel
     };
   }, [cover, coverSpreadId, bookId, title, author, targetAge, styleId, text, showInStore, createdAt]);
 
-  // Det som avgör om molnets kopia är aktuell
-  const signature = JSON.stringify([title.trim(), author.trim(), targetAge, text, cover?.version || '', showInStore]);
+  // Det som avgör om molnets kopia är aktuell. Valet om bokhandeln sparas för sig
+  // (changeShowInStore), så att spelaren inte laddas om när man kryssar i det.
+  const signature = JSON.stringify([title.trim(), author.trim(), targetAge, text, cover?.version || '']);
 
   // ── Molnsparning (behövs för att servern ska kunna läsa in ljudboken) ──
   const saveToCloud = useCallback(async () => {
@@ -245,16 +248,26 @@ export default function AudiobookCreator({ book, onBookChange, onBack, backLabel
         setPublished(true);
       }
       await updateBookInfoInCloud(next);
-      setSavedSignature(JSON.stringify([title.trim(), author.trim(), targetAge, text, cover?.version || '', on]));
     } catch (err) {
       setStoreError(err instanceof Error ? err.message : 'Kunde inte ändra bokhandeln just nu');
     }
   };
 
-  // Servern publicerar ljudboken när sista kapitlet är inläst - fråga igen då
+  // Servern publicerar ljudboken när sista kapitlet är inläst. Har det inte
+  // blivit av (t.ex. om den avpublicerats förut) men rutan är ikryssad, görs det här.
   const handleAudiobookChange = useCallback((state: { complete: boolean; parts: number }) => {
     setAudioComplete(state.complete);
-    if (state.complete) getBookPublishState(bookId).then(setPublished).catch(() => {});
+    if (!state.complete) return;
+    getBookPublishState(bookId)
+      .then(async isPublic => {
+        if (isPublic === false && showInStoreRef.current) {
+          await setBookPublished(bookId, true);
+          return true;
+        }
+        return isPublic;
+      })
+      .then(setPublished)
+      .catch(() => { /* syns som opublicerad - rutan går att kryssa om */ });
   }, [bookId]);
 
   // ════════════════════════════════════════════
@@ -511,12 +524,19 @@ export default function AudiobookCreator({ book, onBookChange, onBack, backLabel
               type="checkbox"
               checked={showInStore}
               onChange={e => void changeShowInStore(e.target.checked)}
+              // Medan boken sparas skulle valet kunna skrivas över av sparningen
+              disabled={saving}
+              aria-label="Visa i bokhandeln"
               className="mt-0.5 w-4 h-4 accent-brand shrink-0"
             />
             <span className="text-sm text-ink leading-snug">
               Visa i bokhandeln
               <span className="block text-xs text-ink/50">
-                {published ? 'Finns under Ljudböcker.' : 'Visas under Ljudböcker när hela ljudboken är inläst.'}
+                {published
+                  ? 'Finns under Ljudböcker.'
+                  : !showInStore
+                  ? 'Ljudboken är privat och syns inte i bokhandeln.'
+                  : 'Visas under Ljudböcker när hela ljudboken är inläst.'}
               </span>
             </span>
           </label>
