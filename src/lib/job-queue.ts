@@ -486,11 +486,14 @@ export async function runJob(jobId: string): Promise<void> {
           }
           try {
             const spoken = spokenText(segment.text, pronunciations);
-            const fresh = (part?: KnownPart) => (part && Date.now() - part.at < STITCH_MAX_AGE_MS ? part : undefined);
+            // Bara inläsningar med samma modell: en annan modell låter annorlunda
+            // och ska varken följas eller jämföras med
+            const sameModel = (part?: KnownPart) => (part && part.mode === audioQuality ? part : undefined);
+            const fresh = (part?: KnownPart) => (part && Date.now() - part.at < STITCH_MAX_AGE_MS ? sameModel(part) : undefined);
             const previous = fresh(readParts.get(segment.index - 1));
             const next = fresh(readParts.get(segment.index + 1));
             const otherFloors = Array.from(readParts.entries())
-              .filter(([index, part]) => index !== segment.index && typeof part.floor === 'number')
+              .filter(([index, part]) => index !== segment.index && typeof part.floor === 'number' && sameModel(part))
               .map(([, part]) => part.floor as number);
             const reading = await withTimeout(readChapter({
               spoken,
@@ -511,6 +514,7 @@ export async function runJob(jobId: string): Promise<void> {
               firstRequestId: take.requestIds[0],
               lastRequestId: take.requestIds[take.requestIds.length - 1],
               floor: proof.floor,
+              mode: audioQuality,
             };
             readParts.set(segment.index, known);
             await finishItem(item.id, {
@@ -872,7 +876,7 @@ async function batchTick(
   await save();
 }
 
-async function uploadFile(path: string, bytes: Buffer, contentType: string, cacheControl?: string): Promise<string | null> {
+export async function uploadFile(path: string, bytes: Buffer, contentType: string, cacheControl?: string): Promise<string | null> {
   const db = serverSupabase();
   const { error } = await db.storage.from(SERVER_IMAGES_BUCKET).upload(path, bytes, { contentType, upsert: true, ...(cacheControl ? { cacheControl } : {}) });
   if (error) { console.warn('[Jobb] uppladdning misslyckades:', error.message); return null; }
@@ -908,7 +912,7 @@ interface AudioManifest {
 }
 
 // Ett inläst kapitel som andra kapitel kan hålla tonen mot
-interface KnownPart { at: number; firstRequestId?: string; lastRequestId?: string; floor?: number }
+interface KnownPart { at: number; firstRequestId?: string; lastRequestId?: string; floor?: number; mode?: string }
 
 export async function readAudioManifest(bookId: string): Promise<AudioManifest | null> {
   const url = serverSupabase().storage.from(SERVER_IMAGES_BUCKET).getPublicUrl(audioManifestPath(bookId)).data.publicUrl;
@@ -938,6 +942,8 @@ async function knownAudioParts(bookId: string, jobId: string): Promise<Map<numbe
       firstRequestId: part.firstRequestId,
       lastRequestId: part.lastRequestId,
       floor: part.proof?.floor,
+      // Äldre inläsningar saknar läge - de gjordes med Naturlig
+      mode: part.mode ?? 'best',
     });
   }
   const { data: items } = await serverSupabase()
@@ -946,12 +952,13 @@ async function knownAudioParts(bookId: string, jobId: string): Promise<Map<numbe
     .eq('job_id', jobId)
     .eq('status', 'done');
   for (const item of items || []) {
-    const q = (item.quality || {}) as { at?: string; firstRequestId?: string; lastRequestId?: string; proof?: { floor?: number } };
+    const q = (item.quality || {}) as { at?: string; firstRequestId?: string; lastRequestId?: string; mode?: string; proof?: { floor?: number } };
     known.set(item.spread_number as number, {
       at: q.at ? Date.parse(q.at) : 0,
       firstRequestId: q.firstRequestId,
       lastRequestId: q.lastRequestId,
       floor: q.proof?.floor,
+      mode: q.mode,
     });
   }
   return known;

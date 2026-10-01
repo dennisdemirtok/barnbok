@@ -51,6 +51,27 @@ interface Chapter {
 
 type Mode = 'best' | 'expressive' | 'economy' | 'v4';
 
+// Exporten för utgivning (Spotify): mastrade filer i molnet
+interface ReleaseFile { name: string; url: string; bytes: number; seconds?: number; rms?: number; peak?: number }
+interface ReleaseState {
+  progress: { state: 'running'; done: number; total: number } | { state: 'failed'; error: string } | null;
+  export: {
+    version: string;
+    createdAt: string;
+    narrator: string;
+    seconds: number;
+    specOk: boolean;
+    files: ReleaseFile[];
+    m4b?: ReleaseFile;
+    cover?: ReleaseFile;
+  } | null;
+  upToDate: boolean;
+}
+
+const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes > 10 * 1024 * 1024 ? 0 : 1).replace('.', ',')} MB`;
+// Supabase skickar filen som nedladdning med ?download=
+const downloadUrl = (file: ReleaseFile) => `${file.url}?download=${encodeURIComponent(file.name)}`;
+
 const KIND_LABEL: Record<string, string> = {
   mispronounced: 'uttal',
   cut_off_ending: 'ordslut',
@@ -205,6 +226,10 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const [openProof, setOpenProof] = useState<number | null>(null);
   // Hoppa till en tid i kapitlet när det börjar spelas
   const pendingSeek = useRef<number | null>(null);
+  // Utgivning: mastrade filer för Spotify
+  const [release, setRelease] = useState<ReleaseState | null>(null);
+  const [releaseStarting, setReleaseStarting] = useState(false);
+  const [zipping, setZipping] = useState<string | null>(null);
   // Röstprov: några sekunder av vald röst, så att valet går att höra
   const [sampleId, setSampleId] = useState('');
   const [customVoice, setCustomVoice] = useState('');
@@ -459,6 +484,75 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     }
   };
 
+  // ── Utgivning ──
+  const loadRelease = useCallback(async () => {
+    if (!bookId) return null;
+    const res = await fetch(`/api/audio/export?bookId=${encodeURIComponent(bookId)}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json() as ReleaseState;
+    setRelease(data);
+    return data;
+  }, [bookId]);
+
+  // Pollar medan exporten pågår
+  const releaseRunning = release?.progress?.state === 'running';
+  useEffect(() => {
+    if (!releaseRunning) return;
+    const timer = setInterval(() => { void loadRelease().catch(() => null); }, 3000);
+    return () => clearInterval(timer);
+  }, [releaseRunning, loadRelease]);
+
+  const startRelease = async () => {
+    if (!bookId) return;
+    setReleaseStarting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/audio/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId }),
+      });
+      const data = await res.json().catch(() => null) as (ReleaseState & { error?: string }) | null;
+      if (!res.ok || !data) throw new Error(data?.error || 'Exporten kunde inte startas');
+      setRelease(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Exporten kunde inte startas');
+    } finally {
+      setReleaseStarting(false);
+    }
+  };
+
+  // Alla filer i en zip, packad i webbläsaren (filerna ligger redan i molnet)
+  const downloadAll = async () => {
+    const out = release?.export;
+    if (!out) return;
+    const files = [...out.files, ...(out.m4b ? [out.m4b] : []), ...(out.cover ? [out.cover] : [])];
+    setError('');
+    try {
+      const { zipSync } = await import('fflate');
+      const entries: Record<string, [Uint8Array, { level: 0 }]> = {};
+      for (let i = 0; i < files.length; i++) {
+        setZipping(`Hämtar ${i + 1} av ${files.length}...`);
+        const res = await fetch(files[i].url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Kunde inte hämta ${files[i].name}`);
+        entries[files[i].name] = [new Uint8Array(await res.arrayBuffer()), { level: 0 }];
+      }
+      setZipping('Packar...');
+      const zipped = zipSync(entries);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }));
+      link.download = `${title.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Ljudbok'} - Spotify.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kunde inte packa filerna');
+    } finally {
+      setZipping(null);
+    }
+  };
+
   // ── Rätta uttal ──
   const sameWord = (a: string, b: string) => a.trim().toLocaleLowerCase('sv-SE') === b.trim().toLocaleLowerCase('sv-SE');
 
@@ -668,6 +762,11 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const progressText = jobTotal === 1
     ? `Läser upp ${jobRunningItem?.label || jobLabel || 'kapitlet'}`
     : `Läser upp kapitel ${Math.min((job?.done || 0) + (job?.failed || 0) + 1, jobTotal || 1)} av ${jobTotal}`;
+
+  // Läget för utgivningen hämtas när hela boken är inläst
+  useEffect(() => {
+    if (allRead && canCreate && bookId) void loadRelease().catch(() => null);
+  }, [allRead, canCreate, bookId, loadRelease]);
 
   // Byt ljudfil och starta den när man valt en del själv eller förra delen tog slut
   useEffect(() => {
@@ -1026,6 +1125,96 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
               <span className="text-xs text-ink/55">
                 cirka {thousands(credits(selectedCharacters))} krediter
               </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Ge ut: mastrade filer för Spotify ─── */}
+      {allRead && canCreate && bookId && !running && (
+        <div className="mt-5 rounded-2xl border border-line bg-white px-3.5 py-3.5">
+          <div className="flex items-start gap-2.5">
+            <Icon name="podcasts" size={20} className="text-ink/55 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-ink">Ge ut på Spotify</p>
+              <p className="text-xs text-ink/55 leading-relaxed">
+                Ljudet mastras till Spotifys krav: 192 kbit/s, ljudnivå runt −20 dB, toppar under −3 dB och lite tystnad före och efter varje kapitel.
+                Du får en fil per kapitel, en M4B med kapitelmarkeringar och omslaget i 3000×3000.
+              </p>
+            </div>
+          </div>
+
+          {release?.progress?.state === 'running' ? (
+            <div className="mt-3">
+              <div className="flex items-center gap-2 text-sm text-ink/70">
+                <span className="spinner !w-4 !h-4 text-brand" />
+                {release.progress.done < release.progress.total - 1
+                  ? `Mastrar kapitel ${release.progress.done + 1} av ${release.progress.total - 1}...`
+                  : 'Bygger M4B och omslag...'}
+              </div>
+              <div className="mt-2 h-1.5 w-full rounded-full bg-ink/10 overflow-hidden">
+                <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.round((release.progress.done / release.progress.total) * 100)}%` }} />
+              </div>
+            </div>
+          ) : release?.export && release.upToDate ? (
+            <div className="mt-3 space-y-3">
+              <p className={`text-xs font-medium inline-flex items-center gap-1 ${release.export.specOk ? 'text-emerald-700' : 'text-amber-700'}`}>
+                <Icon name={release.export.specOk ? 'verified' : 'error'} size={15} />
+                {release.export.specOk ? 'Alla kapitel uppfyller Spotifys ljudkrav' : 'Något kapitel ligger utanför ljudkraven - förbered igen'}
+                {' · '}{spokenDuration(release.export.seconds)}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => void downloadAll()} disabled={!!zipping} className="btn-action !py-2 !text-sm">
+                  {zipping ? <span className="spinner !w-4 !h-4" /> : <Icon name="download" size={17} />}
+                  {zipping || 'Ladda ner allt (zip)'}
+                </button>
+                {release.export.m4b && (
+                  <a href={downloadUrl(release.export.m4b)} className="btn-ghost !py-2 !text-sm">
+                    <Icon name="library_music" size={17} /> M4B ({megabytes(release.export.m4b.bytes)})
+                  </a>
+                )}
+                {release.export.cover && (
+                  <a href={downloadUrl(release.export.cover)} className="btn-ghost !py-2 !text-sm">
+                    <Icon name="image" size={17} /> Omslag
+                  </a>
+                )}
+              </div>
+              <details className="text-xs text-ink/60">
+                <summary className="cursor-pointer select-none font-medium text-ink/70">Kapitelfilerna ({release.export.files.length})</summary>
+                <ul className="mt-2 divide-y divide-line rounded-xl border border-line overflow-hidden">
+                  {release.export.files.map(f => (
+                    <li key={f.name} className="flex items-center gap-2 px-2.5 py-1.5 bg-white">
+                      <a href={downloadUrl(f)} className="flex-1 min-w-0 truncate text-ink hover:text-brand">{f.name}</a>
+                      <span className="shrink-0 tabular-nums text-ink/45">
+                        {typeof f.rms === 'number' ? `${f.rms.toFixed(1).replace('.', ',')} dB · ` : ''}{megabytes(f.bytes)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              <ul className="space-y-1.5 text-xs text-ink/65">
+                <li className="flex gap-1.5">
+                  <Icon name={issueCount === 0 && unproofed.length === 0 ? 'check_circle' : 'error'} size={15} className={issueCount === 0 && unproofed.length === 0 ? 'text-emerald-600 shrink-0' : 'text-amber-600 shrink-0'} />
+                  {issueCount === 0 && unproofed.length === 0
+                    ? 'Korrekturlyssnad utan kvarstående fel.'
+                    : `Korrekturlyssningen har ${issueCount} ${issueCount === 1 ? 'sak' : 'saker'} kvar${unproofed.length ? ` och ${unproofed.length} kapitel är inte kontrollerade` : ''} - gå igenom dem innan du ger ut boken.`}
+                </li>
+                <li className="flex gap-1.5"><Icon name="info" size={15} className="text-ink/40 shrink-0" /> Ange att uppläsningen är gjord med AI-röst när du laddar upp ({release.export.narrator}).</li>
+                <li className="flex gap-1.5"><Icon name="info" size={15} className="text-ink/40 shrink-0" /> Lyssna igenom boken en sista gång - automatiken hittar det mesta, men inte allt.</li>
+              </ul>
+            </div>
+          ) : (
+            <div className="mt-3">
+              {release?.export && !release.upToDate && (
+                <p className="mb-2 text-xs text-amber-700">Ljudboken har ändrats sedan förra exporten.</p>
+              )}
+              {release?.progress?.state === 'failed' && (
+                <p className="mb-2 text-xs text-red-700">Exporten misslyckades: {release.progress.error}</p>
+              )}
+              <button onClick={() => void startRelease()} disabled={releaseStarting} className="btn-ghost !py-2 !text-sm">
+                {releaseStarting ? <span className="spinner !w-4 !h-4" /> : <Icon name="tune" size={17} />}
+                {release?.export ? 'Förbered igen' : 'Förbered för Spotify'}
+              </button>
             </div>
           )}
         </div>
