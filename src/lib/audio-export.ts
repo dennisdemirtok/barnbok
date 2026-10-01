@@ -173,12 +173,22 @@ export async function buildRelease(input: {
     const metaFile = path.join(dir, 'meta.txt');
     await writeFile(metaFile, meta);
     const m4bFile = path.join(dir, 'bok.m4b');
+    // Molnet tar filer upp till 50 MB: långa böcker får lägre bithastighet i M4B:n
+    // (tal låter bra ner till 48 kbit/s i AAC). Ryms den inte alls hoppas den över.
+    const totalSeconds = start / 1000;
+    const fitKbps = Math.floor((46 * 1024 * 1024 * 8) / Math.max(totalSeconds, 1) / 1000);
+    const m4bKbps = Math.min(96, fitKbps);
+    if (m4bKbps < 48) {
+      input.onProgress?.(total, total);
+      const specOkShort = files.every(f => typeof f.rms === 'number' && typeof f.peak === 'number' && f.rms >= SPEC.rmsMin && f.rms <= SPEC.rmsMax && f.peak <= SPEC.peakMax);
+      return { files, cover, seconds: totalSeconds, specOk: specOkShort };
+    }
     await run([
       '-y', '-f', 'concat', '-safe', '0', '-i', list, '-i', metaFile,
       ...(coverFile ? ['-i', coverFile] : []),
       '-map', '0:a', '-map_metadata', '1', '-map_chapters', '1',
       ...(coverFile ? ['-map', '2', '-c:v', 'mjpeg', '-disposition:v', 'attached_pic'] : []),
-      '-c:a', 'aac', '-b:a', '96k', '-ac', '1', '-ar', String(SPEC.sampleRate), '-movflags', '+faststart',
+      '-c:a', 'aac', '-b:a', `${m4bKbps}k`, '-ac', '1', '-ar', String(SPEC.sampleRate), '-movflags', '+faststart',
       '-f', 'mp4', m4bFile,
     ]);
     const m4bData = await readFile(m4bFile);
