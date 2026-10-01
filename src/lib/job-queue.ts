@@ -842,4 +842,41 @@ async function writeAudioManifest(book: BookForJob, jobId: string, voiceId: stri
   };
   // Innehållsförteckningen skrivs om när kapitel läggs till - den får aldrig cachas
   await uploadFile(audioManifestPath(book.id), Buffer.from(JSON.stringify(manifest)), 'application/json', '0');
+
+  const segments = narrationSegments(bookForNarration(book));
+  await syncAudioMeta(book.id, {
+    seconds: manifest.seconds,
+    parts: parts.length,
+    complete: segments.length > 0 && segments.every(seg => byIndex.has(seg.index)),
+  }).catch(err => console.warn('[Jobb] kunde inte notera ljudboken på boken:', err instanceof Error ? err.message : err));
+}
+
+/**
+ * Noterar ljudboken på bokens rad (theme-JSON, ingen databasändring), så att
+ * bokhandeln kan visa ljudböckerna utan att läsa varje boks innehållsförteckning.
+ * En ljudbok från text publiceras här när hela den är inläst - en gång, och
+ * aldrig om författaren valt att den ska vara privat eller avpublicerat den.
+ */
+export async function syncAudioMeta(bookId: string, audio: { seconds: number; parts: number; complete: boolean }): Promise<void> {
+  const db = serverSupabase();
+  const { data: row, error } = await db.from('barnbok_books').select('theme, published_at').eq('id', bookId).maybeSingle();
+  if (error || !row) return;
+  let meta: Record<string, unknown> = {};
+  if (typeof row.theme === 'string' && row.theme.startsWith('{')) {
+    try { meta = JSON.parse(row.theme); } catch { meta = {}; }
+  }
+  const before = meta.audio as { seconds?: number; parts?: number; complete?: boolean } | undefined;
+  const same = !!before && before.seconds === audio.seconds && before.parts === audio.parts && before.complete === audio.complete;
+  const publish = meta.kind === 'audiobook' && audio.complete && meta.keepPrivate !== true && !row.published_at;
+  if (same && !publish) return;
+
+  const now = new Date().toISOString();
+  const update: Record<string, unknown> = { theme: JSON.stringify({ ...meta, audio }) };
+  if (publish) {
+    update.is_public = true;
+    update.published_at = now;
+  }
+  const { error: updateError } = await db.from('barnbok_books').update(update).eq('id', bookId);
+  if (updateError) throw new Error(updateError.message);
+  if (publish) console.log(`[Ljudbok] ${bookId} är färdig och publicerad i bokhandeln`);
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createAudiobookJob, audioManifestPath, loadBookForJob } from '@/lib/job-queue';
+import { createAudiobookJob, audioManifestPath, loadBookForJob, syncAudioMeta } from '@/lib/job-queue';
 import { applyPronunciations, containsWord, estimateSeconds, hasTtsKey, isQuality, narrationSegments, textStamp } from '@/lib/tts';
 import { loadPronunciations } from '@/lib/pronunciations';
 import { serverSupabase, SERVER_IMAGES_BUCKET } from '@/lib/supabase-server';
@@ -75,6 +75,16 @@ export async function GET(request: Request) {
       characters: chapters.reduce((n, c) => n + c.characters, 0),
       seconds: chapters.reduce((n, c) => n + c.seconds, 0),
     };
+
+    // Bokhandeln läser ljudbokens speltid från bokens rad - håll den i takt med
+    // innehållsförteckningen (t.ex. när texten fått ett nytt kapitel)
+    if (audiobook && Array.isArray(audiobook.parts) && audiobook.parts.length > 0) {
+      await syncAudioMeta(bookId, {
+        seconds: typeof audiobook.seconds === 'number' ? audiobook.seconds : 0,
+        parts: audiobook.parts.length,
+        complete: chapters.length > 0 && chapters.every(c => c.url),
+      }).catch(() => { /* bara en genväg för bokhandeln - ljudboken fungerar ändå */ });
+    }
   }
   return NextResponse.json({ audiobook, estimate, chapters });
 }

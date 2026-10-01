@@ -11,6 +11,23 @@ export function formatLabel(format?: string): string {
   return FORMAT_LABEL[format || ''] || 'Bok';
 }
 
+// Ljudbokens speltid kort: "24 min", "1 h 5 min"
+export function formatListenTime(seconds?: number): string {
+  if (!seconds || seconds <= 0) return '';
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
+// Kategorin i bokhandeln för allt som går att lyssna på
+export const AUDIOBOOK_FILTER = 'ljudbok';
+
+export function isListenable(book: { kind?: string; audioSeconds?: number }): boolean {
+  return book.kind === 'audiobook' || (book.audioSeconds ?? 0) > 0;
+}
+
 export function formatDate(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);

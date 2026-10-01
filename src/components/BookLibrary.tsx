@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { BookProject } from '@/lib/types';
 import { listBooks, deleteBook } from '@/lib/storage';
 import { getStylePreset } from '@/lib/styles';
+import { estimateSeconds, narrationSegments } from '@/lib/narration';
 import Icon from './Icon';
 import Reveal from './Reveal';
 
@@ -13,6 +14,7 @@ interface Props {
   onStyleTest: () => void;
   onReuseBook: (book: BookProject) => void;
   onFinishBook: () => void;
+  onNewAudiobook: () => void;
 }
 
 const STATUS: Record<BookProject['status'], { text: string; className: string }> = {
@@ -39,7 +41,21 @@ const FINISH_PREVIEW: { label: string; kind: 'author' | 'ai' | 'planned' }[] = [
   { label: 'Kapitel 4', kind: 'planned' },
 ];
 
-export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReuseBook, onFinishBook }: Props) {
+// Liten spellista som illustration i "Ljudbok från text"-kortet
+const AUDIO_PREVIEW = [
+  { label: 'Kapitel 1: Ön i dimman', time: '6:12' },
+  { label: 'Kapitel 2: Ljuset som slocknade', time: '7:40' },
+  { label: 'Kapitel 3: Katten på trappan', time: '5:58' },
+];
+
+// Ljudbokens längd i biblioteket: antal spår och ungefärlig speltid
+function audiobookInfo(book: BookProject): string {
+  const segments = narrationSegments(book);
+  const minutes = Math.max(1, Math.round(segments.reduce((n, s) => n + estimateSeconds(s.text), 0) / 60));
+  return `${segments.length} spår · ca ${minutes} min`;
+}
+
+export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReuseBook, onFinishBook, onNewAudiobook }: Props) {
   const [books, setBooks] = useState<BookProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -165,6 +181,64 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
         </div>
       </section>
 
+      {/* ── Ljudbok från text ── */}
+      <section
+        aria-labelledby="audiobook-heading"
+        className="relative overflow-hidden rounded-[2rem] border border-line bg-white shadow-soft"
+      >
+        <div className="relative grid lg:grid-cols-[1.05fr_0.95fr] gap-8 lg:gap-12 items-center p-6 sm:p-10 lg:p-12">
+          <div>
+            <p className="eyebrow"><Icon name="headphones" size={16} /> Nytt · Ljudbok från text</p>
+            <h2 id="audiobook-heading" className="mt-3 text-3xl sm:text-4xl font-heading font-bold tracking-tight text-ink leading-tight">
+              Har du en färdig text? Gör en ljudbok.
+            </h2>
+            <p className="mt-3 text-lg text-ink/65 leading-relaxed max-w-xl">
+              Klistra in texten, välj en svensk röst och få ett eget omslag. Inga illustrationer behövs.
+            </p>
+            <ul className="mt-5 space-y-2 text-sm text-ink/70">
+              <li className="flex items-start gap-2"><Icon name="format_list_numbered" size={18} className="text-brand mt-px" /> Kapitlen blir egna spår</li>
+              <li className="flex items-start gap-2"><Icon name="record_voice_over" size={18} className="text-brand mt-px" /> Provlyssna rösterna innan något läses in</li>
+              <li className="flex items-start gap-2"><Icon name="storefront" size={18} className="text-brand mt-px" /> Hamnar under Ljudböcker i bokhandeln när den är klar</li>
+            </ul>
+            <button onClick={onNewAudiobook} className="btn-action mt-7 !px-6 !py-3.5 text-base w-full sm:w-auto">
+              Gör en ljudbok <Icon name="arrow_forward" size={20} />
+            </button>
+          </div>
+
+          <div aria-hidden className="relative rounded-3xl bg-paper border border-line p-4 sm:p-5 lg:-rotate-1">
+            <div className="flex items-center gap-4">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 rounded-2xl overflow-hidden border border-line shadow-soft bg-white">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/styles/luna.jpg" alt="" className="w-full h-full object-cover" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/40">Ljudbok</span>
+                <p className="mt-1 font-heading text-lg font-bold text-ink leading-tight">Fyrvaktarens katt</p>
+                <p className="text-xs text-ink/50 mt-0.5">Uppläst av Elvira · 21 min</p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <span className="w-9 h-9 shrink-0 rounded-full bg-ink text-white flex items-center justify-center">
+                <Icon name="play_arrow" filled size={22} />
+              </span>
+              <div className="flex-1 h-1.5 rounded-full bg-ink/10 overflow-hidden">
+                <div className="h-full w-1/3 rounded-full bg-brand" />
+              </div>
+              <span className="text-xs tabular-nums text-ink/45">2:04</span>
+            </div>
+            <ol className="mt-4 divide-y divide-line rounded-2xl border border-line overflow-hidden bg-white">
+              {AUDIO_PREVIEW.map((row, i) => (
+                <li key={row.label} className="flex items-center gap-3 px-3 py-2">
+                  <Icon name={i === 0 ? 'play_circle' : 'play_arrow'} filled={i === 0} size={18} className={i === 0 ? 'text-brand' : 'text-ink/35'} />
+                  <span className={`flex-1 min-w-0 truncate text-sm ${i === 0 ? 'font-semibold text-ink' : 'text-ink/70'}`}>{row.label}</span>
+                  <span className="text-xs tabular-nums text-ink/45">{row.time}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </section>
+
       {/* ── Mina böcker ── */}
       <section className="space-y-6" id="mina-bocker">
         <div className="flex items-end justify-between gap-4">
@@ -197,9 +271,13 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-5 gap-y-8">
             {books.map(book => {
-              const cover = book.spreads.find(s => s.pages === 'omslag' && s.generatedImage)
+              const isAudiobook = book.kind === 'audiobook';
+              const cover = book.spreads.find(s => s.pages === 'omslag' && (s.generatedImage || s.imageUrl))
                 || book.spreads.find(s => s.generatedImage);
-              const status = STATUS[book.status] || STATUS.importing;
+              const coverImage = cover?.generatedImage ? `data:image/png;base64,${cover.generatedImage}` : cover?.imageUrl;
+              const status = isAudiobook
+                ? { text: 'Ljudbok', className: 'bg-ink text-white' }
+                : STATUS[book.status] || STATUS.importing;
               const images = book.spreads.filter(s => s.generatedImage).length;
               const style = getStylePreset(book.stylePresetId);
 
@@ -211,16 +289,22 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
                                group-hover:shadow-lift group-hover:-translate-y-1 transition-all duration-200 text-left"
                     title={`Öppna ${book.title}`}
                   >
-                    {cover?.generatedImage ? (
+                    {coverImage && isAudiobook ? (
+                      // Kvadratiskt ljudboksomslag: hela bilden överst, oskuren
+                      <span className="absolute inset-0 flex flex-col bg-ink">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={coverImage} alt="" className="w-full aspect-square object-cover" />
+                        <span className="flex-1 flex items-center justify-center text-white/70">
+                          <Icon name="headphones" size={22} />
+                        </span>
+                      </span>
+                    ) : coverImage ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`data:image/png;base64,${cover.generatedImage}`}
-                        alt=""
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
+                      <img src={coverImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
                     ) : (
-                      <div className="absolute inset-0 flex flex-col justify-between p-4 bg-gradient-to-b from-paper to-white">
-                        <Icon name="auto_stories" size={26} className="text-ink/25" />
+                      // Luft nedtill så att statusmärket inte täcker titeln
+                      <div className="absolute inset-0 flex flex-col justify-between p-4 pb-10 bg-gradient-to-b from-paper to-white">
+                        <Icon name={isAudiobook ? 'headphones' : 'auto_stories'} size={26} className="text-ink/25" />
                         <span className="font-heading text-lg font-semibold text-ink/80 leading-tight line-clamp-4 break-words hyphens-auto">{book.title}</span>
                       </div>
                     )}
@@ -235,13 +319,18 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
                     <div className="min-w-0">
                       <h3 className="font-heading font-semibold text-ink leading-snug truncate" title={book.title}>{book.title}</h3>
                       <p className="text-xs text-ink/50 mt-0.5 truncate">
-                        {style ? `${style.label} · ` : ''}{images} {images === 1 ? 'bild' : 'bilder'} · {new Date(book.updatedAt || book.createdAt).toLocaleDateString('sv-SE')}
+                        {isAudiobook
+                          ? audiobookInfo(book)
+                          : `${style ? `${style.label} · ` : ''}${images} ${images === 1 ? 'bild' : 'bilder'}`}
+                        {' · '}{new Date(book.updatedAt || book.createdAt).toLocaleDateString('sv-SE')}
                       </p>
                     </div>
                     <div className="flex shrink-0 -mr-1.5">
-                      <button onClick={() => onReuseBook(book)} title="Skapa en kopia med nya bilder" className="btn-icon !w-8 !h-8">
-                        <Icon name="content_copy" size={17} />
-                      </button>
+                      {!isAudiobook && (
+                        <button onClick={() => onReuseBook(book)} title="Skapa en kopia med nya bilder" className="btn-icon !w-8 !h-8">
+                          <Icon name="content_copy" size={17} />
+                        </button>
+                      )}
                       {confirmDeleteId === book.id ? (
                         <button
                           onClick={() => handleDelete(book.id)}

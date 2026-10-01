@@ -15,10 +15,11 @@ import BookPreview from '@/components/BookPreview';
 import ReferenceManager from '@/components/ReferenceManager';
 import LoginModal from '@/components/LoginModal';
 import Bookstore from '@/components/Bookstore';
+import AudiobookCreator from '@/components/AudiobookCreator';
 import Icon from '@/components/Icon';
 import { SiteHeader, SiteFooter, MobileTabBar, NavTarget } from '@/components/AppNav';
 
-type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore' | 'characterStudio' | 'finish';
+type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore' | 'characterStudio' | 'finish' | 'audiobook';
 
 export default function Home() {
   const [step, setStep] = useState<Step>('library');
@@ -35,6 +36,11 @@ export default function Home() {
   const [sharedBookId, setSharedBookId] = useState<string | null>(null);
   // Bok som öppnats från bokhandeln för att rättas - "Tillbaka" går då till bokens sida där
   const [bookstoreEditId, setBookstoreEditId] = useState<string | null>(null);
+  // Ljudbok från text: räknaren ger en ny, tom sida varje gång en ljudbok öppnas
+  const [audiobookSession, setAudiobookSession] = useState(0);
+  // Bokhandeln kan öppnas direkt på en kategori (t.ex. Ljudböcker från sidfoten)
+  const [bookstoreFilter, setBookstoreFilter] = useState<string | undefined>(undefined);
+  const [bookstoreVisit, setBookstoreVisit] = useState(0);
   const { user, signOut, loading: authLoading } = useAuth();
 
   // Referensdatabasen är ett internt verktyg. Visas för e-postadresser i
@@ -103,7 +109,20 @@ export default function Home() {
     setStep('characters');
   };
 
+  // Ljudbok från text: ny (null) eller en som redan finns
+  const handleOpenAudiobook = (audiobook: BookProject | null) => {
+    setBook(audiobook);
+    setIsClonedBook(false);
+    setAudiobookSession(n => n + 1);
+    setStep('audiobook');
+  };
+
   const handleLoadBook = (loadedBook: BookProject) => {
+    if (loadedBook.kind === 'audiobook') {
+      setBookstoreEditId(null);
+      handleOpenAudiobook(loadedBook);
+      return;
+    }
     setBook(loadedBook);
     setIsClonedBook(false);
     setBookstoreEditId(null);
@@ -249,8 +268,22 @@ export default function Home() {
     if (!loaded) throw new Error('Boken kunde inte hämtas från molnet. Försök igen om en stund.');
     // Delningslänken hör till bokhandelns sida, inte till redigeringen
     try { window.history.replaceState(null, '', window.location.pathname); } catch { /* ignoreras */ }
-    handleLoadBook({ ...loaded, status: loaded.status === 'done' ? 'done' : 'reviewing' });
+    if (loaded.kind === 'audiobook') {
+      handleOpenAudiobook(loaded);
+    } else {
+      handleLoadBook({ ...loaded, status: loaded.status === 'done' ? 'done' : 'reviewing' });
+    }
     setBookstoreEditId(bookId);
+  };
+
+  // Öppna bokhandeln, på en viss bok eller kategori
+  const handleOpenBookstore = (options: { bookId?: string; filter?: string } = {}) => {
+    setBook(null);
+    setBookstoreEditId(null);
+    setSharedBookId(options.bookId || null);
+    setBookstoreFilter(options.filter);
+    setBookstoreVisit(n => n + 1);
+    setStep('bookstore');
   };
 
   // Tillbaka till bokens sida i bokhandeln, som läser in den rättade boken från molnet
@@ -278,14 +311,15 @@ export default function Home() {
   const handleNavigate = (target: NavTarget) => {
     if (target === 'create') {
       // Redan i skapa-flödet: stanna kvar i stället för att börja om
-      if (navActive !== 'create' || step === 'finish') handleNewBook();
+      if (navActive !== 'create' || step === 'finish' || step === 'audiobook') handleNewBook();
       return;
     }
     if (target === 'library') return handleBackToLibrary();
+    if (target === 'bookstore') return handleOpenBookstore();
     if (target === 'characterStudio') setBook(null);
     setStep(target);
   };
-  const showSteps = step !== 'library' && step !== 'bookstore' && step !== 'characterStudio' && step !== 'finish';
+  const showSteps = step !== 'library' && step !== 'bookstore' && step !== 'characterStudio' && step !== 'finish' && step !== 'audiobook';
 
   return (
     <main className="min-h-screen overflow-x-clip">
@@ -343,6 +377,19 @@ export default function Home() {
             onStyleTest={() => { handleNewBook(); setImportMode('styleTest'); }}
             onReuseBook={handleReuseBook}
             onFinishBook={() => { setBook(null); setStep('finish'); }}
+            onNewAudiobook={() => handleOpenAudiobook(null)}
+          />
+        )}
+
+        {step === 'audiobook' && (
+          <AudiobookCreator
+            key={audiobookSession}
+            book={book}
+            onBookChange={setBook}
+            onBack={bookstoreEditId ? handleBackToBookstore : handleBackToLibrary}
+            backLabel={bookstoreEditId ? 'Bokhandeln' : 'Mina böcker'}
+            onDone={handleBackToLibrary}
+            onOpenInBookstore={bookId => handleOpenBookstore({ bookId })}
           />
         )}
 
@@ -366,8 +413,11 @@ export default function Home() {
 
         {step === 'bookstore' && (
           <Bookstore
+            key={bookstoreVisit}
             onBack={() => setStep('library')}
             initialBookId={sharedBookId || undefined}
+            initialFilter={bookstoreFilter}
+            onNewAudiobook={() => handleOpenAudiobook(null)}
             isAdmin={isAdmin}
             onEditBook={handleEditFromBookstore}
           />
@@ -382,6 +432,7 @@ export default function Home() {
             onModeChange={setImportMode}
             parsedBook={importParsedBook}
             onParsedBookChange={setImportParsedBook}
+            onAudiobook={() => handleOpenAudiobook(null)}
           />
         )}
 
@@ -463,6 +514,8 @@ export default function Home() {
       <SiteFooter
         onNavigate={handleNavigate}
         onStyleTest={() => { handleNewBook(); setImportMode('styleTest'); }}
+        onAudiobook={() => handleOpenAudiobook(null)}
+        onAudiobooks={() => handleOpenBookstore({ filter: 'ljudbok' })}
       />
 
       <MobileTabBar active={navActive} onNavigate={handleNavigate} />

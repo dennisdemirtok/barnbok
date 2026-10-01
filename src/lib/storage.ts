@@ -119,6 +119,8 @@ export interface SaveResult {
   // Boken som faktiskt sparades - id:n kan ha migrerats till UUID
   book: BookProject;
   idsMigrated: boolean;
+  // Bildernas adresser i molnet efter sparningen (uppslagets id -> adress)
+  cloudImageUrls?: Record<string, string>;
 }
 
 export async function saveBook(
@@ -160,15 +162,15 @@ export async function saveBook(
   if (!isCloudEnabled()) return { cloud: 'disabled', book: bookWithTimestamp, idsMigrated };
 
   try {
-    const { problems } = await saveBookToCloud(bookWithTimestamp, { publish: options?.publish });
+    const { problems, imageUrls } = await saveBookToCloud(bookWithTimestamp, { publish: options?.publish });
     if (problems.length > 0) {
       // Delvis sparad räknas som misslyckad så att UI:t inte visar grönt
       const cloudError = problems.length === 1
         ? problems[0]
         : `${problems.length} delar kunde inte sparas (bl.a. ${problems[0]})`;
-      return { cloud: 'failed', cloudError, cloudProblems: problems, book: bookWithTimestamp, idsMigrated };
+      return { cloud: 'failed', cloudError, cloudProblems: problems, book: bookWithTimestamp, idsMigrated, cloudImageUrls: imageUrls };
     }
-    return { cloud: 'synced', book: bookWithTimestamp, idsMigrated };
+    return { cloud: 'synced', book: bookWithTimestamp, idsMigrated, cloudImageUrls: imageUrls };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn('Cloud-synk misslyckades:', message);

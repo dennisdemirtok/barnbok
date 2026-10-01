@@ -67,6 +67,11 @@ interface Props {
   onUnavailable?: () => void;
   // Visar en stängknapp när panelen går att fälla ihop
   onClose?: () => void;
+  // Visas på telefonens låsskärm medan ljudboken spelas
+  author?: string;
+  coverUrl?: string;
+  // Anropas när ljudboken hämtats: om alla kapitel är inlästa och hur många delar som finns
+  onAudiobookChange?: (state: { complete: boolean; parts: number }) => void;
 }
 
 const POLL_MS = 5000;
@@ -133,7 +138,7 @@ function ttsIsOff(): Promise<boolean> {
   return ttsOffCheck;
 }
 
-export default function AudiobookPanel({ bookId, book, title, canCreate, onUnavailable, onClose }: Props) {
+export default function AudiobookPanel({ bookId, book, title, canCreate, onUnavailable, onClose, author, coverUrl, onAudiobookChange }: Props) {
   const [loading, setLoading] = useState(true);
   const [audiobook, setAudiobook] = useState<Audiobook | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
@@ -187,6 +192,9 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   // Städa bort provlyssningens blob-adress när panelen stängs
   useEffect(() => () => { if (previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
+  const changeRef = useRef(onAudiobookChange);
+  changeRef.current = onAudiobookChange;
+
   const loadAudiobook = useCallback(async (): Promise<Audiobook | null> => {
     if (!bookId) return null;
     const res = await fetch(`/api/audio/book?bookId=${encodeURIComponent(bookId)}`, { cache: 'no-store' });
@@ -198,6 +206,11 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     // Kapitel som blivit inlästa ska inte ligga kvar kryssade
     setSelected(prev => prev.filter(i => !(data.chapters || []).some(c => c.index === i && c.url)));
     if (data.audiobook?.voiceId) setVoiceId(data.audiobook.voiceId);
+    const list = data.chapters || [];
+    changeRef.current?.({
+      complete: list.length > 0 && list.every(c => c.url),
+      parts: data.audiobook?.parts?.length || 0,
+    });
     return data.audiobook;
   }, [bookId]);
 
@@ -576,6 +589,23 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
     if (partIndex + 1 < parts.length) selectPart(partIndex + 1);
   };
 
+  // Låsskärmen och hörlurarnas knappar: kapitlets namn, omslaget och hopp mellan kapitel
+  const onPartPlay = () => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator) || !current) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: current.label,
+        artist: author || '',
+        album: title,
+        artwork: coverUrl ? [{ src: coverUrl }] : [],
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', partIndex > 0 ? () => selectPart(partIndex - 1) : null);
+      navigator.mediaSession.setActionHandler('nexttrack', partIndex + 1 < parts.length ? () => selectPart(partIndex + 1) : null);
+    } catch {
+      // Äldre webbläsare - ljudet spelar ändå
+    }
+  };
+
   // ════════════════════════════════════════════
   //  Vyer
   // ════════════════════════════════════════════
@@ -680,6 +710,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
             preload="none"
             src={current.url}
             onEnded={onPartEnded}
+            onPlay={onPartPlay}
             className="w-full"
           >
             Din webbläsare kan inte spela upp ljud.

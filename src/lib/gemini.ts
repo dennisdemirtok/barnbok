@@ -579,6 +579,53 @@ ${corrections.map(c => `- ${c}`).join('\n')}`,
   };
 }
 
+// Kvadratiskt omslag till en ljudbok från text, som omslagen i Storytel och Spotify.
+// Inga referensblad finns - figurerna beskrivs i scenen.
+export async function generateAudiobookCover(options: {
+  title: string;
+  scene: string;
+  styleGuide: string;
+  // Författarens egna önskemål, på svenska
+  wish?: string;
+}): Promise<string> {
+  await rateLimitedDelay();
+  const ai = getClient();
+  const monochrome = isMonochromeStyle(options.styleGuide);
+  const monochromeRule = monochrome
+    ? '\n\nBLACK AND WHITE ONLY: black ink on white paper, no color at all. Where the description names a color, show it only as light or dark.'
+    : '';
+  const wish = options.wish?.trim();
+
+  const prompt = `Generate the cover art for a Swedish children's AUDIOBOOK (square, 1:1).
+
+STYLE GUIDE (this defines the entire look - rendering, line, color AND how faces and bodies are drawn):
+${options.styleGuide}${monochromeRule}
+
+LAYOUT: SQUARE AUDIOBOOK COVER, the way audiobook covers look in Storytel or Spotify.
+- One strong, simple motif that still reads when the cover is shown as a small thumbnail
+- The book title MUST appear as large, clearly readable title lettering in the upper part, integrated with the artwork in the style given under COVER TITLE LETTERING in the style guide (if present). The title, letter for letter: "${options.title}"
+- The title is Swedish: keep every Å, Ä and Ö with its ring or dots, never translate it, never add or drop a word
+- Apart from the title, NO other text anywhere: no author name, no "ljudbok" label, no logos, no headphones, no signs or labels in the scene
+- Fill the whole square edge to edge and keep faces and the title away from the outermost edges (the corners may be rounded off)
+
+IMAGE DESCRIPTION:
+${options.scene}${wish ? `
+
+THE AUTHOR'S OWN WISHES (in Swedish - follow them, they override the description above where they differ):
+${wish}` : ''}`;
+
+  return withRetry(async () => {
+    const response = await generateWithImageModel(ai, {
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: { aspectRatio: '1:1', imageSize: '1K' },
+      },
+    });
+    return extractImage(response, monochrome);
+  }, 2);
+}
+
 export async function regeneratePageImage(
   spread: Spread,
   characters: Character[],

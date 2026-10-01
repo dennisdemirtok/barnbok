@@ -11,7 +11,7 @@ import AuthorPage from './bookstore/AuthorPage';
 import BookCard from './bookstore/BookCard';
 import BookDetail from './bookstore/BookDetail';
 import CharacterDetail from './bookstore/CharacterDetail';
-import { FORMAT_LABEL, LikesState } from './bookstore/shared';
+import { AUDIOBOOK_FILTER, FORMAT_LABEL, isListenable, LikesState } from './bookstore/shared';
 
 interface Props {
   onBack: () => void;
@@ -21,6 +21,10 @@ interface Props {
   isAdmin?: boolean;
   // Öppnar boken i granskningssteget för att rättas (kastar ett fel om det inte går)
   onEditBook?: (bookId: string) => Promise<void>;
+  // Kategori att börja på, t.ex. 'ljudbok'
+  initialFilter?: string;
+  // Tom ljudbokskategori: gå till Ljudbok från text
+  onNewAudiobook?: () => void;
 }
 
 type SortKey = 'nyast' | 'gillade' | 'titel';
@@ -31,12 +35,12 @@ type View =
   | { kind: 'author'; userId: string; name: string }
   | { kind: 'character'; character: PublicCharacter; bookId: string; bookTitle: string };
 
-export default function Bookstore({ onBack, initialBookId, isAdmin = false, onEditBook }: Props) {
+export default function Bookstore({ onBack, initialBookId, isAdmin = false, onEditBook, initialFilter, onNewAudiobook }: Props) {
   const { user } = useAuth();
   const [books, setBooks] = useState<PublicBookSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [format, setFormat] = useState<string>('alla');
+  const [format, setFormat] = useState<string>(initialFilter || 'alla');
   const [sort, setSort] = useState<SortKey>('nyast');
   // Navigeringsstack: lista -> bok -> skapare -> bok ...
   const [stack, setStack] = useState<View[]>([{ kind: 'list' }]);
@@ -255,14 +259,20 @@ export default function Bookstore({ onBack, initialBookId, isAdmin = false, onEd
   }
 
   // ── Listan ──
-  const formats = Array.from(new Set(books.map(b => b.bookFormat).filter(Boolean))) as string[];
+  // Ljudböcker från text har ingen boktyp - de finns bara under Ljudböcker
+  const formats = Array.from(new Set(books.filter(b => b.kind !== 'audiobook').map(b => b.bookFormat).filter(Boolean))) as string[];
+  const listenable = books.filter(isListenable).length;
+  const chips = ['alla', ...(listenable > 0 || format === AUDIOBOOK_FILTER ? [AUDIOBOOK_FILTER] : []), ...formats];
   const q = query.trim().toLowerCase();
   const activeSort: SortKey = sort === 'gillade' && !likesSupported ? 'nyast' : sort;
   const byNewest = (a: PublicBookSummary, b: PublicBookSummary) =>
     new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
+  const inCategory = (b: PublicBookSummary) =>
+    format === 'alla' ||
+    (format === AUDIOBOOK_FILTER ? isListenable(b) : b.kind !== 'audiobook' && b.bookFormat === format);
   const filtered = books
     .filter(b =>
-      (format === 'alla' || b.bookFormat === format) &&
+      inCategory(b) &&
       (!q ||
         b.title.toLowerCase().includes(q) ||
         (b.authorName || '').toLowerCase().includes(q) ||
@@ -279,7 +289,7 @@ export default function Bookstore({ onBack, initialBookId, isAdmin = false, onEd
       <StepHeader
         eyebrow="Bokhandeln"
         title="Böcker från skaparna"
-        description="Läs gratis, ge hjärtan till dina favoriter, ladda ner och dela med en länk."
+        description="Läs och lyssna gratis, ge hjärtan till dina favoriter, ladda ner och dela med en länk."
         onBack={onBack}
         backLabel="Mina böcker"
         actions={!loading && <span className="text-sm text-ink/45">{books.length} {books.length === 1 ? 'bok' : 'böcker'}</span>}
@@ -298,9 +308,10 @@ export default function Bookstore({ onBack, initialBookId, isAdmin = false, onEd
           />
         </div>
         <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-          {['alla', ...formats].map(f => (
+          {chips.map(f => (
             <button key={f} onClick={() => setFormat(f)} className={`${format === f ? 'chip-on' : 'chip'} shrink-0`}>
-              {f === 'alla' ? 'Alla' : FORMAT_LABEL[f] || f}
+              {f === AUDIOBOOK_FILTER && <Icon name="headphones" size={17} />}
+              {f === 'alla' ? 'Alla' : f === AUDIOBOOK_FILTER ? 'Ljudböcker' : FORMAT_LABEL[f] || f}
             </button>
           ))}
           <select
@@ -321,6 +332,17 @@ export default function Bookstore({ onBack, initialBookId, isAdmin = false, onEd
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
           {[0, 1, 2, 3, 4].map(i => <div key={i} className="skeleton aspect-[3/4] rounded-2xl" />)}
+        </div>
+      ) : filtered.length === 0 && format === AUDIOBOOK_FILTER && !q ? (
+        <div className="rounded-3xl border border-dashed border-ink/20 bg-white/60 px-6 py-14 text-center">
+          <Icon name="headphones" size={32} className="text-ink/30" />
+          <h3 className="mt-3 text-xl font-heading font-bold text-ink">Inga ljudböcker ännu</h3>
+          <p className="mt-1 text-ink/55">Ljudböcker dyker upp här när hela boken är inläst.</p>
+          {onNewAudiobook && (
+            <button onClick={onNewAudiobook} className="btn-action mt-6">
+              <Icon name="headphones" size={19} /> Gör en ljudbok av din text
+            </button>
+          )}
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-ink/20 bg-white/60 px-6 py-14 text-center">

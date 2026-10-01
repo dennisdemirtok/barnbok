@@ -319,9 +319,11 @@ export function MobileTabBar({ active, onNavigate }: NavProps) {
 interface FooterProps {
   onNavigate: (target: NavTarget) => void;
   onStyleTest: () => void;
+  onAudiobook: () => void;
+  onAudiobooks: () => void;
 }
 
-export function SiteFooter({ onNavigate, onStyleTest }: FooterProps) {
+export function SiteFooter({ onNavigate, onStyleTest, onAudiobook, onAudiobooks }: FooterProps) {
   const link = 'text-sm text-ink/60 hover:text-ink transition-colors text-left';
   const columns: { title: string; items: { label: string; onClick?: () => void }[] }[] = [
     {
@@ -342,7 +344,8 @@ export function SiteFooter({ onNavigate, onStyleTest }: FooterProps) {
     {
       title: 'Lyssna',
       items: [
-        { label: 'Ljudbok av din bok', onClick: () => onNavigate('bookstore') },
+        { label: 'Ljudbok från text', onClick: onAudiobook },
+        { label: 'Ljudböcker', onClick: onAudiobooks },
         { label: 'Tryckta böcker (snart)' },
       ],
     },

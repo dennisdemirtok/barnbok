@@ -14,17 +14,22 @@ export interface CloudSaveOptions {
 export interface CloudSaveReport {
   // Delar av boken som inte kunde sparas (karaktärer, uppslag, bilder, text)
   problems: string[];
+  // Adressen till varje uppslags bild i molnet (uppslagets id -> adress)
+  imageUrls: Record<string, string>;
 }
 
 export async function saveBookToCloud(book: BookProject, options: CloudSaveOptions = {}): Promise<CloudSaveReport> {
   const now = new Date().toISOString();
   const problems: string[] = [];
+  const imageUrls: Record<string, string> = {};
 
   // Knyt boken till inloggad användare om det finns en. Ej inloggade sparar
   // med user_id = null (testläge - kräver anon-policies i
   // scripts/anon-save-migration.sql så RLS släpper igenom skrivningen).
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id ?? null;
+  // Ljudbokens uppgifter i theme skrivs av servern - de får inte försvinna här
+  const serverMeta = await serverThemeKeys(book.id);
 
   // 1. Upsert the book record. is_public skickas INTE med här - en uppdatering
   // ska aldrig skriva över ett uttryckligt avpublicerat läge.
@@ -40,7 +45,7 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
       age_min: parseAgeMin(book.targetAge),
       age_max: parseAgeMax(book.targetAge),
       // Stilval och bildform (styr sättningen) - JSON i theme-kolumnen, ingen migrering krävs
-      theme: buildTheme(book),
+      theme: buildTheme(book, serverMeta),
       num_spreads: book.spreads.length,
       style: book.styleGuide,
       status: mapStatus(book.status),
@@ -58,7 +63,8 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
     } catch (err) {
       problems.push(err instanceof Error ? err.message : String(err));
     }
-  } else if (!isPrivateBook(book)) {
+  } else if (!isPrivateBook(book) && book.kind !== 'audiobook') {
+    // En ljudbok publiceras av servern först när hela ljudboken är inläst
     const { error: autoError } = await supabase
       .from('barnbok_books')
       .update({ is_public: true, published_at: now })
@@ -162,6 +168,7 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
         problems.push(`Uppslag ${spreadLabel(spread)}: ${spreadError.message}`);
         continue;
       }
+      if (imageUrl) imageUrls[spread.id] = imageUrl;
 
       // Save text blocks
       if (spread.textBlocks.length > 0) {
@@ -189,18 +196,19 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
     void ensureBookDescription(book.id, book).catch(() => {});
   }
 
-  return { problems };
+  return { problems, imageUrls };
 }
 
 // Lätt uppdatering av titel och författare (utan att ladda upp bilder igen).
 // Returnerar false om boken inte finns i molnet än.
 export async function updateBookInfoInCloud(book: BookProject): Promise<boolean> {
+  const serverMeta = await serverThemeKeys(book.id);
   const { data, error } = await supabase
     .from('barnbok_books')
     .update({
       title: book.title,
       author_name: book.author?.trim() || null,
-      theme: buildTheme(book),
+      theme: buildTheme(book, serverMeta),
       updated_at: new Date().toISOString(),
     })
     .eq('id', book.id)
@@ -294,6 +302,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     author: meta.author || undefined,
     stylePresetId: meta.stylePresetId,
     keepPrivate: meta.keepPrivate,
+    kind: meta.kind,
     illustrationShape: meta.illustrationShape,
     targetAge: `${bookRow.age_min}-${bookRow.age_max}`,
     bookFormat: bookRow.book_format,
@@ -323,6 +332,11 @@ export interface PublicBookSummary {
   // Skaparens konto - saknas för anonyma böcker
   userId?: string;
   targetAge?: string;
+  // 'audiobook' = ljudbok från text (bara omslag och uppläsning)
+  kind?: 'audiobook';
+  // Speltid och antal spår när hela ljudboken är inläst
+  audioSeconds?: number;
+  audioParts?: number;
 }
 
 // Publicera/avpublicera en bok. Publicerade böcker blir läsbara för alla via RLS.
@@ -403,11 +417,16 @@ async function queryPublicBooks(authorUserId?: string): Promise<PublicBookSummar
 }
 
 function toPublicSummary(b: any, coverUrl?: string): PublicBookSummary {
+  const meta = parseBookMeta(b.theme);
+  const audio = meta.audio?.complete && meta.audio.seconds > 0 ? meta.audio : undefined;
   return {
     id: b.id,
     title: b.title,
     // Samma källa som läsaren: bokens eget författarfält, aldrig e-post
-    authorName: parseBookMeta(b.theme).author || undefined,
+    authorName: meta.author || undefined,
+    kind: meta.kind,
+    audioSeconds: audio?.seconds,
+    audioParts: audio?.parts,
     bookFormat: b.book_format,
     numSpreads: b.num_spreads,
     publishedAt: b.published_at || undefined,
@@ -1067,13 +1086,32 @@ export function isPrivateBook(book: BookProject): boolean {
   return !!book.keepPrivate || book.characters.some(c => c.fromPhoto);
 }
 
-function buildTheme(book: BookProject): string {
+// Ljudbokens speltid och om alla kapitel är inlästa. Skrivs av servern när
+// kapitel läses in (job-queue.ts) - bokhandeln hittar ljudböckerna här.
+export interface AudioMeta { seconds: number; parts: number; complete: boolean }
+
+// Nycklar i theme som servern äger - en sparning härifrån behåller dem
+const SERVER_THEME_KEYS = ['audio'] as const;
+
+async function serverThemeKeys(bookId: string): Promise<Record<string, unknown>> {
+  try {
+    const { data } = await supabase.from('barnbok_books').select('theme').eq('id', bookId).maybeSingle();
+    const raw = typeof data?.theme === 'string' && data.theme.startsWith('{') ? JSON.parse(data.theme) : {};
+    return Object.fromEntries(SERVER_THEME_KEYS.filter(k => raw[k] !== undefined).map(k => [k, raw[k]]));
+  } catch {
+    return {};
+  }
+}
+
+function buildTheme(book: BookProject, serverMeta: Record<string, unknown> = {}): string {
   // Bildtyper per uppslag sparas här så att ingen tabelländring behövs
   const compositions = Object.fromEntries(book.spreads.filter(sp => sp.composition).map(sp => [sp.spreadNumber, sp.composition]));
   return JSON.stringify({
+    ...serverMeta,
     v: 1, stylePresetId: book.stylePresetId, illustrationShape: book.illustrationShape, author: book.author?.trim() || undefined,
     ...(Object.keys(compositions).length > 0 ? { compositions } : {}),
     ...(isPrivateBook(book) ? { keepPrivate: true } : {}),
+    ...(book.kind ? { kind: book.kind } : {}),
   });
 }
 
@@ -1081,11 +1119,19 @@ function spreadLabel(spread: Spread): string {
   return spread.pages === 'omslag' ? 'omslag' : spread.pages === 'slutsida' ? 'slutsida' : `sida ${spread.pages}`;
 }
 
-function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author' | 'keepPrivate'> & { compositions?: Record<string, Spread['composition']> } {
+function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author' | 'keepPrivate' | 'kind'> & { compositions?: Record<string, Spread['composition']>; audio?: AudioMeta } {
   if (typeof theme !== 'string' || !theme.startsWith('{')) return {};
   try {
     const meta = JSON.parse(theme);
-    return { stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author, compositions: meta.compositions, keepPrivate: meta.keepPrivate === true || undefined };
+    const audio = meta.audio && typeof meta.audio.seconds === 'number'
+      ? { seconds: meta.audio.seconds, parts: Number(meta.audio.parts) || 0, complete: meta.audio.complete === true }
+      : undefined;
+    return {
+      stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author, compositions: meta.compositions,
+      keepPrivate: meta.keepPrivate === true || undefined,
+      kind: meta.kind === 'audiobook' ? 'audiobook' : undefined,
+      audio,
+    };
   } catch {
     return {};
   }

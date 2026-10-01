@@ -30,6 +30,9 @@ export interface BookProject {
   // Boken har en figur ritad efter foton av ett verkligt barn: den publiceras
   // aldrig automatiskt i bokhandeln, bara om författaren själv väljer det
   keepPrivate?: boolean;
+  // 'audiobook' = ljudbok från en färdig text: bara omslag och uppläsning, inga
+  // illustrationer. Publiceras i bokhandeln först när hela ljudboken är inläst.
+  kind?: 'audiobook';
   createdAt: string;
   updatedAt?: string;
 }

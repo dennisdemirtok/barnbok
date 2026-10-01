@@ -51,6 +51,8 @@ interface Props {
   onModeChange: (mode: ImportMode) => void;
   parsedBook: BookProject | null;
   onParsedBookChange: (book: BookProject | null) => void;
+  // Bara en ljudbok av en färdig text - ingen illustrering
+  onAudiobook?: () => void;
 }
 
 const LEGACY_FORMATS: { value: BookFormat; label: string }[] = [
@@ -129,6 +131,7 @@ export default function BookImporter({
   onModeChange,
   parsedBook,
   onParsedBookChange,
+  onAudiobook,
 }: Props) {
   const [planning, setPlanning] = useState(false);
   const [continuing, setContinuing] = useState(false);
@@ -345,6 +348,30 @@ export default function BookImporter({
             </span>
           </div>
         </button>
+
+        {/* Bara ljudbok */}
+        {onAudiobook && (
+          <button
+            onClick={onAudiobook}
+            className="w-full card-glass p-5 sm:p-6 text-left group hover:-translate-y-0.5"
+          >
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <span className="w-12 h-12 shrink-0 rounded-2xl bg-paper border border-line text-ink flex items-center justify-center">
+                <Icon name="headphones" size={24} />
+              </span>
+              <div className="flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">Bara ljud</p>
+                <h3 className="mt-1 text-xl font-heading font-bold text-ink">Gör en ljudbok av en färdig text</h3>
+                <p className="mt-1 text-sm text-ink/60 leading-relaxed max-w-2xl">
+                  Klistra in texten, välj röst och få ett omslag. Inga illustrationer – kapitlen blir spår i en ljudbok.
+                </p>
+              </div>
+              <span className="shrink-0 inline-flex items-center gap-1.5 text-sm font-semibold text-ink group-hover:gap-2.5 transition-all">
+                Gör en ljudbok <Icon name="arrow_forward" size={18} />
+              </span>
+            </div>
+          </button>
+        )}
       </div>
     );
   }

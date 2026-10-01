@@ -3,7 +3,7 @@
 import { PublicBookSummary } from '@/lib/supabase-db';
 import Icon from '../Icon';
 import LikeButton from './LikeButton';
-import { formatLabel, LikesState } from './shared';
+import { formatLabel, formatListenTime, LikesState } from './shared';
 
 interface Props {
   book: PublicBookSummary;
@@ -16,6 +16,8 @@ interface Props {
 }
 
 export default function BookCard({ book: b, likes, opening, disabled, onOpen, showAuthor = true }: Props) {
+  const isAudiobook = b.kind === 'audiobook';
+  const listenTime = formatListenTime(b.audioSeconds);
   return (
     <div className="group min-w-0">
       <button
@@ -25,7 +27,23 @@ export default function BookCard({ book: b, likes, opening, disabled, onOpen, sh
                    group-hover:shadow-lift group-hover:-translate-y-1 transition-all duration-200"
         title={`Öppna ${b.title}`}
       >
-        {b.coverUrl ? (
+        {isAudiobook ? (
+          // Ljudbok: det kvadratiska omslaget helt, med speltiden under
+          <span className="absolute inset-0 flex flex-col bg-ink text-left">
+            {b.coverUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={b.coverUrl} alt="" loading="lazy" className="w-full aspect-square object-cover" />
+            ) : (
+              <span className="w-full aspect-square flex items-end p-4 bg-gradient-to-br from-paper via-white to-brand/10">
+                <span className="font-heading text-lg font-semibold text-ink/80 leading-tight line-clamp-4 break-words hyphens-auto">{b.title}</span>
+              </span>
+            )}
+            <span className="flex-1 flex items-center gap-1.5 px-3 text-white text-xs font-semibold">
+              <Icon name="headphones" size={17} />
+              Ljudbok{listenTime ? ` · ${listenTime}` : ''}
+            </span>
+          </span>
+        ) : b.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={b.coverUrl} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -34,7 +52,13 @@ export default function BookCard({ book: b, likes, opening, disabled, onOpen, sh
             <span className="font-heading text-lg font-semibold text-ink/80 leading-tight line-clamp-4 break-words hyphens-auto">{b.title}</span>
           </div>
         )}
-        <span className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-black/15 to-transparent" />
+        {!isAudiobook && <span className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-black/15 to-transparent" />}
+        {/* Illustrerad bok som också går att lyssna på */}
+        {!isAudiobook && listenTime && (
+          <span className="absolute bottom-2.5 left-3.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-ink/85 text-white text-[11px] font-semibold shadow-soft">
+            <Icon name="headphones" size={14} /> {listenTime}
+          </span>
+        )}
         {opening && (
           <span className="absolute inset-0 bg-white/70 flex items-center justify-center text-ink">
             <span className="spinner !w-7 !h-7" />
@@ -45,7 +69,7 @@ export default function BookCard({ book: b, likes, opening, disabled, onOpen, sh
         <button onClick={onOpen} disabled={disabled} className="min-w-0 text-left">
           <h3 className="font-heading font-semibold text-ink leading-snug truncate" title={b.title}>{b.title}</h3>
           <p className="text-xs text-ink/50 mt-0.5 truncate">
-            {showAuthor && b.authorName ? `${b.authorName} · ` : ''}{formatLabel(b.bookFormat)}
+            {showAuthor && b.authorName ? `${b.authorName} · ` : ''}{isAudiobook ? 'Ljudbok' : formatLabel(b.bookFormat)}
           </p>
         </button>
         {likes.supported && (

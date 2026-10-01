@@ -9,7 +9,7 @@ import Icon from '../Icon';
 import BookCard from './BookCard';
 import LikeButton from './LikeButton';
 import PrintOrderModal from './PrintOrderModal';
-import { formatAge, formatDate, formatLabel, initials, LikesState, shareBookLink } from './shared';
+import { formatAge, formatDate, formatLabel, formatListenTime, initials, LikesState, shareBookLink } from './shared';
 
 interface Props {
   details: PublicBookDetails;
@@ -28,6 +28,9 @@ interface Props {
 
 export default function BookDetail({ details, likes, moreByAuthor, openingId, onBack, onOpenAuthor, onOpenBook, onOpenCharacter, onDescription, onEdit }: Props) {
   const { book, summary, characters } = details;
+  // Ljudbok från text: omslag och uppläsning, ingen läsare eller PDF
+  const isAudiobook = summary.kind === 'audiobook' || book.kind === 'audiobook';
+  const listenTime = formatListenTime(summary.audioSeconds);
   const readerRef = useRef<HTMLDivElement>(null);
   const [description, setDescription] = useState(summary.description || '');
   const [writingBlurb, setWritingBlurb] = useState(false);
@@ -37,8 +40,9 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
   const [opening, setOpening] = useState(false);
   const [editError, setEditError] = useState('');
   const [showPrint, setShowPrint] = useState<'print' | 'audio' | null>(null);
-  // Ljudbokspanelen fälls ut under knappraden i stället för "kommer snart"-rutan
-  const [showAudio, setShowAudio] = useState(false);
+  // Ljudbokspanelen fälls ut under knappraden i stället för "kommer snart"-rutan.
+  // En ljudbok från text visar spelaren direkt - det är hela boken.
+  const [showAudio, setShowAudio] = useState(isAudiobook);
   const audioRef = useRef<HTMLDivElement>(null);
 
   // Baksidestext skapas första gången någon öppnar en bok som saknar en
@@ -105,22 +109,24 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
 
         <div className="grid gap-6 sm:gap-10 sm:grid-cols-[minmax(0,15rem)_1fr] lg:grid-cols-[minmax(0,17rem)_1fr] items-start">
           {/* Omslag */}
-          <div className="relative w-44 sm:w-full mx-auto aspect-[3/4] rounded-2xl overflow-hidden bg-white border border-line shadow-lift">
+          <div className={`relative w-44 sm:w-full mx-auto ${isAudiobook ? 'aspect-square' : 'aspect-[3/4]'} rounded-2xl overflow-hidden bg-white border border-line shadow-lift`}>
             {summary.coverUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={summary.coverUrl} alt={`Omslag till ${book.title}`} className="absolute inset-0 w-full h-full object-cover" />
             ) : (
               <div className="absolute inset-0 flex flex-col justify-between p-5 bg-gradient-to-b from-paper to-white">
-                <Icon name="auto_stories" size={30} className="text-ink/25" />
+                <Icon name={isAudiobook ? 'headphones' : 'auto_stories'} size={30} className="text-ink/25" />
                 <span className="font-heading text-xl font-semibold text-ink/80 leading-tight line-clamp-5 break-words hyphens-auto">{book.title}</span>
               </div>
             )}
-            <span className="absolute inset-y-0 left-0 w-2.5 bg-gradient-to-r from-black/15 to-transparent" />
+            {!isAudiobook && <span className="absolute inset-y-0 left-0 w-2.5 bg-gradient-to-r from-black/15 to-transparent" />}
           </div>
 
           {/* Info */}
           <div className="min-w-0">
-            <p className="eyebrow">{formatLabel(summary.bookFormat || book.bookFormat)}</p>
+            <p className="eyebrow">
+              {isAudiobook ? <><Icon name="headphones" size={16} /> Ljudbok</> : formatLabel(summary.bookFormat || book.bookFormat)}
+            </p>
             <h2 className="mt-2 text-3xl sm:text-4xl font-heading font-bold tracking-tight text-ink leading-tight break-words">{book.title}</h2>
 
             {authorName && (
@@ -146,7 +152,14 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
               {age && (
                 <span className="inline-flex items-center gap-1.5"><Icon name="child_care" size={16} /> {age}</span>
               )}
-              {book.spreads.length > 0 && (
+              {isAudiobook ? (
+                <>
+                  {listenTime && <span className="inline-flex items-center gap-1.5"><Icon name="schedule" size={16} /> {listenTime}</span>}
+                  {!!summary.audioParts && (
+                    <span className="inline-flex items-center gap-1.5"><Icon name="format_list_numbered" size={16} /> {summary.audioParts} spår</span>
+                  )}
+                </>
+              ) : book.spreads.length > 0 && (
                 <span className="inline-flex items-center gap-1.5"><Icon name="menu_book" size={16} /> {summary.numSpreads || book.spreads.length} uppslag</span>
               )}
             </div>
@@ -170,33 +183,51 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
                   onToggle={() => likes.toggle(book.id)}
                 />
               )}
-              <button
-                onClick={() => readerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="btn-action"
-              >
-                <Icon name="auto_stories" size={19} /> Läs boken
-              </button>
-              <button onClick={download} disabled={downloading} className="btn-ghost">
-                {downloading ? <span className="spinner !w-4 !h-4" /> : <Icon name="download" size={19} />}
-                {downloading ? 'Skapar PDF...' : 'Ladda ner PDF'}
-              </button>
+              {isAudiobook ? (
+                <button
+                  onClick={() => {
+                    setShowAudio(true);
+                    setTimeout(() => audioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+                  }}
+                  className="btn-action"
+                >
+                  <Icon name="headphones" size={19} /> Lyssna
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => readerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    className="btn-action"
+                  >
+                    <Icon name="auto_stories" size={19} /> Läs boken
+                  </button>
+                  <button onClick={download} disabled={downloading} className="btn-ghost">
+                    {downloading ? <span className="spinner !w-4 !h-4" /> : <Icon name="download" size={19} />}
+                    {downloading ? 'Skapar PDF...' : 'Ladda ner PDF'}
+                  </button>
+                </>
+              )}
               <button onClick={share} className="btn-ghost">
                 <Icon name={copied ? 'check' : 'ios_share'} size={19} />
                 {copied ? 'Länken är kopierad' : 'Dela'}
               </button>
-              <button
-                onClick={() => {
-                  setShowAudio(true);
-                  setTimeout(() => audioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
-                }}
-                aria-expanded={showAudio}
-                className="btn-ghost"
-              >
-                <Icon name="headphones" size={19} /> Lyssna som ljudbok
-              </button>
-              <button onClick={() => setShowPrint('print')} className="btn-ghost">
-                <Icon name="print" size={19} /> Beställ tryckt bok
-              </button>
+              {!isAudiobook && (
+                <>
+                  <button
+                    onClick={() => {
+                      setShowAudio(true);
+                      setTimeout(() => audioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+                    }}
+                    aria-expanded={showAudio}
+                    className="btn-ghost"
+                  >
+                    <Icon name="headphones" size={19} /> Lyssna som ljudbok{listenTime ? ` · ${listenTime}` : ''}
+                  </button>
+                  <button onClick={() => setShowPrint('print')} className="btn-ghost">
+                    <Icon name="print" size={19} /> Beställ tryckt bok
+                  </button>
+                </>
+              )}
               {onEdit && (
                 <button onClick={edit} disabled={opening} className="btn-ghost">
                   {opening ? <span className="spinner !w-4 !h-4" /> : <Icon name="edit" size={19} />}
@@ -213,13 +244,16 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
                   bookId={book.id}
                   book={book}
                   title={book.title}
-                  canCreate
+                  author={authorName || undefined}
+                  coverUrl={summary.coverUrl}
+                  // En ljudbok från text läses in av den som gjort den, inte av besökare
+                  canCreate={isAudiobook ? !!onEdit : true}
                   onUnavailable={() => {
                     // Ljudbok är inte påslaget - visa "kommer snart" med intresseanmälan i stället
                     setShowAudio(false);
                     setShowPrint('audio');
                   }}
-                  onClose={() => setShowAudio(false)}
+                  onClose={isAudiobook ? undefined : () => setShowAudio(false)}
                 />
               </div>
             )}
@@ -258,11 +292,13 @@ export default function BookDetail({ details, likes, moreByAuthor, openingId, on
       </div>
 
       {/* Läsaren */}
-      <div ref={readerRef} className="scroll-mt-6">
-        <div className="card-glass hover:!shadow-soft px-2 py-4 sm:p-8 -mx-2 sm:mx-0">
-          <BookReader book={book} showDownload={false} />
+      {!isAudiobook && (
+        <div ref={readerRef} className="scroll-mt-6">
+          <div className="card-glass hover:!shadow-soft px-2 py-4 sm:p-8 -mx-2 sm:mx-0">
+            <BookReader book={book} showDownload={false} />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Fler av samma skapare */}
       {authorName && summary.userId && moreByAuthor.length > 0 && (

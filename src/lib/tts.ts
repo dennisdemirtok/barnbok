@@ -3,8 +3,13 @@
 // Texten delas i avsnitt (kapitel), och varje avsnitt läses i bitar som hålls
 // ihop av previous_text/next_text så att rösten behåller tonen över skarvarna.
 import { createHash } from 'crypto';
-import { BookProject, Spread } from './types';
+import { BookProject } from './types';
 import { DEFAULT_VOICE_ID } from './tts-voices';
+import { estimateSeconds, narrationSegments } from './narration';
+
+// Avsnittsindelningen bor i narration.ts (delas med sidan) - samma namn som förut här
+export { estimateSeconds, narrationSegments };
+export type { NarrationSegment } from './narration';
 
 const API = 'https://api.elevenlabs.io/v1/text-to-speech';
 
@@ -24,85 +29,8 @@ export const isQuality = (value: unknown): value is TtsQuality =>
 const CHUNK_CHARS = 2200;
 const REQUEST_TIMEOUT_MS = 120_000;
 
-export interface NarrationSegment {
-  index: number;
-  label: string; // "Kapitel 3" eller "Början"
-  text: string;
-}
-
 export function hasTtsKey(): boolean {
   return !!process.env.ELEVENLABS_API_KEY;
-}
-
-// ── Texten som ska läsas ──
-
-const CHAPTER_RE = /^(kapitel\s+[\wåäö]+|prolog|epilog|förord|efterord)\b/i;
-
-// Talstreck och radbrytningar ska inte läsas upp som tecken
-function forNarration(line: string): string {
-  return line
-    .replace(/^\s*[-–—*]\s*/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function spreadLines(spread: Spread): string[] {
-  return spread.textBlocks
-    .map(b => b.text)
-    .join('\n')
-    .split('\n')
-    .map(forNarration)
-    .filter(Boolean);
-}
-
-/**
- * Delar boken i uppläsningsavsnitt. Kapitelböcker delas per kapitel, bilderböcker
- * i lagom långa stycken. Titel och författare läses först.
- */
-export function narrationSegments(book: BookProject): NarrationSegment[] {
-  const segments: NarrationSegment[] = [];
-  let current: string[] = [];
-  let label = 'Början';
-
-  const push = () => {
-    const text = current.join('\n\n').trim();
-    if (text) segments.push({ index: segments.length, label, text });
-    current = [];
-  };
-
-  const intro = [book.title, book.author ? `av ${book.author}` : ''].filter(Boolean).join('. ');
-  current.push(intro);
-
-  for (const spread of book.spreads) {
-    if (spread.pages === 'omslag') continue;
-    for (const line of spreadLines(spread)) {
-      if (CHAPTER_RE.test(line) && line.length <= 80) {
-        push();
-        label = line.replace(/\s*[-–—:.]\s*/, ': ').trim();
-        current.push(label);
-        continue;
-      }
-      current.push(line);
-    }
-    // Bilderbok utan kapitel: dela i avsnitt som inte blir orimligt långa
-    if (current.join(' ').length > 6000) {
-      push();
-      label = `Del ${segments.length + 1}`;
-    }
-  }
-  push();
-  // Ett pyttelitet avsnitt (bara titeln, eller en rubrik utan text) blir inget
-  // eget spår - det läggs ihop med nästa så att spellistan blir vettig
-  const merged: NarrationSegment[] = [];
-  for (const segment of segments) {
-    const previous = merged[merged.length - 1];
-    if (previous && previous.text.split(/\s+/).length < 30) {
-      merged[merged.length - 1] = { ...previous, label: segment.label, text: `${previous.text}\n\n${segment.text}` };
-      continue;
-    }
-    merged.push(segment);
-  }
-  return merged.map((seg, i) => ({ ...seg, index: i }));
 }
 
 // ── Uttal ──
@@ -245,8 +173,3 @@ export async function synthesize(text: string, voiceId = DEFAULT_VOICE_ID, quali
 // Kort mening att välja röst på. Samma text för alla röster, så att de går att jämföra.
 export const VOICE_SAMPLE_TEXT =
   'Hej! Det är jag som läser boken för dig. Vilja sjunker alltid åt vänster i vattnet, och det tycker hon är ganska tjatigt.';
-
-// Grov speltid: uppläsning ligger runt 150 ord i minuten
-export function estimateSeconds(text: string): number {
-  return Math.round((text.split(/\s+/).filter(Boolean).length / 150) * 60);
-}
