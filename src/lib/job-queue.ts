@@ -11,7 +11,7 @@ import { buildPageImageRequest, extractImage, isMonochromeStyle, ImageQuality, B
 import { cancelImageBatch, checkImageBatch, fileReference, imageMimeType, submitImageBatch, uploadReferenceSheets, UploadedRef } from './image-batch';
 import { withReferenceImages } from './character-refs';
 import { BookFormat, BookProject, Character, IllustrationShape, Spread, SpreadQualityCheck } from './types';
-import { applyPronunciations, estimateSeconds, isQuality, narrationSegments, synthesize, textStamp, TtsQuality } from './tts';
+import { applyPronunciations, estimateSeconds, isQuality, narrationSegments, synthesize, textStamp, TtsQuality, TtsQuotaError } from './tts';
 import { loadPronunciations } from './pronunciations';
 import { DEFAULT_VOICE_ID, voiceById } from './tts-voices';
 
@@ -22,6 +22,9 @@ const WORKERS = 4;
 const ITEM_BUDGET_MS = DEFAULT_QUALITY_BUDGET_MS;
 // Ett uppläst avsnitt (kapitel) får ta så här lång tid
 const AUDIO_BUDGET_MS = 8 * 60 * 1000;
+// Kapitel som läses samtidigt. ElevenLabs tillåter bara några anrop åt gången
+// per konto, och tts.ts släpper ändå bara fram två i hela servern.
+const AUDIO_WORKERS = 2;
 // Sparläget: så ofta tittar jobbet efter levererade bilder hos Google,
 // och så många bilder läggs i varje batch (svaren hämtas en batch i taget)
 const BATCH_POLL_MS = 60_000;
@@ -401,6 +404,7 @@ export async function runJob(jobId: string): Promise<void> {
         .lt('claimed_at', stuckBefore),
       DB_TIMEOUT_MS, 'Databasen svarade inte när fastnade uppslag skulle läggas tillbaka'
     );
+    await giveUpExhausted(jobId);
 
     const book = await withTimeout(loadBookForJob(job.book_id), DB_TIMEOUT_MS * 2, 'Boken kunde inte läsas i tid');
     console.log(`[Jobb] ${jobId}: startar körning, boken har ${book?.spreads.length ?? 0} uppslag`);
@@ -473,6 +477,14 @@ export async function runJob(jobId: string): Promise<void> {
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             console.warn(`[Jobb] ${item.label || segment.label} misslyckades:`, message);
+            if (err instanceof TtsQuotaError) {
+              // Kvoten är slut: resten av kapitlen får samma besked i stället för att försöka i onödan
+              await finishItem(item.id, { status: 'error', error: message });
+              await db.from('barnbok_job_items').update({ status: 'error', error: message, updated_at: new Date().toISOString() })
+                .eq('job_id', jobId).eq('status', 'queued');
+              await withTimeout(db.rpc('barnbok_job_progress', { p_job: jobId }), DB_TIMEOUT_MS, 'Databasen svarade inte').catch(() => null);
+              return;
+            }
             await finishItem(item.id, item.attempts >= MAX_ITEM_ATTEMPTS
               ? { status: 'error', error: message }
               : { status: 'queued', error: message });
@@ -528,11 +540,13 @@ export async function runJob(jobId: string): Promise<void> {
     }, 30_000);
 
     try {
-      await Promise.all(Array.from({ length: WORKERS }, (_, n) => worker(n)));
+      await Promise.all(Array.from({ length: isAudiobook ? AUDIO_WORKERS : WORKERS }, (_, n) => worker(n)));
     } finally {
       clearInterval(beat);
     }
 
+    // Rader som använt alla försök kan aldrig tas igen - annars väntar jobbet på dem för alltid
+    await giveUpExhausted(jobId);
     await db.rpc('barnbok_job_progress', { p_job: jobId });
     const { data: after } = await db.from('barnbok_jobs').select('*').eq('id', jobId).single();
     if (after?.status === 'running') {
@@ -552,7 +566,7 @@ export async function runJob(jobId: string): Promise<void> {
         if (isAudiobook) await writeAudioManifest(book, jobId, voiceId);
         await db.from('barnbok_jobs').update({
           status: failed > 0 && failed === after.total ? 'failed' : 'done',
-          message: failed > 0 ? `${failed} uppslag behöver göras om` : null,
+          message: failed > 0 ? (isAudiobook ? `${failed} kapitel kunde inte läsas in` : `${failed} uppslag behöver göras om`) : null,
           updated_at: new Date().toISOString(),
         }).eq('id', jobId);
         console.log(`[Jobb] ${jobId} klart på ${Math.round((Date.now() - startedAt) / 1000)} s (${after.done}/${after.total})`);
@@ -618,6 +632,19 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number, message: string): P
     const timer = setTimeout(() => reject(new Error(message)), ms);
     promise.then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); });
   });
+}
+
+// Köade rader som redan använt alla försök (t.ex. tagna strax före en omstart)
+// markeras som misslyckade, så att jobbet kan bli klart och startas om
+async function giveUpExhausted(jobId: string): Promise<void> {
+  await withTimeout(
+    serverSupabase().from('barnbok_job_items')
+      .update({ status: 'error', updated_at: new Date().toISOString() })
+      .eq('job_id', jobId)
+      .eq('status', 'queued')
+      .gte('attempts', MAX_ITEM_ATTEMPTS),
+    DB_TIMEOUT_MS, 'Databasen svarade inte när uttjänta rader skulle avslutas'
+  ).catch(err => console.warn('[Jobb] kunde inte avsluta uttjänta rader:', err instanceof Error ? err.message : err));
 }
 
 async function queuedCount(jobId: string): Promise<number> {

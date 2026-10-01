@@ -284,8 +284,12 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
           if (fresh.status !== 'running') {
             setJobId(null);
             if (bookId) { try { localStorage.removeItem(jobKey(bookId)); } catch { /* lagring blockerad */ } }
-            if (fresh.status === 'failed') {
+            if (fresh.status === 'failed' && !fresh.failed) {
               setError(fresh.message || 'Uppläsningen avbröts. Försök gärna igen.');
+            } else if (fresh.failed > 0) {
+              // Säg vad som gick fel, så att det inte ser ut som att kapitlen bara försvann
+              const reason = fresh.items.find(i => i.status === 'error' && i.error)?.error;
+              setError(`${fresh.failed} kapitel kunde inte läsas in${reason ? ` (${reason})` : ''}. Försök igen med Läs in resten av boken.`);
             }
             // Hämta den färdiga innehållsförteckningen
             await loadAudiobook().catch(() => null);
@@ -562,7 +566,7 @@ export default function AudiobookPanel({ bookId, book, title, canCreate, onUnava
   const jobRunningItem = (job?.items || []).find(i => i.status === 'running');
   const progressText = jobTotal === 1
     ? `Läser upp ${jobRunningItem?.label || jobLabel || 'kapitlet'}`
-    : `Läser upp kapitel ${Math.min((job?.done || 0) + 1, jobTotal || 1)} av ${jobTotal}`;
+    : `Läser upp kapitel ${Math.min((job?.done || 0) + (job?.failed || 0) + 1, jobTotal || 1)} av ${jobTotal}`;
 
   // Byt ljudfil och starta den när man valt en del själv eller förra delen tog slut
   useEffect(() => {

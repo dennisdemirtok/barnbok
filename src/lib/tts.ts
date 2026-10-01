@@ -124,7 +124,51 @@ function chunkText(text: string): string[] {
   return chunks;
 }
 
+// ElevenLabs tillåter bara några anrop samtidigt per konto (Starter: 3). Alla
+// uppläsningar i servern - ljudböcker, provlyssningar, uttal - delar därför på
+// två platser och väntar på sin tur, i stället för att få "för många anrop".
+const MAX_CONCURRENT = Math.max(1, Number(process.env.ELEVENLABS_CONCURRENCY) || 2);
+let activeCalls = 0;
+const waiting: (() => void)[] = [];
+
+async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
+  // En ledig plats tas direkt, annars lämnas platsen över av den som blir klar
+  if (activeCalls >= MAX_CONCURRENT) await new Promise<void>(resolve => waiting.push(resolve));
+  else activeCalls++;
+  try {
+    return await fn();
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else activeCalls--;
+  }
+}
+
+// Kvoten slut: ingen idé att försöka igen eller fortsätta med fler kapitel
+export class TtsQuotaError extends Error {}
+
+// För många anrop just nu, eller tillfälligt fel hos ElevenLabs - går att försöka igen
+class TtsBusyError extends Error {
+  constructor(message: string, public retryAfterMs = 0) { super(message); }
+}
+
+// Så länge väntar vi när ElevenLabs säger "för många anrop" eller är överbelastat
+const RETRY_DELAYS_MS = [3000, 8000, 15000, 30000];
+
 async function speak(text: string, voiceId: string, around: { before?: string; after?: string }, quality: TtsQuality): Promise<Buffer> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await withSlot(() => speakOnce(text, voiceId, around, quality));
+    } catch (err) {
+      if (!(err instanceof TtsBusyError) || attempt >= RETRY_DELAYS_MS.length) throw err;
+      const wait = Math.max(RETRY_DELAYS_MS[attempt], err.retryAfterMs);
+      console.warn(`[Ljud] ElevenLabs är upptaget - nytt försök om ${Math.round(wait / 1000)} s`);
+      await new Promise(resolve => setTimeout(resolve, wait));
+    }
+  }
+}
+
+async function speakOnce(text: string, voiceId: string, around: { before?: string; after?: string }, quality: TtsQuality): Promise<Buffer> {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new Error('ElevenLabs-nyckeln saknas på servern (ELEVENLABS_API_KEY)');
 
@@ -148,6 +192,13 @@ async function speak(text: string, voiceId: string, around: { before?: string; a
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
+    if (/quota_exceeded|exceeds your quota|credits remaining/i.test(detail)) {
+      throw new TtsQuotaError('Ljudkvoten hos ElevenLabs är slut för den här perioden - resten kan läsas in när kvoten fylls på');
+    }
+    if (res.status === 429 || res.status >= 500) {
+      const retryAfter = Number(res.headers.get('retry-after')) * 1000 || 0;
+      throw new TtsBusyError(ttsErrorMessage(res.status, detail), retryAfter);
+    }
     throw new Error(ttsErrorMessage(res.status, detail));
   }
   return Buffer.from(await res.arrayBuffer());
@@ -155,8 +206,8 @@ async function speak(text: string, voiceId: string, around: { before?: string; a
 
 function ttsErrorMessage(status: number, detail: string): string {
   if (status === 401) return 'ElevenLabs-nyckeln godtogs inte (kontrollera nyckeln i Railway)';
-  if (status === 429) return 'ElevenLabs säger stopp för tillfället (för många anrop) - försök igen om en stund';
-  if (status === 422 && /quota|credits/i.test(detail)) return 'Ljudkvoten hos ElevenLabs är slut för den här månaden';
+  if (status === 429) return 'ElevenLabs hann inte med fler anrop just då - försök igen om en stund';
+  if (status >= 500) return 'ElevenLabs hade ett tillfälligt fel - försök igen om en stund';
   return `ElevenLabs svarade ${status}${detail ? `: ${detail.slice(0, 200)}` : ''}`;
 }
 
