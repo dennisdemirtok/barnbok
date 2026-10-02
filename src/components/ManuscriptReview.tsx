@@ -38,6 +38,8 @@ const spreadName = (s: Spread) =>
   s.pages === 'omslag' ? 'Omslag' : s.pages === 'slutsida' ? 'Slutsida' : `Sida ${s.pages}`;
 
 const storageKey = (bookId: string) => `barnbok:lektor:${bookId}`;
+// Pågående läsning: sidan kan lämnas och hämtar resultatet när man kommer tillbaka
+const taskKey = (bookId: string) => `barnbok:lektor-uppdrag:${bookId}`;
 
 // Uppslaget där citatet faktiskt står: det lektören angav, annars där det finns
 function locate(issue: Issue, spreads: Spread[]): Spread | undefined {
@@ -59,6 +61,7 @@ export default function ManuscriptReview({ book, onSaveSpread }: Props) {
 
   // En tidigare läsning av samma bok finns kvar på enheten
   useEffect(() => {
+    stopped.current = false;
     try {
       const saved = localStorage.getItem(storageKey(book.id));
       if (saved) {
@@ -81,12 +84,53 @@ export default function ManuscriptReview({ book, onSaveSpread }: Props) {
     .filter(s => s.text), [book.spreads]);
   const words = sections.reduce((n, s) => n + s.text.split(/\s+/).length, 0);
 
+  // Väntar på en läsning som redan är startad (även efter att sidan lämnats)
+  const follow = async (id: string, began: number) => {
+    setError('');
+    setRunning(true);
+    const tick = setInterval(() => setElapsed(Math.round((Date.now() - began) / 1000)), 1000);
+    try {
+      for (let i = 0; i < 120 && !stopped.current; i++) {
+        await new Promise(r => setTimeout(r, 4000));
+        if (stopped.current) return;
+        const poll = await fetch(`/api/manuscript-review?id=${id}`, { cache: 'no-store' });
+        const task = await poll.json().catch(() => null) as { state?: string; review?: Review; error?: string } | null;
+        if (task?.state === 'done' && task.review) {
+          setReview(task.review);
+          setStatus({});
+          try { localStorage.removeItem(taskKey(book.id)); } catch { /* lagring blockerad */ }
+          return;
+        }
+        if (task?.state === 'failed') throw new Error(task.error || 'Lektören kunde inte läsa klart');
+        if (poll.status === 404) throw new Error('Läsningen tappades bort (servern startade om) - försök igen');
+      }
+      if (!stopped.current) throw new Error('Lektören blev inte klar i tid - försök igen');
+    } catch (err) {
+      try { localStorage.removeItem(taskKey(book.id)); } catch { /* lagring blockerad */ }
+      setError(err instanceof Error ? err.message : 'Lektören kunde inte läsa boken');
+    } finally {
+      clearInterval(tick);
+      if (!stopped.current) setRunning(false);
+    }
+  };
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(taskKey(book.id));
+      if (saved) {
+        const { id, began } = JSON.parse(saved) as { id: string; began: number };
+        if (Date.now() - began < 30 * 60 * 1000) void follow(id, began);
+        else localStorage.removeItem(taskKey(book.id));
+      }
+    } catch { /* lagring blockerad */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.id]);
+
   const start = async () => {
     setError('');
     setRunning(true);
     setElapsed(0);
     const began = Date.now();
-    const tick = setInterval(() => setElapsed(Math.round((Date.now() - began) / 1000)), 1000);
     try {
       const res = await fetch('/api/manuscript-review', {
         method: 'POST',
@@ -100,25 +144,11 @@ export default function ManuscriptReview({ book, onSaveSpread }: Props) {
       });
       const data = await res.json().catch(() => null) as { id?: string; error?: string } | null;
       if (!res.ok || !data?.id) throw new Error(data?.error || 'Lektören kunde inte starta');
-
+      try { localStorage.setItem(taskKey(book.id), JSON.stringify({ id: data.id, began })); } catch { /* lagring blockerad */ }
       // Läsningen tar några minuter (en hel bok med eftertanke)
-      for (let i = 0; i < 120 && !stopped.current; i++) {
-        await new Promise(r => setTimeout(r, 4000));
-        const poll = await fetch(`/api/manuscript-review?id=${data.id}`, { cache: 'no-store' });
-        const task = await poll.json().catch(() => null) as { state?: string; review?: Review; error?: string } | null;
-        if (task?.state === 'done' && task.review) {
-          setReview(task.review);
-          setStatus({});
-          return;
-        }
-        if (task?.state === 'failed') throw new Error(task.error || 'Lektören kunde inte läsa klart');
-        if (poll.status === 404) throw new Error('Läsningen tappades bort (servern startade om) - försök igen');
-      }
-      throw new Error('Lektören blev inte klar i tid - försök igen');
+      await follow(data.id, began);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lektören kunde inte läsa boken');
-    } finally {
-      clearInterval(tick);
       setRunning(false);
     }
   };
