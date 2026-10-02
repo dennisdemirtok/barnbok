@@ -335,8 +335,21 @@ function buildBackCover(pb: PageBuilder, book: BookProject, t: Typography, m: Me
   // Tryckta böcker har ett sidantal delbart med 4
   while ((pb.count + 1) % 4 !== 0) pb.add({ els: [] });
   const back = pb.add({ els: [], background: '#2f2a4a' });
-  const y = centeredLines(back, book.title, t.heading, t.hs(16), 88, 110, '#ffffff', m);
+  const blurb = book.description?.trim();
+  // Med baksidestext: titeln högre upp och texten under, som på en riktig bok
+  const y = centeredLines(back, book.title, t.heading, t.hs(16), blurb ? 46 : 88, 110, '#ffffff', m);
   back.els.push({ kind: 'rect', box: { x: (PAGE_W - 14) / 2, y: y + 4, w: 14, h: 0.5 }, color: '#ffffff', opacity: 0.5, radius: 0.25 });
+  if (blurb) {
+    const size = t.bs(10);
+    let ty = y + 14;
+    for (const line of breakLines(blurb, t.body, size, 112, 0, m)) {
+      back.els.push({ kind: 'text', x: (PAGE_W - 112) / 2, y: ty, width: 112, text: line.text, font: t.body, size, color: '#eceaf3', align: 'left' });
+      ty += size * PT * 1.55;
+    }
+    if (book.author) {
+      back.els.push({ kind: 'text', x: 0, y: ty + 8, width: PAGE_W, text: book.author, font: t.heading, size: t.hs(10), color: '#ffffff', align: 'center' });
+    }
+  }
   back.els.push({
     kind: 'text', x: 0, y: PAGE_H - 18, width: PAGE_W, text: 'Skapad med Bokverktyget',
     font: t.body, size: 7.5, color: '#c9c3d6', align: 'center',
@@ -610,6 +623,9 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
   const lh = style.size * PT * style.leading;
   if (lined) style.paraGap = lh;
   const GAP = 4; // luft mellan figur och text
+  // Smalaste spalten bredvid en figur: ungefär fem ord. Smalare blir det två-tre
+  // ord per rad, som är svårläst för ett barn - då går texten under figuren.
+  const minColumn = Math.max(48, style.size * PT * 10);
 
   // ── Linjerat papper ──
   // Radernas överkant ligger på ett fast rutnät med radavståndet, så att baslinjerna
@@ -671,8 +687,10 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
     page = null;
   };
 
-  // Serierutor som väntar på att sidan fylls med text - de hamnar överst på nästa sida
-  const pendingTop: (string | undefined)[] = [];
+  // Bilder som väntar på att sidan fylls med text - de hamnar överst på nästa sida.
+  // Hellre det än en halvtom sida (ett band, rutor eller en figur som inte ryms).
+  // 'inline' = bild i textbredd överst i scenen (kapitelböcker utan bildblandning)
+  const pendingTop: { src: string | undefined; comp: Composition | 'inline' }[] = [];
   const placePanels = (src: string | undefined, h: number, aspect: number) => {
     const w = h * aspect;
     const box: Box = { x: xFor() + (textW - w) / 2, y, w, h };
@@ -681,7 +699,9 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
     pageHasText = true;
   };
 
-  const openPage = () => {
+  // withPending = false när sidan öppnas för en bild som själv ska stå överst -
+  // då väntar köade bilder till nästa sidbrytning i stället för att tränga undan den
+  const openPage = (withPending = true) => {
     closePage();
     page = pb.add({ els: [] });
     y = CB_MARGIN.top;
@@ -689,17 +709,36 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
     numbered = true;
     pageHasText = false;
     wrap = null;
-    if (pendingTop.length > 0) {
-      const waiting = pendingTop.shift();
-      const aspect = waiting ? aspectOf(waiting, 4 / 5) : 4 / 5;
-      placePanels(waiting, Math.min(textW / aspect, PAGE_H - CB_MARGIN.top - CB_MARGIN.bottom - lh * 3), aspect);
+    if (withPending && pendingTop.length > 0) {
+      const waiting = pendingTop.shift()!;
+      if (waiting.comp === 'panels') {
+        const aspect = waiting.src ? aspectOf(waiting.src, 4 / 5) : 4 / 5;
+        placePanels(waiting.src, Math.min(textW / aspect, PAGE_H - CB_MARGIN.top - CB_MARGIN.bottom - lh * 3), aspect);
+      } else if (waiting.comp === 'band') {
+        const bandH = Math.min(PAGE_W / aspectOf(waiting.src ?? '', 16 / 9), 92);
+        const box: Box = { x: 0, y: 0, w: PAGE_W, h: bandH };
+        page!.els.push(...(waiting.src ? [imageEl(waiting.src, box, aspectOf(waiting.src, 16 / 9))] : missingImage(box, t.body)));
+        y = below(bandH, lh * 1.2);
+        pageHasText = true;
+      } else if (waiting.comp === 'inline') {
+        if (waiting.src) {
+          const aspect = aspectOf(waiting.src, 3 / 2);
+          const imgH = Math.min(textW / aspect, 92);
+          page!.els.push(imageEl(waiting.src, { x: xFor(), y, w: textW, h: imgH }, aspect));
+          y = below(y + imgH, lh);
+          pageHasText = true;
+        }
+      } else {
+        // Figur eller vinjett överst - texten flyter runt den som vanligt
+        placeSceneImage(waiting.src, waiting.comp);
+      }
     }
   };
 
   let justOpened = false;
 
-  const ensureSpace = (h: number) => {
-    if (!page || y + h > bottom) openPage();
+  const ensureSpace = (h: number, withPending = true) => {
+    if (!page || y + h > bottom) openPage(withPending);
   };
 
   // Hur mycket av textbredden en figur tar på höjden y0-y1 (mm från sin sida), med luft
@@ -743,9 +782,12 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
         page.els.push(...(src ? [imageEl(src, box, aspectOf(src, 16 / 9))] : missingImage(box, t.body)));
         bottom = PAGE_H - bandH - lh;
         numbered = false;
+      } else if (page && pageHasText && bottom - y > lh * 2) {
+        // Ryms inte här: texten fortsätter och bandet hamnar överst på nästa sida
+        pendingTop.push({ src, comp: 'band' });
       } else {
         // Band överst på en ny sida, utfallande
-        if (!page || pageHasText) openPage();
+        if (!page || pageHasText) openPage(false);
         const box: Box = { x: 0, y: 0, w: PAGE_W, h: bandH };
         page!.els.push(...(src ? [imageEl(src, box, aspectOf(src, 16 / 9))] : missingImage(box, t.body)));
         y = below(bandH, lh * 1.2);
@@ -761,12 +803,19 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
       // Hellre en mindre figur än en halvtom sida
       if (page && y + size > bottom + lh && bottom + lh - y >= textW * 0.42) size = bottom + lh - y;
       // Mest till höger eller vänster så att texten kan flyta runt; ibland mitt i
-      const align = comp === 'round' ? (spotCount % 2 ? 'left' : 'right') : (['right', 'left', 'right', 'left', 'center'] as const)[spotCount % 5];
+      let align: 'left' | 'right' | 'center' = comp === 'round' ? (spotCount % 2 ? 'left' : 'right') : (['right', 'left', 'right', 'left', 'center'] as const)[spotCount % 5];
       spotCount++;
-      // Figuren läggs aldrig över text som redan är satt: ryms den inte, ny sida
-      if (!page || y + size > bottom + lh) openPage();
-      const x0 = xFor();
       const bleed = comp === 'spot' ? 8 : 0;
+      // Blir spalten bredvid för smal ställs figuren mitt i, med texten över och under
+      if (align !== 'center' && textW - (size - bleed) - GAP < minColumn) align = 'center';
+      // Figuren läggs aldrig över text som redan är satt. Ryms den inte men
+      // sidan har plats för mer text: figuren väntar till nästa sida.
+      if (page && pageHasText && y + size > bottom + lh && bottom - y > lh * 2) {
+        pendingTop.push({ src, comp });
+        return;
+      }
+      if (!page || y + size > bottom + lh) openPage(false);
+      const x0 = xFor();
       const x = align === 'left' ? x0 - bleed : align === 'right' ? x0 + textW - size + bleed : x0 + (textW - size) / 2;
       const box: Box = { x, y, w: size, h: Math.min(size, bottom + lh - y) };
       if (src) page!.els.push({ ...imageEl(src, box, aspectOf(src, 1)), ...(comp === 'round' ? { clip: 'circle' as const } : {}) });
@@ -790,8 +839,8 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
       const room = page ? bottom - y - lh * 2 : full;
       // Ryms rutorna inte: hellre lite mindre än en halvtom sida, annars
       // fyller texten sidan och rutorna börjar överst på nästa
-      if (room < full && room < full * 0.72 && pageHasText) { pendingTop.push(src); return; }
-      if (!page) openPage();
+      if (room < full && room < full * 0.72 && pageHasText) { pendingTop.push({ src, comp: 'panels' }); return; }
+      if (!page) openPage(false);
       const h = Math.min(full, Math.max(room, full * 0.72));
       placePanels(src, h, aspect);
       return;
@@ -801,7 +850,13 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
     if (!src) return;
     const aspect = aspectOf(src, 3 / 2);
     const imgH = Math.min(textW / aspect, 92);
-    ensureSpace(imgH + lh * 3);
+    // Ryms bilden inte men sidan har plats för text: texten fortsätter här och
+    // bilden hamnar överst på nästa sida, i stället för en halvtom sida
+    if (page && pageHasText && y + imgH + lh * 3 > bottom && bottom - y > lh * 4) {
+      pendingTop.push({ src, comp: 'inline' });
+      return;
+    }
+    ensureSpace(imgH + lh * 3, false);
     page!.els.push(imageEl(src, { x: xFor(), y, w: textW, h: imgH }, aspect));
     y = below(y + imgH, lh);
     pageHasText = true;
@@ -831,7 +886,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
             && numbered
             && page !== null
             && y + lh <= PAGE_H - PAGE_NUMBER_AIR
-            && availTail >= 28
+            && availTail >= minColumn
             && m.width(tail, style.font, style.size) <= availTail;
           if (roomBelow) {
             const x0 = xFor();
@@ -851,7 +906,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
         const occ = wrap.occupied(y, y + lh);
         const avail = textW - occ;
         const x0 = xFor();
-        if (avail < 28) { y += lh; continue; } // för smalt bredvid figuren - hoppa ner en rad
+        if (avail < minColumn) { y += lh; continue; } // för smalt bredvid figuren - hoppa ner en rad
         const indent = first && !afterHeading && !block.continued ? style.indent : 0;
         const line: string[] = [];
         let width = 0;
@@ -907,16 +962,25 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
         const hs = Math.round(style.size * 1.2 * 4) / 4;
         const text = heading.label ? `${heading.label}: ${heading.title}` : heading.title;
         const headLines = breakLines(text, style.heading, hs, textW, 0, m);
-        // Rubriken + två rader text ska rymmas - och scenens bild om den kommer direkt
-        // efter rubriken - annars ny sida, så att rubriken aldrig blir ensam kvar
-        let follow = lh * 2;
-        if (!imagePlaced && page && pageHasText) {
+        // Rubriken + tre rader text ska rymmas, annars ny sida - så att rubriken
+        // aldrig blir ensam kvar. Ryms inte dagens bild direkt efter rubriken
+        // börjar texten ändå här och bilden hamnar överst på nästa sida. Förr
+        // började hela dagen på ny sida och sidan före blev halvtom.
+        let follow = lh * 3;
+        let deferImage = false;
+        if (!imagePlaced && page && pageHasText && (comp === 'band' || comp === 'panels' || comp === 'spot' || comp === 'round')) {
           const aspect = scene.image ? aspectOf(scene.image, comp === 'band' ? 16 / 9 : comp === 'panels' ? 4 / 5 : 1) : 1;
-          if (comp === 'band') follow = Math.min(PAGE_W / aspect, 92) + lh * 4;
-          else if (comp === 'panels') follow = Math.min(textW / aspect, PAGE_H - CB_MARGIN.top - CB_MARGIN.bottom - lh * 3) + lh * 2;
-          else if (comp === 'spot' || comp === 'round') follow = textW * 0.42;
+          const imageNeeds = comp === 'band'
+            ? Math.min(PAGE_W / aspect, 92) + lh * 4
+            : comp === 'panels'
+            ? Math.min(textW / aspect, PAGE_H - CB_MARGIN.top - CB_MARGIN.bottom - lh * 3) + lh * 2
+            : textW * 0.42;
+          if (y + lh * headLines.length + imageNeeds > bottom) deferImage = true;
         }
-        if (y + lh * headLines.length + follow > bottom) openPage();
+        if (y + lh * headLines.length + follow > bottom) {
+          openPage();
+          deferImage = false; // på en ny sida ryms bilden direkt efter rubriken
+        }
         for (const hl of headLines) {
           // Bredvid en figur: rubriken ställs bredvid den, eller längre ner där den ryms
           let x = xFor();
@@ -927,7 +991,8 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
             occ = 0;
             y += lh;
           }
-          if (y + lh > bottom) { openPage(); occ = 0; }
+          // Flyttades rubriken ner förbi en figur måste den fortfarande ha tre rader text under sig
+          if (y + lh * 4 > bottom) { openPage(); occ = 0; }
           if (wrap && y < wrap.bottom) {
             if (wrap.side === 'left') x += occ;
             page!.els.push(wrap.side === 'left' ? ruleEl(x - 1, PAGE_W - RULE.margin, y) : ruleEl(RULE.margin, x + textW - occ + 1, y));
@@ -940,6 +1005,10 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
         pageHasText = true;
         justOpened = true;
         blocks = blocks.slice(1);
+        if (deferImage) {
+          pendingTop.push({ src: scene.image, comp: comp! });
+          imagePlaced = true;
+        }
         continue;
       }
 
@@ -1025,7 +1094,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
       }
     }
   }
-  if (pendingTop.length > 0) openPage(); // rutor som väntade när texten tog slut
+  while (pendingTop.length > 0) openPage(); // bilder som väntade när texten tog slut
   closePage();
   // Bilder som köats efter sista textsidan
   while (pendingImages.length > 0) fullPageImage(pb, pendingImages.shift(), sizes, t);

@@ -33,6 +33,8 @@ export interface BookProject {
   // 'audiobook' = ljudbok från en färdig text: bara omslag och uppläsning, inga
   // illustrationer. Publiceras i bokhandeln först när hela ljudboken är inläst.
   kind?: 'audiobook';
+  // Baksidestext (skrivs när boken sparas i molnet) - står på bokens baksida
+  description?: string;
   createdAt: string;
   updatedAt?: string;
 }

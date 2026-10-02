@@ -303,6 +303,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     stylePresetId: meta.stylePresetId,
     keepPrivate: meta.keepPrivate,
     kind: meta.kind,
+    description: typeof bookRow.description === 'string' && bookRow.description.trim() ? bookRow.description.trim() : undefined,
     illustrationShape: meta.illustrationShape,
     targetAge: `${bookRow.age_min}-${bookRow.age_max}`,
     bookFormat: bookRow.book_format,
