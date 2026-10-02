@@ -4,7 +4,7 @@ import { reviewManuscript, ManuscriptReview } from '@/lib/claude';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// Lektören läser hela manuset i ett anrop. Det tar en minut eller två, så det
+// Lektören läser hela manuset i ett anrop. Det tar några minuter, så det
 // körs i bakgrunden och sidan frågar efter resultatet tills det är klart.
 
 type Task = { state: 'running'; startedAt: number } | { state: 'done'; review: ManuscriptReview; at: number } | { state: 'failed'; error: string; at: number };

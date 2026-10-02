@@ -101,7 +101,7 @@ export default function ManuscriptReview({ book, onSaveSpread }: Props) {
       const data = await res.json().catch(() => null) as { id?: string; error?: string } | null;
       if (!res.ok || !data?.id) throw new Error(data?.error || 'Lektören kunde inte starta');
 
-      // Läsningen tar en minut eller två
+      // Läsningen tar några minuter (en hel bok med eftertanke)
       for (let i = 0; i < 120 && !stopped.current; i++) {
         await new Promise(r => setTimeout(r, 4000));
         const poll = await fetch(`/api/manuscript-review?id=${data.id}`, { cache: 'no-store' });
@@ -215,7 +215,7 @@ export default function ManuscriptReview({ book, onSaveSpread }: Props) {
         <div className="flex items-center gap-2.5 text-sm text-ink/70">
           <span className="spinner !w-4 !h-4 text-brand" />
           Lektören läser {words.toLocaleString('sv-SE')} ord... {elapsed > 0 ? `${elapsed} s` : ''}
-          <span className="text-xs text-ink/45">(brukar ta 1-2 minuter)</span>
+          <span className="text-xs text-ink/45">(brukar ta 3-5 minuter - du kan läsa vidare under tiden)</span>
         </div>
       ) : !review ? (
         <button onClick={() => void start()} disabled={sections.length === 0} className="btn-action">
