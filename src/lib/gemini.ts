@@ -4,7 +4,7 @@ import { Character, Spread, BookFormat, IllustrationShape } from './types';
 import { textSideForSpread } from './styles';
 import { describeLettering, letteringCaps } from './comic';
 import { withReferenceImages } from './character-refs';
-import { picturedCharacters } from './scene-characters';
+import { isMemoryOnly, picturedCharacters } from './scene-characters';
 
 // Bildmodellen: den stabila versionen först, förhandsversionen som reserv om
 // den stabila inte finns för kontot. Förhandsversioner stängs efter ett tag.
@@ -35,12 +35,14 @@ async function generateWithImageModel(ai: GoogleGenAI, request: ImageRequest, qu
 }
 
 // Svartvita stilar görs svartvita på riktigt efteråt: bildmodellen slinker
-// ibland in en färgklick, och det är gratis och säkert att ta bort den här
-// i stället för att göra om bilden.
+// ibland in en färgklick eller en grå skuggning, och det är gratis och säkert
+// att ta bort här i stället för att göra om bilden. Ljusgrå ytor blir vitt och
+// mörkgrå svart (nivåer 60-200), så att tuschteckningen blir ren utan att
+// linjernas mjuka kanter går förlorade.
 async function toGrayscale(base64: string): Promise<string> {
   try {
     const sharp = (await import('sharp')).default;
-    const out = await sharp(Buffer.from(base64, 'base64')).grayscale().png().toBuffer();
+    const out = await sharp(Buffer.from(base64, 'base64')).grayscale().linear(255 / 140, -60 * (255 / 140)).png().toBuffer();
     return out.toString('base64');
   } catch (err) {
     console.warn('[Bild] kunde inte göra bilden svartvit:', err instanceof Error ? err.message : err);
@@ -404,6 +406,16 @@ export async function extractImage(
   throw new Error('Ingen bild genererades');
 }
 
+/**
+ * Text som bilden måste visa ordagrant, skriven i bildbeskrivningen som
+ * TEXT I BILDEN: "SIGRID. SKATAN. Näbben sist." (eller TEXT IN THE PICTURE: "...").
+ * Används när orden på en lapp eller skiss är viktiga för berättelsen.
+ */
+export function pictureText(imagePrompt?: string): string | null {
+  const m = (imagePrompt || '').match(/TEXT (?:I BILDEN|IN THE PICTURE)\s*:\s*["“”„']([^"“”„']{1,80})["“”„']/i);
+  return m ? m[1].trim() : null;
+}
+
 export async function buildPageImageRequest(
   spread: Spread,
   characters: Character[],
@@ -433,6 +445,9 @@ export async function buildPageImageRequest(
   // Referensblad skickas bara för figurerna som är med. Blad för andra figurer
   // "som stilreferens" fick modellen att rita in dem i bakgrunden - den vanligaste
   // orsaken till att bilder underkändes och fick göras om.
+
+  // Text som bilden måste visa, ordagrant (en lapp, en skiss): "TEXT I BILDEN: \"...\""
+  const requiredText = pictureText(spread.imagePrompt);
 
   // Get format-specific instructions
   const isCover = spread.pages === 'omslag';
@@ -483,6 +498,12 @@ Make sure ALL text is spelled correctly in Swedish.
 Draw EXACTLY as many text boxes/speech bubbles as there are texts above - no extra bubbles, no empty bubbles, and no invented text.
 Every word on the image must be Swedish and come from the texts above. Do not add chapter headings or titles.
 DO NOT write any position labels, metadata, or page numbers. Only the actual story text should appear.`;
+  } else if (requiredText) {
+    const storyText = spread.textBlocks.map(tb => tb.text).join('\n\n');
+    textSection = `STORY CONTEXT (for mood only - DO NOT put this text on the image, and do NOT draw people or things that are mentioned only here; draw only what the IMAGE DESCRIPTION asks for):
+${storyText}
+
+THE ONLY TEXT IN THE PICTURE: exactly "${requiredText}", written where the image description says (handwritten on the paper, the note or the sketch). Copy it letter for letter: Swedish, never translated, keep every Å, Ä and Ö with its ring or dots, no extra or missing words. No other letters, words or numbers anywhere in the picture - signs, boxes and other papers stay blank.`;
   } else {
     const storyText = spread.textBlocks.map(tb => tb.text).join('\n\n');
     textSection = `STORY CONTEXT (for mood only - DO NOT put this text on the image, and do NOT draw people or things that are mentioned only here; draw only what the IMAGE DESCRIPTION asks for):
@@ -498,7 +519,9 @@ NO TEXT IN THE PICTURE: no letters, words, numbers, page numbers, labels, speech
     : '';
   if (charsInScene.length > 0) {
     const charList = charsInScene.map(c =>
-      `- ${c.name}${c.heroName ? ` (${c.heroName})` : ''}: ${c.appearance.substring(0, 100)}`
+      `- ${c.name}${c.heroName ? ` (${c.heroName})` : ''}: ${c.appearance.substring(0, 100)}${isMemoryOnly(c)
+        ? ` [ONLY as the memory, dream or photo the description asks for - e.g. inside a framed photo or a dreamlike memory image. ${c.name} is not alive in the present-day scene: never draw ${c.name} as a living person standing among the others]`
+        : ''}`
     ).join('\n');
 
     characterPresenceSection = `\nCHARACTERS THAT MUST BE VISIBLE IN THIS SCENE (and no other named book characters):
@@ -540,7 +563,7 @@ ${formatInstructions}
 ${textSection}
 
 IMAGE DESCRIPTION:
-${spread.imagePrompt}${!includeTextOnImage && !isCover && !comicPage ? `
+${spread.imagePrompt}${!includeTextOnImage && !isCover && !comicPage && !requiredText ? `
 (Any writing the description mentions - names, dates, labels, prices - is drawn as illegible scribbles or wavy lines, never as readable letters or digits.)` : ''}
 ${characterPresenceSection}
 
@@ -555,9 +578,11 @@ ${composition === 'spread'
 - Make sure character proportions, hair, clothing, and features match their reference sheets
 - Every character must be recognizably the SAME person on every page - same face (shape, eyes, nose, mouth, freckles/marks), same hair color and hairstyle, same age and proportions. Only the clothes may change, and only when the scene motivates it (pajamas in bed, a jacket outside); otherwise use their normal clothes
 - NEVER duplicate a character - each person appears EXACTLY ONCE ${perPanel ? 'in each panel' : 'in the image'}
-- NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image${!includeTextOnImage && !isCover && !comicPage ? `
+- NEVER write position labels like "left page", "right page", "sida X", or page numbers on the image${!includeTextOnImage && !isCover && !comicPage ? (requiredText ? `
 
-FINAL CHECK before you finish: there are no letters, words or digits anywhere in the picture. Door signs, boxes, papers, notebooks, posters, screens and labels are blank or carry only a few wavy lines.` : ''}`;
+FINAL CHECK before you finish: the only text in the picture is exactly "${requiredText}", spelled letter for letter. Everything else that could carry writing is blank.` : `
+
+FINAL CHECK before you finish: there are no letters, words or digits anywhere in the picture. Door signs, boxes, papers, notebooks, posters, screens and labels are blank or carry only a few wavy lines.`) : ''}`;
 
   contents.push({ text: mainPrompt });
 

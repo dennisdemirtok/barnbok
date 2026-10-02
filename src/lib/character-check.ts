@@ -8,8 +8,8 @@ import {
   SpreadQualityCheck,
   QualityIssueCategory,
 } from './types';
-import { generatePageImage, resolveIllustrationShape, textInImage, PageImageOptions, isMonochromeStyle } from './gemini';
-import { picturedCharacters, mentionsCharacter as sceneMentions, isGroupCharacter } from './scene-characters';
+import { generatePageImage, resolveIllustrationShape, textInImage, PageImageOptions, isMonochromeStyle, pictureText } from './gemini';
+import { picturedCharacters, isGroupCharacter, isMemoryOnly } from './scene-characters';
 import { textSideForSpread } from './styles';
 import { describeLettering, letteringCaps, scriptPanelCount } from './comic';
 
@@ -138,12 +138,15 @@ RESPOND WITH ONLY THE JSON, no other text.`;
 export function expectedCharactersForSpread(spread: Spread, characters: Character[]): {
   required: Character[];
   optional: Character[];
+  absent: Character[];
 } {
-  // Samma regel som bildmotorn: bildbeskrivningen avgör vem som ska synas
-  const storyText = (spread.textBlocks || []).map(tb => tb.text).join(' ');
+  // Samma regel som bildmotorn: bildbeskrivningen avgör vem som ska synas.
+  // Alla andra av bokens figurer ska INTE synas - även de som nämns i
+  // berättartexten ("pappa är på jobbet"). Förr fick de vara med, och då kom
+  // pappa, syskon och en död mamma med i scener där de inte hörde hemma.
   const required = picturedCharacters(spread.imagePrompt || '', characters);
-  const optional = characters.filter(c => !required.includes(c) && sceneMentions(storyText, c, characters));
-  return { required, optional };
+  const absent = characters.filter(c => !required.includes(c) && c.approved !== false);
+  return { required, optional: [], absent };
 }
 
 export interface ReviewContext {
@@ -265,7 +268,14 @@ function describeCharacter(c: Character, hasReference: boolean): string {
   return `- ${c.name}${c.heroName ? ` (hero name: ${c.heroName})` : ''} - ${details} [${hasReference ? 'reference sheet attached' : 'no reference sheet'}]${group}`;
 }
 
-function buildReviewPrompt(ctx: ReviewContext, required: Character[], optional: Character[], withRef: Set<Character>): string {
+// Kort beskrivning av en figur som inte ska vara med - nog för att känna igen den
+function describeAbsent(c: Character): string {
+  const look = [c.age ? `age ${c.age}` : '', (c.appearance || '').slice(0, 140), c.normalClothes ? `usually wears ${c.normalClothes.slice(0, 60)}` : '']
+    .filter(Boolean).join('; ');
+  return `- ${c.name}${isMemoryOnly(c) ? ' [NOT ALIVE in the story - exists only in memories and photos]' : ''}: ${look}`;
+}
+
+function buildReviewPrompt(ctx: ReviewContext, required: Character[], optional: Character[], withRef: Set<Character>, absent: Character[] = []): string {
   const { spread, bookFormat } = ctx;
   const isCover = spread.pages === 'omslag';
   const isComic = bookFormat === 'bildbok-text-pa-bild';
@@ -308,6 +318,9 @@ Read every speech bubble, caption box and sound effect in the image one by one a
     textRules = `Text belongs in the image in this format${isComic ? ' (in speech bubbles and narration boxes)' : bookFormat === 'larobok' ? ' (helpful labels and arrows are also allowed)' : ''}. Expected Swedish texts:
 ${expected}
 Major unwanted_text: English text, empty speech bubbles or empty text boxes, invented text not in the list above${bookFormat === 'larobok' ? ' (apart from short helpful labels)' : ''}, headings, page numbers or position labels, garbled/unreadable pseudo-letters. An expected text that is missing completely -> major missing_element. Small spelling slips in otherwise correct text -> minor.`;
+  } else if (pictureText(spread.imagePrompt)) {
+    const wanted = pictureText(spread.imagePrompt)!;
+    textRules = `The ONLY text allowed in this image is exactly "${wanted}" (Swedish, on the paper, note or sketch the brief describes). Compare it letter for letter: missing entirely -> major missing_element; misspelled, garbled pseudo-letters, Å/Ä/Ö without ring or dots, or missing/extra words -> major unwanted_text with a correction quoting the exact text. Any OTHER text anywhere -> major unwanted_text.`;
   } else {
     textRules = `NO text is allowed anywhere in this image: no letters, words, numbers, speech bubbles, captions, labels, signs or book covers with writing, watermarks or signatures. Speech bubbles or caption boxes, a heading, a page number or a sign with readable words -> major unwanted_text (correction e.g. "No text, letters or speech bubbles anywhere; keep the shop sign blank"). A few small letters on a prop far back in the scene (a jar, a packet, a t-shirt print) -> minor unwanted_text. Tiny texture marks that do not read as letters are fine.`;
   }
@@ -341,12 +354,14 @@ Major unwanted_text: English text, empty speech bubbles or empty text boxes, inv
     ? required.map(c => describeCharacter(c, withRef.has(c))).join('\n')
     : '(no named characters - check that no named book character is duplicated and that figures match the brief)';
   const optionalList = optional.map(c => describeCharacter(c, withRef.has(c))).join('\n');
+  const absentList = absent.map(describeAbsent).join('\n');
+  const memoryInScene = required.filter(isMemoryOnly);
 
   return `You are the art director doing final quality control of one illustration for a printed Swedish children's book. Compare the IMAGE TO REVIEW with the brief below and with the attached character reference sheets. Be precise and concrete, report only problems you can actually see, and do not invent problems. Stylization dictated by the art style (simplified hands, big heads, etc.) is NOT an error.
 
 FORMAT: ${formatLine}${isMonochromeStyle(ctx.styleGuide || '') ? `
 
-ART STYLE: black ink on white paper, NO color by design. Missing color is never an issue. Judge hair and clothes only by shape and by light versus dark (a "dark brown" hair may be solid black, hatched or left white as line art - all fine). Colored areas in the image are a style error -> minor.` : ''}
+ART STYLE: black ink on white paper, NO color by design. Missing color is never an issue. Judge hair and clothes only by shape and by light versus dark (a "dark brown" hair may be solid black, hatched or left white as line art - all fine). Colored areas in the image are a style error -> minor. Soft grey shading, gradients or a realistic grey rendering instead of flat ink line art is a style break -> minor layout.` : ''}
 
 BRIEF - IMAGE DESCRIPTION THE ILLUSTRATOR RECEIVED:
 """
@@ -358,6 +373,11 @@ ${requiredList}
 ${optionalList ? `
 OTHER BOOK CHARACTERS MENTIONED IN THE STORY TEXT (optional - they may or may not appear; if they appear they must match their reference and appear only once per ${scene}):
 ${optionalList}
+` : ''}${memoryInScene.length > 0 ? `
+MEMORY ONLY: ${memoryInScene.map(c => c.name).join(', ')} ${memoryInScene.length === 1 ? 'is' : 'are'} not alive in the story and may appear ONLY as the photo, dream or memory image the brief describes. Drawn as a living person present in the scene -> major extra_figure.
+` : ''}${absentList ? `
+BOOK CHARACTERS WHO ARE NOT IN THIS PICTURE (they are elsewhere at this moment - none of them may appear):
+${absentList}
 ` : ''}
 TEXT RULES:
 ${textRules}
@@ -366,9 +386,10 @@ LAYOUT RULES:
 ${layoutRules}
 
 CHECKLIST:
-1. CHARACTERS: add one entry to "characters" for EVERY character listed above (required and optional). should_be_visible = true for characters named in the brief unless the brief clearly says they are absent, off-screen or only thought of; false for optional ones. visible = whether you can see them. max_count_in_one_scene = how many times that character is drawn inside one ${scene} (0 if absent, 2+ means duplicated). matches_reference = hair, clothes, species, age/size match the reference/description. same_person_as_reference = a child who has seen the reference sheet would instantly recognize this as the SAME person (true if not visible or no reference sheet). note = short English observation, for visible characters naming what differs in the face if anything.
+1. CHARACTERS: add one entry to "characters" for EVERY character listed above (required, optional and not-in-this-picture; for the not-in-this-picture characters should_be_visible = false and visible = true only if you are confident a figure in the image IS that character - their distinctive hair, age and clothes match; generic background people are not them). should_be_visible = true for characters named in the brief unless the brief clearly says they are absent, off-screen or only thought of; false for optional ones. visible = whether you can see them. max_count_in_one_scene = how many times that character is drawn inside one ${scene} (0 if absent, 2+ means duplicated). matches_reference = hair, clothes, species, age/size match the reference/description. same_person_as_reference = a child who has seen the reference sheet would instantly recognize this as the SAME person (true if not visible or no reference sheet). note = short English observation, for visible characters naming what differs in the face if anything.
 2. MISSING: a character that should be visible but is not -> major missing_character.
-3. DUPLICATES: the same character drawn twice or more in one ${scene} -> major duplicate_character. Books often have twins, siblings or classmates who are SUPPOSED to look alike: two similar-looking children are only a duplicate if the brief names one character there; when the brief names two different characters who resemble each other, that is correct, not a duplicate.${isComic ? ' The same character in DIFFERENT panels (also normal clothes vs hero costume in different panels) is normal comic storytelling - not an issue.' : ''} Unexplained twin/clone figures, or unnamed figures that look like a copy of a book character -> major extra_figure. Background extras that the brief calls for are fine.
+3. WRONG PEOPLE: a book character from the NOT IN THIS PICTURE list who is drawn in the image -> major extra_figure, with character = their name and a correction like "Remove Pappa Palmkvist - only Sigrid and the old lady are at the garbage room".
+3b. DUPLICATES: the same character drawn twice or more in one ${scene} -> major duplicate_character. Books often have twins, siblings or classmates who are SUPPOSED to look alike: two similar-looking children are only a duplicate if the brief names one character there; when the brief names two different characters who resemble each other, that is correct, not a duplicate.${isComic ? ' The same character in DIFFERENT panels (also normal clothes vs hero costume in different panels) is normal comic storytelling - not an issue.' : ''} Unexplained twin/clone figures, or unnamed figures that look like a copy of a book character -> major extra_figure. Background extras that the brief calls for are fine.
 4. IDENTITY (most important): the reference sheet decides who the character IS. Compare the FACE feature by feature: face shape, eye shape and color, eyebrows, nose, mouth/teeth (e.g. buck teeth), freckles, moles or dimples, ears, hairline, hair color and hairstyle, skin tone, apparent age and body proportions. If the face reads as a different child/person - even when the hair and clothes are right - that is major wrong_appearance with a correction naming the exact features to restore (e.g. "Otis must have the round face, big green eyes, freckles across the nose and two front buck teeth from his reference sheet"). A slightly different expression or angle is fine.
 5. CLOTHES: the reference sheets contain labels and color swatches - those are not part of the character. Clothes MAY change when the scene motivates it (pajamas in bed, a jacket outdoors, swimwear, the hero costume) - that is never an error as long as the face and hair are the same person. Different clothes are ALWAYS minor wrong_appearance (a reader barely notices a sweater), unless the brief makes the garment the point of the scene (a costume reveal, the yellow raincoat everyone recognizes her by) -> then major. Wrong species or clearly wrong age/size -> major wrong_appearance. Small shade or accessory differences -> minor.
 6. SCENE ELEMENTS: identify the few elements the brief makes essential to this moment (the action, important props, animals, places, time of day). An essential element missing or clearly wrong -> major missing_element. A missing background detail -> minor.
@@ -393,7 +414,7 @@ const RETRY_CATEGORIES = new Set<QualityIssueCategory>([
   'missing_character', 'duplicate_character', 'wrong_appearance', 'anatomy', 'unwanted_text', 'cropped_character',
 ]);
 
-function normalizeReview(raw: RawReview, required: Character[], optional: Character[], isComic: boolean, model: string): ImageReview {
+function normalizeReview(raw: RawReview, required: Character[], optional: Character[], isComic: boolean, model: string, absent: Character[] = []): ImageReview {
   const issues: ReviewIssue[] = (raw.issues || []).map(i => ({
     category: (ISSUE_CATEGORIES as string[]).includes(i.category) ? i.category as QualityIssueCategory : 'other',
     character: i.character || '',
@@ -456,6 +477,23 @@ function normalizeReview(raw: RawReview, required: Character[], optional: Charac
     }
   }
 
+  // Säkerhetsnät: en av bokens figurer som inte ska vara med syns ändå (pappa på
+  // jobbet, en död mamma i en vardagsscen). Det märker varje läsare.
+  for (const c of absent) {
+    const entry = findEntry(c);
+    if (!entry?.visible || hasIssue('extra_figure', c.name)) continue;
+    issues.push({
+      category: 'extra_figure',
+      character: c.name,
+      severity: 'major',
+      descriptionSv: `${c.name} ska inte vara med i bilden`,
+      correction: `Remove ${c.name} from the picture completely - ${c.name} is not in this scene${required.length ? `; only ${required.map(r => r.name).join(', ')} ${required.length === 1 ? 'is' : 'are'} there` : ''}`,
+    });
+    problemsExtra.push(`${c.name} var med fast hen inte ska`);
+  }
+  const namedExtra = (issue: ReviewIssue) =>
+    issue.category === 'extra_figure' && [...absent, ...required].some(c => sameName(issue.character, c.name));
+
   // Tvåpersonersposter som modellen ändå kallat dubblett räknas inte
   for (const issue of issues) {
     const group = [...required, ...optional].find(c => isGroupCharacter(c) && issue.character && c.name.toLowerCase() === issue.character.toLowerCase());
@@ -466,7 +504,8 @@ function normalizeReview(raw: RawReview, required: Character[], optional: Charac
   // kompositionsdetaljer blir anteckningar i stället - de kostar en ny bild
   // men gör sällan boken sämre, och författaren kan själv välja att göra om.
   for (const issue of issues) {
-    if (issue.severity === 'major' && !RETRY_CATEGORIES.has(issue.category)) issue.severity = 'minor';
+    // Fel person i scenen är värt en ny bild - okända statister är det inte
+    if (issue.severity === 'major' && !RETRY_CATEGORIES.has(issue.category) && !namedExtra(issue)) issue.severity = 'minor';
   }
   const majors = issues.filter(i => i.severity === 'major');
   const passed = majors.length === 0;
@@ -501,7 +540,7 @@ export async function reviewPageImage(
   opts: { timeoutMs?: number } = {}
 ): Promise<ImageReview> {
   const ai = getClient();
-  const { required, optional } = expectedCharactersForSpread(ctx.spread, await withReferenceImages(ctx.characters));
+  const { required, optional, absent } = expectedCharactersForSpread(ctx.spread, await withReferenceImages(ctx.characters));
   const isComic = ctx.bookFormat === 'bildbok-text-pa-bild';
 
   // Referensbilder för figurerna i scenen (max 6 för att hålla nere anropet)
@@ -527,7 +566,7 @@ export async function reviewPageImage(
     contents.push({ text: 'IMAGE TO REVIEW:' });
     contents.push({ inlineData: { mimeType: detectMimeType(imageBase64), data: imageBase64 } });
     const liteCtx = lite ? { ...ctx, spread: { ...ctx.spread, imagePrompt: withoutAges(ctx.spread.imagePrompt || '') } } : ctx;
-    contents.push({ text: buildReviewPrompt(liteCtx, required, optional, withRef) });
+    contents.push({ text: buildReviewPrompt(liteCtx, required, optional, withRef, absent) });
     return contents;
   };
 
@@ -566,7 +605,7 @@ export async function reviewPageImage(
         throw new Error(`Tomt svar från granskaren (${blocked ? `blockerad: ${blocked}` : response.candidates?.[0]?.finishReason ?? 'okänd orsak'})`);
       }
       const raw = JSON.parse(text) as RawReview;
-      return normalizeReview(raw, required, optional, isComic, model);
+      return normalizeReview(raw, required, optional, isComic, model, level === 'minimal' ? [] : absent);
     } catch (err) {
       lastError = err;
       console.warn(`[Granskning] ${model} misslyckades:`, err instanceof Error ? err.message : err);

@@ -46,9 +46,26 @@ export function mentionsCharacter(text: string, char: Character, all: Character[
   return distinctiveParts(char, all).some(part => mentions(text, part));
 }
 
+// Figurer som bara finns i minnen och på foton, t.ex. en förälder som dött. De
+// ritas aldrig som levande personer i en scen - bara när bilden uttryckligen är
+// ett minne, en dröm eller ett foto. Känns igen på hur planeringen beskrev dem
+// ("syns på foto och i minne", "död sedan två år").
+const MEMORY_ONLY_RE = /(syns (bara )?(på foto|i minne)|på foton? och i minne|bara (som|i) minne|i minnen och|avliden|är död|död sedan|dog (för|när)|gick bort|only (appears )?(in|as) (a )?(memory|memories|photo)|deceased|passed away)/i;
+const MEMORY_SCENE_RE = /(memory|memories|dream|dreamlike|flashback|photo|photograph|framed picture|portrait|minne|dröm|foto|fotografi)/i;
+
+export function isMemoryOnly(char: Character): boolean {
+  return MEMORY_ONLY_RE.test(`${char.age || ''} ${char.appearance || ''} ${char.personality || ''}`);
+}
+
+/** Är bilden ett minne, en dröm eller ett foto (där en minnesfigur får synas)? */
+export function isMemoryScene(imagePrompt: string): boolean {
+  return MEMORY_SCENE_RE.test(imagePrompt || '');
+}
+
 /** Figurerna som bildbeskrivningen säger ska synas. */
 export function picturedCharacters(imagePrompt: string, characters: Character[]): Character[] {
-  return characters.filter(c => mentionsCharacter(imagePrompt || '', c, characters));
+  return characters.filter(c =>
+    mentionsCharacter(imagePrompt || '', c, characters) && (!isMemoryOnly(c) || isMemoryScene(imagePrompt)));
 }
 
 /** En post som egentligen är två personer ("Tage och Tindra Palmgren"). */

@@ -13,6 +13,7 @@ import PageEditor from './PageEditor';
 import Workshop from './Workshop';
 import BookReader from './BookReader';
 import TextCorrections from './TextCorrections';
+import ManuscriptReview from './ManuscriptReview';
 import { updateSpreadTextInCloud } from '@/lib/cloud-text';
 
 const spreadName = (s: Spread) =>
@@ -583,6 +584,9 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack, 
 
       {/* ─── Verkstad (redigera text och bilder) ─── */}
       {/* ─── Rätta text (bara texten, bilderna rörs inte) ─── */}
+      {viewMode === 'text' && (
+        <ManuscriptReview book={book} onSaveSpread={handleSaveSpreadText} />
+      )}
       {viewMode === 'text' && (
         <TextCorrections
           book={book}

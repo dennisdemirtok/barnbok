@@ -269,7 +269,8 @@ ${config.bookFormat === 'kapitelbok' ? '5. Varje kapitel ska ha en KAPITEL-rubri
 8. Varje bildprompt ska vara detaljerad (minst 3-4 meningar) och beskriva motiv, komposition, miljö, ljus och stämning - men INTE ritstil, teknik eller hur ansikten ritas (stilen läggs på separat)
 9. Karaktärsbeskrivningarna ska vara tillräckligt detaljerade för att kunna generera konsekventa bilder
 10. ${config.bookFormat === 'bildbok-text-pa-bild' ? 'Inkludera i bildprompten var texten ska placeras (t.ex. "text box in upper left", "speech bubble")' : 'Bildprompten ska INTE inkludera text i bilden'}
-11. Bildpromptarna får ALDRIG be om rubriker, kapitelbanderoller, sidnummer eller annan text utöver berättelsetexten${config.bookFormat === 'bildbok-text-pa-bild' ? ' i textrutor/pratbubblor' : ''}`;
+11. Bildpromptarna får ALDRIG be om rubriker, kapitelbanderoller, sidnummer eller annan text utöver berättelsetexten${config.bookFormat === 'bildbok-text-pa-bild' ? ' i textrutor/pratbubblor' : ''}
+12. Nämn i varje bildprompt alla figurer som syns med fullständigt namn, och nämn ALDRIG en namngiven figur som inte är på plats i scenen - bildmotorn ritar alla namn den ser. En figur som är död eller bara finns i minnen nämns bara när bilden uttryckligen är ett minne, en dröm eller ett foto ("a dreamlike memory image of ...", "a framed photo of ...")`;
 
   const model = await resolveLatestModel(client);
 
@@ -431,7 +432,8 @@ ${splitLines}
    - label: kort svensk rubrik för scenen (t.ex. "Drömmen i skogen")
    - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick. Beskriv komposition, miljö, ljus och stämning. Skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder) så att figurerna blir likadana på alla bilder.
 
-Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget): lappar, kvitton, böcker och skyltar beskrivs utan läsbar text. Nämn bara de namngivna figurer som faktiskt ska synas på bilden.`;
+Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget): lappar, kvitton, böcker och skyltar beskrivs utan läsbar text. Undantag: när texten säger exakt vad som står på en lapp, skiss eller skylt och orden är viktiga för scenen, avsluta bildprompten med TEXT I BILDEN: "exakt den texten" (högst sex ord, ordagrant som i boken).
+VEM SOM SYNS: Nämn varje figur som ska synas med fullständigt namn, och nämn ALDRIG en namngiven figur som inte är på plats i just den scenen (inte "while Dad is at work", inte "Mom's old overall" - skriv "an old overall" i stället). Bildmotorn ritar alla namn den ser. En figur som är död eller bara finns i minnen nämns bara när bilden uttryckligen är ett minne, en dröm eller ett foto, och då med de orden ("a dreamlike memory image of ...", "a framed photo of ..."). Skriv för sådana figurer i karaktärens ålder eller utseende att de bara syns på foto och i minnen.`;
 
   return withModelFallback(model, async (m) => {
     const stream = client.messages.stream({
@@ -552,7 +554,8 @@ ${mix ? `   - composition: vilken sorts bild delen får. Boken ska vara rörlig 
 ${compositionGuide(mix)}
 ` : ''}   - imagePrompt: detaljerad bildprompt på ENGELSKA för delens mest bildstarka ögonblick${mix ? ', skriven för den valda bildtypen (spot: bara figurerna och det de håller i, ingen miljö; panels: beskriv 3-4 rutor i ordning; round: ett centrerat motiv)' : ''}. Beskriv motiv, komposition, miljö, ljus och stämning, och skriv in varje närvarande karaktärs fullständiga utseende (namn + hår, ögon, kläder).
 
-Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget): lappar, kvitton, böcker och skyltar beskrivs utan läsbar text. Nämn bara de namngivna figurer som faktiskt ska synas på bilden.`;
+Bildpromptarna ska INTE innehålla någon ritstil - stilen läggs på separat. De får inte be om text, rubriker eller sidnummer i bilden (utom titeln på omslaget): lappar, kvitton, böcker och skyltar beskrivs utan läsbar text. Undantag: när texten säger exakt vad som står på en lapp, skiss eller skylt och orden är viktiga för scenen, avsluta bildprompten med TEXT I BILDEN: "exakt den texten" (högst sex ord, ordagrant som i boken).
+VEM SOM SYNS: Nämn varje figur som ska synas med fullständigt namn, och nämn ALDRIG en namngiven figur som inte är på plats i just den scenen (inte "while Dad is at work", inte "Mom's old overall" - skriv "an old overall" i stället). Bildmotorn ritar alla namn den ser. En figur som är död eller bara finns i minnen nämns bara när bilden uttryckligen är ett minne, en dröm eller ett foto, och då med de orden ("a dreamlike memory image of ...", "a framed photo of ..."). Skriv för sådana figurer i karaktärens ålder eller utseende att de bara syns på foto och i minnen.`;
 
   return withModelFallback(model, async (m) => {
     const stream = client.messages.stream({
@@ -656,7 +659,7 @@ const COMIC_PAGES_SCHEMA = {
   },
 };
 
-async function streamJson<T>(prompt: string, schema: { [key: string]: unknown }, opts: { effort: 'low' | 'medium'; maxTokens: number; refusal: string; tooLong: string }): Promise<T> {
+async function streamJson<T>(prompt: string, schema: { [key: string]: unknown }, opts: { effort: 'low' | 'medium' | 'high'; maxTokens: number; refusal: string; tooLong: string }): Promise<T> {
   const client = getClient();
   const model = await resolveLatestModel(client);
   return withModelFallback(model, async (m) => {
@@ -1527,4 +1530,97 @@ Undvik klyschor, håll det barnvänligt och konsekvent.`;
     }
     return suggestion;
   });
+}
+
+// ═══════════════════════════════════════════
+//  Lektören: läser hela manuset som en förlagslektör
+// ═══════════════════════════════════════════
+
+export type ManuscriptIssueKind = 'logik' | 'språk' | 'tydlighet' | 'konsekvens' | 'lämplighet';
+
+export interface ManuscriptIssue {
+  kind: ManuscriptIssueKind;
+  severity: 'major' | 'minor';
+  spread: number; // uppslagets nummer
+  quote: string; // exakt text ur manuset som ska bytas ut
+  suggestion: string; // texten som ska stå i stället
+  reason: string; // kort förklaring på svenska
+}
+
+export interface ManuscriptReview {
+  summary: string;
+  issues: ManuscriptIssue[];
+}
+
+const MANUSCRIPT_REVIEW_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'issues'],
+  properties: {
+    summary: { type: 'string' },
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['kind', 'severity', 'spread', 'quote', 'suggestion', 'reason'],
+        properties: {
+          kind: { type: 'string', enum: ['logik', 'språk', 'tydlighet', 'konsekvens', 'lämplighet'] },
+          severity: { type: 'string', enum: ['major', 'minor'] },
+          spread: { type: 'integer' },
+          quote: { type: 'string' },
+          suggestion: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+/**
+ * Lektörsläsning av ett helt manus: logiska glapp, språkfel, otydligheter för
+ * målgruppen och sådant som en förälder kan reagera på. Ett anrop per bok -
+ * varje fynd har ett exakt citat och en ersättning, så att det går att rätta
+ * med ett klick utan att författarens röst ändras.
+ */
+export async function reviewManuscript(input: {
+  title: string;
+  targetAge?: string;
+  characters: { name: string; role: string; note?: string }[];
+  sections: { spread: number; label: string; text: string }[];
+}): Promise<ManuscriptReview> {
+  const manuscript = input.sections.map(s => `[Uppslag ${s.spread} · ${s.label}]\n${s.text}`).join('\n\n');
+  const cast = input.characters.map(c => `- ${c.name} (${c.role}${c.note ? `, ${c.note}` : ''})`).join('\n');
+  const prompt = `Du är lektör på ett svenskt barnboksförlag. Läs hela manuset noga, från början till slut, och hitta det som måste rättas innan boken trycks.
+
+TITEL: "${input.title}"${input.targetAge ? `\nMÅLGRUPP: ${input.targetAge} år` : ''}
+${cast ? `PERSONER:\n${cast}\n` : ''}
+MANUS:
+"""
+${manuscript}
+"""
+
+LETA EFTER:
+- logik: saker som motsäger varandra - tidslinje och veckodagar, antal (dörrar, nycklar, dagar), vem som är var och vet vad, sådant som sägs om det förflutna som inte stämmer med det som berättats tidigare.
+- språk: grammatik, böjning (en/ett, bestämd form, plural), särskrivning, stavning och uttryck som blivit fel. Rätta inte medvetet talspråk eller barnets egen röst.
+- tydlighet: ord eller begrepp som används innan de förklarats, eller som ett barn i målgruppen inte kan förstå av sammanhanget.
+- konsekvens: namn, ålder, utseende och fakta som ändras mellan uppslagen.
+- lämplighet: sådant som en förälder kan reagera på (t.ex. att barn ljuger eller gör något farligt utan att det får följder). Föreslå en liten ändring som löser det.
+
+REGLER FÖR VARJE FYND:
+- spread: uppslagets nummer där texten står.
+- quote: kopiera EXAKT den text som ska ändras, tecken för tecken ur manuset (samma skiljetecken och stora bokstäver). Så kort som möjligt men minst några ord, så att den bara finns på ett ställe i uppslaget.
+- suggestion: texten som ska stå i stället för quote, skriven så att den passar in i meningen och i författarens röst. För logiska fel: den minsta ändring som får det att gå ihop.
+- reason: en kort mening om varför.
+- severity: major = en läsare märker felet eller tappar tråden, minor = finputs.
+Rapportera bara riktiga fel - ingen omskrivning efter smak, ingen ändring av stil eller ton. Högst 40 fynd, de viktigaste först.
+summary: två meningar om vad som fungerar och vad som är viktigast att rätta.`;
+
+  const review = await streamJson<ManuscriptReview>(prompt, MANUSCRIPT_REVIEW_SCHEMA, {
+    effort: 'high',
+    maxTokens: 32000,
+    refusal: 'Lektören kunde inte läsa manuset just nu',
+    tooLong: 'Manuset blev för långt för en läsning - dela upp boken och försök igen',
+  });
+  return { summary: (review.summary || '').trim(), issues: Array.isArray(review.issues) ? review.issues : [] };
 }

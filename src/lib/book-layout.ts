@@ -312,7 +312,8 @@ function buildFrontMatter(pb: PageBuilder, book: BookProject, cover: Spread | un
   const lines = [
     `${book.title}`,
     `© ${year} ${book.author || 'Författaren'}`,
-    preset ? `Illustrationer i stilen ${preset.label}` : 'Illustrationer skapade med AI',
+    // Stilens namn är internt (och kan nämna förlagor och varumärken) - aldrig i en bok som säljs
+    'Illustrationer skapade med AI',
     `Typsnitt: ${Array.from(new Set([BOOK_FONTS[t.body.family].name, BOOK_FONTS[t.heading.family].name])).join(' och ')}`,
     'Skapad med Bokverktyget',
   ];
