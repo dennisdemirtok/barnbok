@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { PROSE_QUALITY_RULES, variationBlock, sanitizeProse } from './writing';
 import { drawStorySeeds, seedsBlock } from './story-seeds';
 import { recentStories, rememberStory, memoryBlock, avoidTextOf } from './story-memory';
+import { brainBlock } from './brain';
 import { extractNames } from './text-eval';
 import { restoreDialogueMarkers, DEFAULT_MARKER } from './dialogue';
 import { COMPOSITIONS, compositionGuide } from './compositions';
@@ -884,6 +885,7 @@ export interface BeginningInput {
   characters?: { name: string; appearance?: string; personality?: string }[];
   style?: WritingStyleRef;
   voice?: AuthorVoiceRef; // författarens eget språk - går före seriens språkexempel
+  remember?: boolean; // false = mätkörning, sparas inte i berättelseminnet
 }
 
 export interface BookBeginning {
@@ -933,7 +935,7 @@ const PLOT_SCHEMA = {
   },
 };
 
-export async function suggestRandomPlot(preset: StylePreset, targetAge: string, hint?: string): Promise<PlotSuggestion> {
+export async function suggestRandomPlot(preset: StylePreset, targetAge: string, hint?: string, options: { remember?: boolean } = {}): Promise<PlotSuggestion> {
   const client = getClient();
   const [model, recent] = await Promise.all([resolveLatestModel(client), recentStories(40)]);
   const isChapterBook = preset.book.format === 'kapitelbok';
@@ -979,8 +981,8 @@ ${variationBlock({ names: true, opening: false })}`;
     }
     const raw = JSON.parse(textBlock.text) as PlotSuggestion;
     const plot = { title: sanitizeProse(raw.title), plot: sanitizeProse(raw.plot), setting: sanitizeProse(raw.setting) };
-    // Kom ihåg idén så att nästa förslag inte upprepar den
-    await rememberStory({
+    // Kom ihåg idén så att nästa förslag inte upprepar den (inte vid mätkörningar)
+    if (options.remember !== false) await rememberStory({
       kind: 'plot',
       style: preset.id,
       title: plot.title,
@@ -1206,6 +1208,8 @@ ${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary)}
 ${comicWritingHint(book)}
 ${proseRules(targetAge)}
 
+${brainBlock(preset, { voice: !!input.voice })}
+
 ${variationBlock({ names: characterLines.length === 0 && plotNames(input.plot).length === 0, opening: true })}
 ${input.plot.trim().length < 120 ? `\n${seedsBlock(drawStorySeeds(preset.id, avoidTextOf(recent)), 'krydda')}\n` : ''}
 ${memoryBlock(recent)}`;
@@ -1243,7 +1247,7 @@ ${memoryBlock(recent)}`;
     // Kom ihåg namn, titel och öppning (inte författarens idé) för kommande böcker
     const opening = beginning.rawText.split('\n').map(l => l.trim())
       .find(l => l && !/^(kapitel\s+\S+|prolog|inledning)\b/i.test(l) && !(diary && /^(måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)\b.{0,25}$/i.test(l)));
-    await rememberStory({
+    if (input.remember !== false) await rememberStory({
       kind: 'beginning',
       style: preset.id,
       title: beginning.title,
@@ -1311,7 +1315,9 @@ ${diary
 
 ${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary)}
 ${comicWritingHint(book)}
-${proseRules(targetAge)}`;
+${proseRules(targetAge)}
+
+${brainBlock(preset, { voice: !!input.voice })}`;
 
   return withModelFallback(model, async (m) => {
     let written = '';

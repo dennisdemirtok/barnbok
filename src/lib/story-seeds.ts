@@ -143,6 +143,7 @@ const PRESET_TAGS: Record<string, Tag[]> = {
   mammamu: ['vardag', 'enkel', 'djur', 'humor'],
   disney: ['fantasi', 'action', 'kansla', 'djur'],
   minimalistisk: ['enkel', 'djur', 'vardag'],
+  uppdrag: ['humor', 'action', 'fantasi', 'spanning'],
 };
 
 // Rotation: det som dragits nyligen dras inte igen förrän halva poolen har använts.

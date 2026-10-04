@@ -43,6 +43,8 @@ export async function POST(request: Request) {
       characters: Array.isArray(body.characters) ? body.characters.slice(0, 20) : undefined,
       style,
       voice: normalizeVoice(body.voice),
+      // Mätkörningar (scripts/eval-texts.mjs) ska inte fylla berättelseminnet
+      remember: request.headers.get('x-barnbok-matning') !== '1',
     });
 
     console.log(`[write-beginning] "${result.title}": ${countWords(result.rawText)} ord`);

@@ -21,7 +21,9 @@ export async function POST(request: Request) {
     const suggestion = await suggestRandomPlot(
       preset,
       targetAge?.trim() || preset.book.age,
-      hint?.trim().slice(0, 500) || undefined
+      hint?.trim().slice(0, 500) || undefined,
+      // Mätkörningar (scripts/eval-texts.mjs) ska inte fylla berättelseminnet
+      { remember: request.headers.get('x-barnbok-matning') !== '1' }
     );
     return NextResponse.json({
       title: suggestion.title.trim(),

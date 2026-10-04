@@ -6,6 +6,11 @@
 // Genererar slumpade handlingar och bokbörjan via appens API, mäter dem med
 // src/lib/text-eval.ts och skriver en rapport (JSON + Markdown) till eval-reports/.
 // Kör samma kommando före och efter en promptändring och jämför siffrorna.
+//
+// Före/efter med samma handlingar och jämförelse med riktiga böcker (hjärnan):
+//   node scripts/eval-texts.mjs --tag fore --styles knyckertz,luna,handbok --plots 4 --beginnings 4 --same 0 --referens yumi-tomu
+//   node scripts/eval-texts.mjs --tag efter --plots-fran eval-reports/fore.raw.json --referens yumi-tomu
+// --referens läser referensbocker/samlat-<namn>.json eller referensbocker/bocker/<namn>/fingeravtryck.json
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -26,8 +31,10 @@ const BEGINNINGS_PER_STYLE = Number(args.beginnings || 1);
 const SAME_PLOT = Number(args.same || 3);
 const OUT = path.resolve(args.out || path.join(ROOT, 'eval-reports'));
 const REUSE = args.reuse; // sökväg till en tidigare rå-JSON: mät om utan att generera
+const PLOTS_FROM = args['plots-fran']; // återanvänd handlingarna från en tidigare körning (före/efter)
+const REFERENCE = args.referens; // fingeravtryck från riktiga böcker att jämföra med
 
-const AGES = { luna: '6-9 år', knyckertz: '6-9 år', handbok: '8-12 år', mammamu: '3-6 år', disney: '3-6 år', minimalistisk: '2-5 år' };
+const AGES = { luna: '6-9 år', knyckertz: '6-9 år', handbok: '8-12 år', mammamu: '3-6 år', disney: '3-6 år', minimalistisk: '2-5 år', uppdrag: '6-9 år' };
 const SAME_PLOT_TEXT = 'Tvillingarna ska sova över hos farmor på en ö. På natten hör de någon gå på vinden fast farmor sover.';
 
 // ── Ladda TypeScript-moduler utan byggsteg ──
@@ -41,12 +48,13 @@ function loadTs(file) {
   return mod.exports;
 }
 const { evaluateBatch } = loadTs(path.join(ROOT, 'src/lib/text-eval.ts'));
+const { fingerprint, FINGERPRINT_LABELS } = loadTs(path.join(ROOT, 'src/lib/text-fingerprint.ts'));
 
 async function post(url, body) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     let res;
     try {
-      res = await fetch(BASE + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      res = await fetch(BASE + url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-barnbok-matning': '1' }, body: JSON.stringify(body) });
     } catch (err) {
       // Nätverksfel (t.ex. när servern startas om) - vänta och försök igen
       console.warn(`  ${url} nätverksfel: ${err.cause?.code ?? err.message}`);
@@ -75,17 +83,20 @@ async function pool(jobs, concurrency) {
 
 // ── Generera ──
 async function generate() {
-  console.log(`Genererar mot ${BASE}: ${PLOTS_PER_STYLE} handlingar och ${BEGINNINGS_PER_STYLE} början per stil, ${SAME_PLOT} på samma handling`);
+  // Samma handlingar som en tidigare körning, så att bara skrivandet skiljer före och efter
+  const reused = PLOTS_FROM ? JSON.parse(fs.readFileSync(PLOTS_FROM, 'utf8')).plots : null;
+  const styles = reused ? [...new Set(reused.map(p => p.style))] : STYLES;
+  console.log(`Genererar mot ${BASE}: ${reused ? `${reused.length} handlingar från ${PLOTS_FROM}` : `${PLOTS_PER_STYLE} handlingar`} och ${BEGINNINGS_PER_STYLE} början per stil, ${SAME_PLOT} på samma handling`);
   const plotJobs = STYLES.flatMap(style => Array.from({ length: PLOTS_PER_STYLE }, () => async () => {
     const r = await post('/api/random-plot', { stylePresetId: style, targetAge: AGES[style] });
     process.stdout.write('.');
     return r && { style, ...r };
   }));
-  const plots = (await pool(plotJobs, 4)).filter(Boolean);
+  const plots = reused ?? (await pool(plotJobs, 4)).filter(Boolean);
   console.log(`\n${plots.length} handlingar`);
 
   const beginningJobs = [
-    ...STYLES.flatMap(style => plots.filter(p => p.style === style).slice(0, BEGINNINGS_PER_STYLE).map(p => ({
+    ...styles.flatMap(style => plots.filter(p => p.style === style).slice(0, BEGINNINGS_PER_STYLE).map(p => ({
       style, plot: p.plot, setting: p.setting, lineage: `plot:${plots.indexOf(p)}`,
     }))),
     ...Array.from({ length: SAME_PLOT }, (_, i) => ({ style: 'luna', plot: SAME_PLOT_TEXT, lineage: `same:${i}`, same: true })),
@@ -148,7 +159,43 @@ function report(raw) {
     '## Början (AI-tecken)',
     ...batch.items.filter(m => m.kind === 'beginning').map(m => `- ${m.group}: ${m.words} ord, rytm ${m.sentenceVariation}, namn ${m.names.slice(0, 3).join('/')}, ${m.aiTellLabels.join('; ') || 'inga AI-tecken'} · ”${m.opening.slice(0, 90)}”`),
   ].join('\n');
-  return { md, summary: { quality: batch.quality, variation: batch.variation, samePlot: same.variation } };
+  const fp = fingerprintSection(raw);
+  return { md: md + fp.md, summary: { quality: batch.quality, variation: batch.variation, samePlot: same.variation, fingerprints: fp.byStyle, reference: fp.reference } };
+}
+
+// ── Fingeravtryck mot riktiga böcker ──
+const KEY_METRICS = ['sentenceMean', 'dialogueShare', 'repliesPer1000', 'saidShare', 'exclamationsPer100Sentences', 'ellipsesPer1000',
+  'particlesPer1000', 'namedEmotionsPer1000', 'tellPhrasesPer1000', 'aiTellsPer1000', 'sentenceStartRepeat', 'capsWordsPer1000'];
+const SHARE_METRICS = new Set(['dialogueShare', 'saidShare', 'sentenceStartRepeat']);
+const fmtMetric = (m, v) => v === undefined || v === null ? '–' : SHARE_METRICS.has(m) ? `${Math.round(v * 100)} %` : String(v).replace('.', ',');
+
+function loadReference(name) {
+  if (!name) return null;
+  const samlat = path.join(ROOT, 'referensbocker', `samlat-${name}.json`);
+  if (fs.existsSync(samlat)) {
+    const rows = JSON.parse(fs.readFileSync(samlat, 'utf8')).matt;
+    return Object.fromEntries(rows.map(r => [r.metric, Math.round(r.mean * 100) / 100]));
+  }
+  const book = path.join(ROOT, 'referensbocker', 'bocker', name, 'fingeravtryck.json');
+  return fs.existsSync(book) ? JSON.parse(fs.readFileSync(book, 'utf8')).text : null;
+}
+
+function fingerprintSection(raw) {
+  const reference = loadReference(REFERENCE);
+  const byStyle = {};
+  for (const style of [...new Set(raw.beginnings.map(b => b.style))]) {
+    const text = raw.beginnings.filter(b => b.style === style && !b.same).map(b => b.rawText || '').join('\n\n');
+    if (text.trim()) byStyle[style] = fingerprint(text);
+  }
+  const styles = Object.keys(byStyle);
+  const md = [
+    '',
+    `## Fingeravtryck per boktyp${reference ? ` mot ${REFERENCE}` : ''}`,
+    `| Mått | ${styles.join(' | ')}${reference ? ' | Referens' : ''} |`,
+    `|---|${styles.map(() => '---|').join('')}${reference ? '---|' : ''}`,
+    ...KEY_METRICS.map(m => `| ${FINGERPRINT_LABELS[m] ?? m} | ${styles.map(s => fmtMetric(m, byStyle[s][m])).join(' | ')}${reference ? ` | ${fmtMetric(m, reference[m])}` : ''} |`),
+  ].join('\n');
+  return { md, byStyle, reference };
 }
 
 const raw = REUSE ? JSON.parse(fs.readFileSync(REUSE, 'utf8')) : await generate();

@@ -77,7 +77,8 @@ ${NO_GENERIC}`,
     shape: 'page',
     fonts: { body: 'Alegreya', heading: 'Alegreya' },
     swatch: 'from-sky-800 to-teal-500',
-    book: { format: 'kapitelbok', wordsPerImage: 250, targetWords: 4500, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 70 sidor' },
+    // Längd och bildtäthet som förlagan (ca 9 000 ord, 12 kapitel, en bild per ca 200 ord)
+    book: { format: 'kapitelbok', wordsPerImage: 200, targetWords: 8500, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 120 sidor' },
     coverLettering: 'Soft, rounded hand-lettered title in lowercase with gentle curves, small star or moon flourishes, calm and cosy - never all-caps serif.',
     artDirection: `ART STYLE: Soft, cozy 2D digital illustration for a Swedish early-reader chapter book.
 RENDERING: Thin COLORED outlines (never black), flat colors with gentle airbrushed shading, subtle grain texture. The illustration is a soft-edged VIGNETTE that fades gently into a pure white page - not a full-bleed rectangle.
@@ -96,11 +97,12 @@ ${NO_GENERIC}`,
     fonts: { body: 'Literata', heading: 'CourierPrime' },
     swatch: 'from-orange-500 to-red-600',
     book: {
-      format: 'kapitelbok', wordsPerImage: 180, targetWords: 9000, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 110 sidor',
+      // Längd och bildtäthet som förlagorna (5 600-6 300 ord i 11-12 kapitel, en bild per ca 110 ord)
+      format: 'kapitelbok', wordsPerImage: 110, targetWords: 6000, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 70 sidor',
       // Rörligt formspråk: mest utklippta figurer, blandat med helsidor, band, serierutor och vinjetter
       compositionMix: { spot: 0.34, full: 0.18, band: 0.16, panels: 0.12, round: 0.1, spread: 0.1 },
       dialogue: 'quotes',
-      textStyle: `Presens och tredje person nära barnet. Korta kapitel med numrerade, lekfulla rubriker, gärna som en fråga eller ett påstående som väcker nyfikenhet. Dialogen bär berättelsen: många korta repliker i citattecken med enkla anföringar som "säger", "undrar", "viskar", ofta i snabba växlingar. Torr, lågmäld humor där de vuxna tar absurda saker på största allvar och barnet är den som ser igenom dem. Figurer och platser får ordvitsnamn. Återkommande skämt och små ritualer (en gest, en fras) som kommer tillbaka flera gånger. Ibland listor, skyltar, tidningsrubriker eller lappar som bryter texten. Ljudord i versaler när det händer något. Meningarna är enkla och rytmiska, med konkreta vardagsdetaljer och ingen moralkaka.`,
+      textStyle: `Presens och tredje person nära barnet. Korta kapitel med numrerade, lekfulla rubriker, gärna som en fråga eller ett påstående som väcker nyfikenhet. Dialogen bär berättelsen: många korta repliker i citattecken med enkla anföringar som "säger", "undrar", "viskar", ofta i snabba växlingar. Torr, lågmäld humor där de vuxna tar absurda saker på största allvar och barnet är den som ser igenom dem. Figurer och platser får ordvitsnamn. Återkommande skämt och små ritualer (en gest, en fras) som kommer tillbaka flera gånger. Ibland listor, skyltar, tidningsrubriker eller lappar som bryter texten. Versaler bara när någon skriker eller för ett enstaka ljudord, och de vuxna får säga rakt ut när de blir arga eller glada - torrt och enkelt. Meningarna är enkla och rytmiska, med konkreta vardagsdetaljer och ingen moralkaka.`,
     },
     coverLettering: 'Ransom-note collage lettering: each letter cut from a different paper or magazine, mixed sizes and colors, slightly crooked, like a playful crook\'s note.',
     artDirection: `ART STYLE: Humorous Scandinavian cartoon illustration for a funny crime-caper chapter book, drawn by hand.
@@ -193,6 +195,27 @@ ${NO_GENERIC}`,
 RENDERING: Thick, wobbly black ink outlines with a marker feel. Saturated flat colors (red, yellow, purple, turquoise, orange) with visible halftone dot shading and simple color gradients in the backgrounds, like printed comics. Panels have thick black borders on off-white paper with white gutters. Sparkly stars, speed lines and motion puffs.
 CHARACTER DESIGN LANGUAGE: Simple, chunky cartoon characters with big round heads, huge round eyes with small pupils, big grins, rubbery limbs and oversized hands and feet. Very exaggerated, slapstick poses and expressions. Everything is goofy and friendly.
 COMPOSITION: Classic comic page with 3-6 panels of varied size; occasional big splash panel. Hand-lettered speech bubbles and caption boxes in ALL-CAPS comic lettering, and giant colorful sound effects that burst out of the panels. Backgrounds are simple: a brick wall, a starry night, a city skyline in silhouette, a green field.
+${NO_GENERIC}`,
+  },
+  {
+    id: 'uppdrag',
+    label: 'Äventyr med uppdrag (Yumi & Tomu-känsla)',
+    concept: 'Färgstark, tokrolig äventyrsbok där läsaren hjälper figurerna',
+    shape: 'page',
+    fonts: { body: 'Literata', heading: 'Fredoka' },
+    swatch: 'from-pink-500 to-amber-400',
+    book: {
+      format: 'kapitelbok', wordsPerImage: 70, targetWords: 5200, age: '6-9 år', lengthLabel: 'Illustrerad kapitelbok · ca 90 sidor',
+      // Bild på varje uppslag: mest frilagda figurer på vitt, band och helsidor, uppslag vid kapitelstarter och toppar
+      compositionMix: { spot: 0.5, band: 0.2, full: 0.14, spread: 0.12, round: 0.02, panels: 0.02 },
+      dialogue: 'quotes',
+      textStyle: `Presens och tredje person nära två kompisar. Boken börjar med en kort prolog där en av hjältarna talar direkt till läsaren och ber om hjälp. Korta kapitel med rubriker i versaler. Dialogen bär boken: snabba replikskiften i citattecken där kompisarna avbryter varandra och fyller i varandras meningar med tre punkter, många utrop, småord som ju, alltså, nog och faktiskt, och anföringar som varieras eller byts mot en handling. Varje figur pratar på sitt eget sätt: en hjälte har ett eget milt kraftuttryck som kommer tillbaka i varianter, skurken har ett eget skratt och påhittade svordomar, en maskin pratar i korta stela meningar. Humorn kommer från ordlekar och påhittade sammansättningar, skämt som kommer tillbaka och blir värre, uppräkningar som slutar i en tokig poäng och underdrifter som bilden avslöjar. Texten beskriver inte utseenden som bilden visar. Känslor syns i kroppen. Varje uppslag slutar med en krok. Några gånger i boken vänder sig en figur direkt till läsaren och ber om hjälp med något enkelt (ropa, räkna, leta i bilden), och nästa sida bekräftar att det fungerade. En detalj från början betalar sig på slutet, och boken slutar på ett fniss, inte en sensmoral.`,
+    },
+    coverLettering: 'Big bubbly cartoon title logo in two bright colours (hot pink and yellow) with a thick black outline and a playful bounce, subtitle in bold black capitals beneath, like the logo of a kids comedy show.',
+    artDirection: `ART STYLE: Bright, funny full-colour cartoon illustration for a Swedish chapter book, like a modern animated comedy printed on paper.
+RENDERING: Thick, even black contour; flat saturated colours with one darker shade tone; soft airbrush gradients only for skies, space and glowing light; subtle halftone dots as texture.
+CHARACTER DESIGN LANGUAGE: Big heads, simple dot eyes, wide expressive mouths, thin limbs; every character readable from two or three signature attributes (a headband, a knitted hat, a hair shape), even from behind; exaggerated comic poses and reactions.
+COMPOSITION: Mostly cut-out figures and objects on white paper, often cropped by the page edge, alternating with a few full-bleed colour pages at chapter starts and big moments; comic devices (speed lines, sweat drops, shock lines, dust clouds with a bubbly outline, hand-lettered sound effects); when the picture fills the page, keep a calm light area (a cloud, a light cone, a soft gradient) for the text.
 ${NO_GENERIC}`,
   },
 ];
