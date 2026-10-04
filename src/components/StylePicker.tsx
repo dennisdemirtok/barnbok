@@ -40,7 +40,7 @@ export default function StylePicker({ value, onChange, columns = 3 }: Props) {
               <span className="block text-xs text-ink/55 mt-0.5 leading-snug">{style.concept}</span>
               <span className="mt-2 flex items-center justify-between gap-2 text-[11px] text-ink/45">
                 <span>{style.book.lengthLabel}</span>
-                <span className="text-ink/75 text-[15px] leading-none" style={heading} title={`Typsnitt: ${BOOK_FONTS[style.fonts.heading].name}`}>
+                <span className="shrink-0 whitespace-nowrap text-ink/75 text-[15px] leading-none" style={heading} title={`Typsnitt: ${BOOK_FONTS[style.fonts.heading].name}`}>
                   {style.book.format === 'kapitelbok' ? 'Kapitel 1' : 'Sagan börjar'}
                 </span>
               </span>

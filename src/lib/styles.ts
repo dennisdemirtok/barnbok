@@ -205,7 +205,7 @@ ${NO_GENERIC}`,
     fonts: { body: 'Literata', heading: 'Fredoka' },
     swatch: 'from-pink-500 to-amber-400',
     book: {
-      format: 'kapitelbok', wordsPerImage: 70, targetWords: 5200, age: '6-9 år', lengthLabel: 'Illustrerad kapitelbok · ca 90 sidor',
+      format: 'kapitelbok', wordsPerImage: 70, targetWords: 5200, age: '6-9 år', lengthLabel: 'Kapitelbok · ca 90 sidor',
       // Bild på varje uppslag: mest frilagda figurer på vitt, band och helsidor, uppslag vid kapitelstarter och toppar
       compositionMix: { spot: 0.5, band: 0.2, full: 0.14, spread: 0.12, round: 0.02, panels: 0.02 },
       dialogue: 'quotes',
