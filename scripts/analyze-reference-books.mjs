@@ -20,7 +20,8 @@ for (const line of readFileSync(join(ROOT, '.env.local'), 'utf8').split('\n')) {
 
 const GEMINI_KEY = env.GEMINI_API_KEY;
 const SUPA_URL = env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPA_KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Servernyckeln behövs när referenstabellerna är låsta (scripts/reference-rls-migration.sql)
+const SUPA_KEY = env.SUPABASE_SERVICE_ROLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 if (!GEMINI_KEY || !SUPA_URL || !SUPA_KEY) {
   console.error('Saknar nycklar i .env.local');
   process.exit(1);

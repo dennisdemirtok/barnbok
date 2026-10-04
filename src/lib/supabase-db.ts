@@ -1,5 +1,6 @@
 import { supabase, IMAGES_BUCKET } from './supabase';
 import { BookProject, Character, Spread, TextBlock, SavedCharacter, SavedText } from './types';
+import { countMissingMarkers } from './dialogue';
 
 // ═══════════════════════════════════════════
 //  Book operations (same API as storage.ts)
@@ -64,13 +65,20 @@ export async function saveBookToCloud(book: BookProject, options: CloudSaveOptio
       problems.push(err instanceof Error ? err.message : String(err));
     }
   } else if (!isPrivateBook(book) && book.kind !== 'audiobook') {
-    // En ljudbok publiceras av servern först när hela ljudboken är inläst
-    const { error: autoError } = await supabase
-      .from('barnbok_books')
-      .update({ is_public: true, published_at: now })
-      .eq('id', book.id)
-      .is('published_at', null);
-    if (autoError) problems.push(`Automatisk publicering: ${autoError.message}`);
+    // Repliker som tappat sina talstreck (t.ex. inklistrade punktlistor från Word)
+    // ska inte ut i bokhandeln - boken publiceras först när de är rättade
+    const missingMarkers = countMissingMarkers(book.spreads.flatMap(sp => sp.textBlocks.map(tb => tb.text)).join('\n'));
+    if (missingMarkers >= 5) {
+      problems.push(`Boken publicerades inte automatiskt: ${missingMarkers} repliker saknar talstreck. Rätta dem och publicera sedan.`);
+    } else {
+      // En ljudbok publiceras av servern först när hela ljudboken är inläst
+      const { error: autoError } = await supabase
+        .from('barnbok_books')
+        .update({ is_public: true, published_at: now })
+        .eq('id', book.id)
+        .is('published_at', null);
+      if (autoError) problems.push(`Automatisk publicering: ${autoError.message}`);
+    }
   }
 
   // 2. Save characters
