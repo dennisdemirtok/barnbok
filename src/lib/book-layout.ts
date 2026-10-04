@@ -4,6 +4,7 @@
 import { BookProject, Spread, IllustrationShape, Composition } from './types';
 import { getStylePreset, textSideForSpread } from './styles';
 import { BOOK_FONTS, type FontFamily, type FontSpec, type Measurer } from './book-fonts';
+import { emphasisRuns, type Run } from './emphasis';
 
 export const PAGE_W = 160;
 export const PAGE_H = 210;
@@ -17,7 +18,8 @@ export interface TextEl {
   x: number;
   y: number; // baslinje
   width: number;
-  text: string;
+  text: string; // ren text utan kursivmarkering
+  runs?: Run[]; // bara när raden har kursiv: texten i delar, i ordning
   font: FontSpec;
   size: number; // pt
   color: string;
@@ -147,24 +149,63 @@ function capitalize(s: string): string {
 //  Radbrytning
 // ════════════════════════════════════════════════════════
 
-interface Line { text: string; indent: number; width: number; last: boolean }
+interface Line { text: string; runs?: Run[]; indent: number; width: number; last: boolean }
+
+// Ett ord kan ha delar med och utan kursiv ("_frukt_-ansvärt")
+interface Word { parts: Run[]; text: string }
+
+function splitWords(text: string): Word[] {
+  const words: Word[] = [];
+  let current: Run[] = [];
+  const flush = () => {
+    if (current.length) words.push({ parts: current, text: current.map(p => p.text).join('') });
+    current = [];
+  };
+  for (const run of emphasisRuns(text)) {
+    run.text.split(' ').forEach((piece, i) => {
+      if (i > 0) flush();
+      if (piece) current.push({ text: piece, italic: run.italic });
+    });
+  }
+  flush();
+  return words;
+}
+
+// Radens delar med mellanslagen inräknade - sammanhängande delar i samma stil slås ihop
+function lineRuns(words: Word[]): Run[] | undefined {
+  if (!words.some(w => w.parts.some(p => p.italic))) return undefined;
+  const runs: Run[] = [];
+  words.forEach((word, i) => {
+    word.parts.forEach((part, j) => {
+      const text = (i > 0 && j === 0 ? ' ' : '') + part.text;
+      const prev = runs[runs.length - 1];
+      if (prev && prev.italic === part.italic) prev.text += text;
+      else runs.push({ text, italic: part.italic });
+    });
+  });
+  return runs;
+}
 
 function breakLines(
   text: string, font: FontSpec, size: number, maxWidth: number, firstIndent: number, m: Measurer
 ): Line[] {
-  const words = text.split(' ').filter(Boolean);
+  const words = splitWords(text);
   const lines: Line[] = [];
-  let current: string[] = [];
+  let current: Word[] = [];
   const space = m.width(' ', font, size);
+  const italic: FontSpec = { ...font, style: 'italic' };
 
-  const lineWidth = (ws: string[]) =>
-    ws.reduce((sum, w) => sum + m.width(w, font, size), 0) + space * Math.max(0, ws.length - 1);
+  const wordWidth = (w: Word) => w.parts.reduce((sum, p) => sum + m.width(p.text, p.italic ? italic : font, size), 0);
+  const lineWidth = (ws: Word[]) =>
+    ws.reduce((sum, w) => sum + wordWidth(w), 0) + space * Math.max(0, ws.length - 1);
+  const line = (ws: Word[], indent: number, last: boolean): Line =>
+    ({ text: ws.map(w => w.text).join(' '), runs: lineRuns(ws), indent, width: lineWidth(ws), last });
 
   for (const word of words) {
     const indent = lines.length === 0 ? firstIndent : 0;
     const candidate = [...current, word];
     if (current.length > 0 && lineWidth(candidate) > maxWidth - indent) {
-      lines.push({ text: current.join(' '), indent, width: lineWidth(current), last: false });
+      lines.push(line(current, indent, false));
       current = [word];
     } else {
       current = candidate;
@@ -172,7 +213,7 @@ function breakLines(
   }
   if (current.length > 0) {
     const indent = lines.length === 0 ? firstIndent : 0;
-    lines.push({ text: current.join(' '), indent, width: lineWidth(current), last: true });
+    lines.push(line(current, indent, true));
   }
   return lines;
 }
@@ -276,7 +317,7 @@ function centeredLines(
   const lh = size * PT * leading;
   lines.forEach((line, i) => {
     page.els.push({
-      kind: 'text', x: 0, y: y + i * lh, width: PAGE_W, text: line.text, font, size, color, align: 'center',
+      kind: 'text', x: 0, y: y + i * lh, width: PAGE_W, text: line.text, runs: line.runs, font, size, color, align: 'center',
     });
   });
   return y + lines.length * lh;
@@ -343,7 +384,7 @@ function buildBackCover(pb: PageBuilder, book: BookProject, t: Typography, m: Me
     const size = t.bs(10);
     let ty = y + 14;
     for (const line of breakLines(blurb, t.body, size, 112, 0, m)) {
-      back.els.push({ kind: 'text', x: (PAGE_W - 112) / 2, y: ty, width: 112, text: line.text, font: t.body, size, color: '#eceaf3', align: 'left' });
+      back.els.push({ kind: 'text', x: (PAGE_W - 112) / 2, y: ty, width: 112, text: line.text, runs: line.runs, font: t.body, size, color: '#eceaf3', align: 'left' });
       ty += size * PT * 1.55;
     }
     if (book.author) {
@@ -394,7 +435,7 @@ function setColumn(blocks: Block[], width: number, style: ColumnStyle, m: Measur
       }
       for (const line of breakLines(block.title, style.heading, hs, width, 0, m)) {
         out.push({
-          el: { kind: 'text', x: 0, y: 0, width, text: line.text, font: style.heading, size: hs, color: INK, align: 'left' },
+          el: { kind: 'text', x: 0, y: 0, width, text: line.text, runs: line.runs, font: style.heading, size: hs, color: INK, align: 'left' },
           height: hs * PT * 1.3, paraStart: true, paraIndex: paraIndex++, keepWithNext: true,
         });
       }
@@ -411,7 +452,7 @@ function setColumn(blocks: Block[], width: number, style: ColumnStyle, m: Measur
       const justify = style.justify && !line.last && gaps > 0;
       out.push({
         el: {
-          kind: 'text', x: line.indent, y: 0, width: width - line.indent, text: line.text,
+          kind: 'text', x: line.indent, y: 0, width: width - line.indent, text: line.text, runs: line.runs,
           font: style.font, size: style.size, color: INK,
           align: justify ? 'justify' : 'left',
           wordSpacing: justify ? (width - line.indent - line.width) / gaps : undefined,
@@ -866,18 +907,22 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
   // Returnerar det som återstår (resten av ett avbrutet stycke + följande block).
   const flowAroundWrap = (run: Block[]): Block[] => {
     const space = m.width(' ', style.font, style.size);
-    const wordW = (w: string) => m.width(w, style.font, style.size);
+    const italic: FontSpec = { ...style.font, style: 'italic' };
+    const wordW = (w: Word) => w.parts.reduce((sum, p) => sum + m.width(p.text, p.italic ? italic : style.font, style.size), 0);
+    const widthOf = (ws: Word[]) => ws.reduce((sum, w) => sum + wordW(w), 0) + space * Math.max(0, ws.length - 1);
+    // Ett avbrutet stycke fortsätter som eget block - kursiven märks ut igen per del
+    const rawOf = (ws: Word[]) => ws.map(w => w.parts.map(p => (p.italic ? `_${p.text}_` : p.text)).join('')).join(' ');
     let afterHeading = justOpened;
     for (let b = 0; b < run.length; b++) {
       const block = run[b];
       if (block.type !== 'para') return run.slice(b);
-      const words = block.text.split(' ').filter(Boolean);
+      const words = splitWords(block.text);
       let first = true;
       while (words.length > 0) {
         if (!wrap || y >= wrap.bottom || y + lh > bottom) {
           // Sista ordparet i stycket: hellre en rad som går lite längre ner än
           // ett ensamt ord överst på nästa sida
-          const tail = words.join(' ');
+          const tail = words.map(w => w.text).join(' ');
           const figure = wrap;
           const pastFigure = !figure || y >= figure.bottom;
           const occTail = pastFigure || !figure ? 0 : figure.occupied(y, y + lh);
@@ -887,20 +932,20 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
             && page !== null
             && y + lh <= PAGE_H - PAGE_NUMBER_AIR
             && availTail >= minColumn
-            && m.width(tail, style.font, style.size) <= availTail;
+            && widthOf(words) <= availTail;
           if (roomBelow) {
             const x0 = xFor();
             page!.els.push({
               kind: 'text',
               x: !pastFigure && figure && figure.side === 'left' ? x0 + occTail : x0,
               y: y + style.size * PT * 0.95,
-              width: availTail, text: tail,
+              width: availTail, text: tail, runs: lineRuns(words),
               font: style.font, size: style.size, color: INK, align: 'left',
             });
             y += lh;
             return [];
           }
-          const rest = { type: 'para' as const, text: tail, continued: !first || block.continued };
+          const rest = { type: 'para' as const, text: rawOf(words), continued: !first || block.continued };
           return [rest, ...run.slice(b + 1)];
         }
         const occ = wrap.occupied(y, y + lh);
@@ -908,7 +953,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
         const x0 = xFor();
         if (avail < minColumn) { y += lh; continue; } // för smalt bredvid figuren - hoppa ner en rad
         const indent = first && !afterHeading && !block.continued ? style.indent : 0;
-        const line: string[] = [];
+        const line: Word[] = [];
         let width = 0;
         while (words.length > 0) {
           const nextW = width + (line.length ? space : 0) + wordW(words[0]);
@@ -924,7 +969,7 @@ function buildChapterBook(pb: PageBuilder, scenes: Scene[], shape: IllustrationS
         // Bildens vita yta täcker sidans linjer - rita linjen igen under raden bredvid figuren
         if (lined) page!.els.push(wrap.side === 'left' ? ruleEl(x0 + occ - 1, PAGE_W - RULE.margin, y) : ruleEl(RULE.margin, x0 + avail + 1, y));
         page!.els.push({
-          kind: 'text', x: lineX, y: y + style.size * PT * 0.95, width: avail - indent, text: line.join(' '),
+          kind: 'text', x: lineX, y: y + style.size * PT * 0.95, width: avail - indent, text: line.map(w => w.text).join(' '), runs: lineRuns(line),
           font: style.font, size: style.size, color: INK,
           align: justify ? 'justify' : 'left',
           wordSpacing: justify ? (avail - indent - width) / gaps : undefined,

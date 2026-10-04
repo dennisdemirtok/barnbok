@@ -1,5 +1,6 @@
 // Uppläsningens avsnitt: hur bokens text delas i spår. Ren logik utan
 // serverberoenden, så att sidan kan visa samma kapitellista som servern läser in.
+import { stripEmphasis } from './emphasis';
 import type { BookProject, Spread } from './types';
 
 export interface NarrationSegment {
@@ -16,7 +17,7 @@ const MAX_SEGMENT_CHARS = 6000;
 
 // Talstreck och radbrytningar ska inte läsas upp som tecken
 function forNarration(line: string): string {
-  return line
+  return stripEmphasis(line)
     .replace(/^\s*[-–—*]\s*/, '')
     .replace(/\s+/g, ' ')
     .trim();

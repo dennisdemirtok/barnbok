@@ -16,6 +16,7 @@ export interface StyleTargets {
   particlesPer1000: number;
   capsPer1000?: number; // ord i versaler (ljudord, betoning) - bara där appen brukar ta i för mycket
   emotionsPer1000?: number; // utpekade känslor i berättartexten - vissa förlagor säger dem rakt ut ofta
+  emphasisPer1000?: number; // kursiv betoning (_ord_)
 }
 
 // Kapitelböcker 6-12 år i allmänhet: medel av de analyserade serierna, där
@@ -51,6 +52,7 @@ const STYLE_TARGETS: Record<string, StyleTargets> = {
     ellipsesPer1000: 9.7,
     particlesPer1000: 7.8,
     capsPer1000: 1.7,
+    emphasisPer1000: 6.6,
   },
   knyckertz: {
     sources: ['Familjen Knyckertz och guld-diamanten', 'Familjen Knyckertz och gipskattens förbannelse', 'Familjen Knyckertz och damen med fjäderboan'],
@@ -95,7 +97,8 @@ function targetsBlock(t: StyleTargets): string {
   if (t.ellipsesPer1000 >= 3) lines.push(`- Tre punkter (…) ${t.ellipsesPer1000 >= 7 ? 'flera gånger per sida' : 'några gånger per sida'}: när någon tvekar, blir avbruten, fyller i en annans mening eller när en mening ska fortsätta på nästa sida.`);
   if (t.particlesPer1000 >= 4) lines.push(`- Småord som ju, nog, faktiskt, alltså, väl ${t.particlesPer1000 >= 7 ? 'flera gånger per sida' : 'några gånger per sida'}, mest i replikerna - de gör att det låter som när barn pratar.`);
   if ((t.emotionsPer1000 ?? 0) >= 4) lines.push(`- Säg gärna enkelt och rakt vad huvudpersonen känner (hon blir glad, han är rädd, det känns pirrigt) - förlagan gör det ofta, särskilt i lugna och varma scener. Visa det också i kroppen.`);
-  lines.push(`- VERSALER bara för enstaka ljudord eller ett ord som ropas, högst ett par gånger per sida - utropstecken räcker oftast.`);
+  if ((t.emphasisPer1000 ?? 0) >= 2) lines.push(`- Kursiv betoning (_ord_) på ett enstaka ord ${t.emphasisPer1000! >= 5 ? 'någon gång per sida' : 'några gånger per kapitel'}, ofta det ord som bär skämtet ("Det _är_ ju en annan värld").`);
+  lines.push(`- VERSALER bara för enstaka ljudord eller ett ord som ropas, högst ett par gånger per sida - betona hellre med kursiv eller ett utropstecken.`);
   lines.push(`- Meningslängd: AI-text blir ofta hackig med bara ${TYPICAL_AI.sentenceMean.toString().replace('.', ',')} ord per mening. Förlagorna har i snitt runt ${Math.round(t.sentenceMean)}: blanda korta meningar med lite längre som binds ihop med och, men, när, så att - särskilt i berättartexten mellan replikerna.`);
   return lines.join('\n');
 }

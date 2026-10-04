@@ -74,7 +74,11 @@ export function BookPageView({ page, width }: { page: LayoutPage | null; width: 
               ...css,
             }}
           >
-            {el.text}
+            {el.runs
+              ? el.runs.map((run, j) => (
+                <span key={j} style={run.italic ? fontCss({ ...el.font, style: 'italic' }) : undefined}>{run.text}</span>
+              ))
+              : el.text}
           </div>
         );
       })}

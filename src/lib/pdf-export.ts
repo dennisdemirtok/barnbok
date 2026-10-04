@@ -84,6 +84,30 @@ async function drawElement(doc: jsPDF, el: PageEl, images: ImageCache) {
       doc.setTextColor(el.color);
       const charSpace = el.tracking ? el.tracking : 0;
 
+      if (el.runs) {
+        // Rad med kursiv: delarna ritas efter varandra, ord för ord så att utjämningen följer med
+        const styleOf = (italic: boolean) => (italic ? 'italic' : el.font.style);
+        const widthOf = (text: string, italic: boolean) => {
+          doc.setFont(el.font.family, styleOf(italic));
+          return doc.getTextWidth(text);
+        };
+        const total = el.runs.reduce((w, r) => w + widthOf(r.text, r.italic), 0);
+        let x = el.align === 'center' ? el.x + (el.width - total) / 2 : el.x;
+        for (const run of el.runs) {
+          run.text.split(/( )/).forEach(piece => {
+            if (!piece) return;
+            if (piece === ' ') {
+              x += widthOf(' ', run.italic) + (el.align === 'justify' && el.wordSpacing ? el.wordSpacing : 0);
+              return;
+            }
+            doc.setFont(el.font.family, styleOf(run.italic));
+            doc.text(piece, x, el.y);
+            x += doc.getTextWidth(piece);
+          });
+        }
+        return;
+      }
+
       if (el.align === 'center') {
         doc.text(el.text, el.x + el.width / 2, el.y, { align: 'center', charSpace });
       } else if (el.align === 'justify' && el.wordSpacing) {

@@ -3,6 +3,7 @@
 // Ren logik utan SDK:er - används av planeringen, bildprompten, granskningen och klienten.
 import type { Spread, TextBlock } from './types';
 import { sanitizeProse } from './writing';
+import { stripEmphasis } from './emphasis';
 
 export type PanelSize = 'small' | 'medium' | 'large' | 'wide';
 
@@ -53,7 +54,8 @@ function words(text: string): string[] {
 // Texten i en bubbla/textruta: inga talstreck, citattecken eller långa tankstreck
 export function cleanLettering(text: string | undefined): string {
   if (!text) return '';
-  let t = sanitizeProse(text.replace(/\s+/g, ' ').trim());
+  // Texten ritas i bilderna - där finns ingen kursiv
+  let t = sanitizeProse(stripEmphasis(text).replace(/\s+/g, ' ').trim());
   t = t
     .replace(/^[\s\-–—―*]+/, '') // talstreck först
     .replace(/["“”„«»]/g, '') // citattecken skulle krocka med manusets citat

@@ -188,7 +188,8 @@ export default function PageEditor({ spread, characters, styleGuide, bookFormat,
           <div className="space-y-4">
             {/* Text blocks */}
             <div>
-              <h4 className="font-heading font-semibold text-ink/80 mb-2">Sidtext</h4>
+              <h4 className="font-heading font-semibold text-ink/80 mb-1">Sidtext</h4>
+              <p className="text-xs text-ink/50 mb-2">Kursiv: skriv understreck runt ordet, t.ex. _verkligen_.</p>
               {editedSpread.textBlocks.map((block, idx) => (
                 <div key={idx} className="mb-3">
                   <label className="text-xs text-ink/55 mb-1 block">

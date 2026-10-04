@@ -1079,14 +1079,18 @@ const DIARY_FORMAT_RULES = `- Boken är en DAGBOK. Varje inlägg börjar med vec
 
 const DIARY_DIALOGUE_RULE = '- Repliker återges oftast indirekt i berättarens egna ord (Mamma sa att jag MÅSTE städa rummet). Ibland, när det gör skämtet bättre, ett kort citat inom svenska citattecken mitt i stycket, t.ex. ”Ut!” skrek Viktor genom dörren. Aldrig talstreck och aldrig långa samtal i replikform.';
 
-function manuscriptFormatRules(isChapterBook: boolean, voice?: AuthorVoiceRef, dialogueStyle?: 'dash' | 'quotes', diary = false): string {
+function manuscriptFormatRules(isChapterBook: boolean, voice?: AuthorVoiceRef, dialogueStyle?: 'dash' | 'quotes', diary = false, emphasis = true): string {
   const marker = lineDialogueMarker(voice?.profile.dialogueMarker);
+  // Kursiv sätts i boken (book-layout.ts) - i serieböcker står texten i bilderna och där går det inte
+  const emphasisRule = emphasis
+    ? '\n- Kursiv: omge ett enstaka ord eller en kort fras som ska betonas med understreck, t.ex. "Det _är_ ju en helt annan värld." Sparsamt, några gånger per kapitel. Betona aldrig med VERSALER.'
+    : '';
   if (diary) {
     return `MANUSFORMAT (viktigt - texten sätts automatiskt i boken):
 - Ren löptext med ett stycke per rad.
 ${DIARY_FORMAT_RULES}
 ${voice ? '- Repliker skrivs som i författarens text, men mest indirekt så att det låter som en dagbok.' : DIARY_DIALOGUE_RULE}
-- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, * eller **).`;
+- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, * eller **).${emphasisRule}`;
   }
   const dialogueRule = !voice && dialogueStyle === 'quotes'
     ? '- Repliker står i egna stycken inom svenska citattecken med anföringen efter, t.ex. ”Kom hit!” säger Ture. Flera korta repliker får gärna följa tätt på varandra.'
@@ -1101,7 +1105,7 @@ ${isChapterBook
     ? '- Kapitelrubriker på en egen rad i formen "Kapitel 1 – Titel" (eller "Prolog"), med en tom rad före rubriken.'
     : '- Inga kapitel eller rubriker - berättelsen flödar sammanhängande. Skriv ALDRIG ordet Kapitel.'}
 ${dialogueRule}
-- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, ${marker === '* ' ? '' : '* eller '}**).`;
+- Inga sidnummer, sidmarkeringar, bildbeskrivningar, kommentarer eller markdown (inga #, ${marker === '* ' ? '' : '* eller '}**).${emphasisRule}`;
 }
 
 // Städar bort markdown och fel talstreck så att manuset följer formatet
@@ -1204,7 +1208,7 @@ ${diary
    - Planera en hel spänningskurva med ett tydligt, tillfredsställande slut.
 3. beginning: BARA bokens början, ca ${beginningWords} ord (håll dig nära den längden). ${diary ? 'Börja med det första dagboksinlägget ("Måndag"), där berättaren presenterar sig själv och dagboken med egna ord, och sätt igång handlingen. Sluta efter ett avslutat inlägg' : 'Börja med en fångande öppning, presentera huvudpersonen och sätt igång handlingen. Sluta vid ett naturligt avbrott efter en scen'} - skriv INTE vidare i handlingen och avsluta inte berättelsen.
 
-${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary)}
+${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary, book.format !== 'bildbok-text-pa-bild')}
 ${comicWritingHint(book)}
 ${proseRules(targetAge)}
 
@@ -1313,7 +1317,7 @@ ${diary
 - Knyt ihop alla trådar och avsluta med ett tydligt, tillfredsställande slut.
 - Svara ENBART med fortsättningen av manuset - ingen inledning, inga kommentarer, inget "Slut".
 
-${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary)}
+${manuscriptFormatRules(isChapterBook, input.voice, book.dialogue, diary, book.format !== 'bildbok-text-pa-bild')}
 ${comicWritingHint(book)}
 ${proseRules(targetAge)}
 

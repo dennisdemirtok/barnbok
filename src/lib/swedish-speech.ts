@@ -2,6 +2,7 @@
 // låter fel uppläst: "tv:n" blir "te-ve, än", "t.ex." stavas ut och "3:e" blir
 // "tre e". Här skrivs de om till det en svensk inläsare faktiskt säger. Bokens
 // egen uttalslista läggs på efteråt och vinner alltid.
+import { stripEmphasis } from './emphasis';
 
 // Förkortningar som sägs som ord eller bokstäver. Ändelsen efter kolon läggs
 // till som den är: "tv:n" -> "teven", "tv:ns" -> "tevens", "cd:n" -> "cedén".
@@ -72,7 +73,8 @@ const L = 'A-Za-zÅÄÖåäöÉéÜü';
 
 /** Skriver om text så att den låter rätt uppläst på svenska. */
 export function prepareForSpeech(text: string): string {
-  let out = text;
+  // Kursivmarkeringen (_ord_) ska inte läsas upp
+  let out = stripEmphasis(text);
 
   // "tv:n", "USA:s", "cd:ns" - kolon mellan förkortning och ändelse
   out = out.replace(new RegExp(`(^|[^${L}])([${L}]{2,5}):([a-zåäö]{1,4})(?=$|[^${L}])`, 'g'), (match, before: string, word: string, ending: string) => {
