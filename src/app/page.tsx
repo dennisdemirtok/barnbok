@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { BookProject, Character, Spread, BookFormat } from '@/lib/types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { BookProject, Character, Spread, BookFormat, ManuscriptDraft } from '@/lib/types';
+import { getStylePreset } from '@/lib/styles';
 import { saveBook, loadBook } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { loadBookFromCloud } from '@/lib/supabase-db';
 import BookLibrary from '@/components/BookLibrary';
-import BookImporter, { EMPTY_DRAFT, ImportMode, ManuscriptDraft } from '@/components/BookImporter';
+import BookImporter, { EMPTY_DRAFT, ImportMode } from '@/components/BookImporter';
 import CharacterStudio from '@/components/CharacterStudio';
 import FinishBook from '@/components/finish/FinishBook';
 import CharacterApproval from '@/components/CharacterApproval';
@@ -20,6 +21,24 @@ import Icon from '@/components/Icon';
 import { SiteHeader, SiteFooter, MobileTabBar, NavTarget } from '@/components/AppNav';
 
 type Step = 'library' | 'import' | 'characters' | 'generate' | 'review' | 'bookstore' | 'characterStudio' | 'finish' | 'audiobook';
+
+// Ett manus som ännu inte gått vidare till karaktärerna, sparat som en bok i Mina böcker
+function draftAsBook(draft: ManuscriptDraft & { id: string }, planned: BookProject | null): BookProject {
+  const preset = getStylePreset(draft.stylePresetId);
+  return {
+    characters: [],
+    spreads: [],
+    styleGuide: '',
+    ...planned,
+    id: draft.id,
+    title: planned?.title || draft.title.trim() || 'Namnlös bok',
+    stylePresetId: planned?.stylePresetId ?? preset?.id,
+    bookFormat: planned?.bookFormat ?? draft.legacyFormat ?? preset?.book.format,
+    status: 'importing',
+    draft: { ...draft, notice: undefined },
+    createdAt: draft.startedAt ?? new Date().toISOString(),
+  };
+}
 
 export default function Home() {
   const [step, setStep] = useState<Step>('library');
@@ -101,10 +120,36 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book]);
 
+  // Manuset sparas löpande som utkast i Mina böcker. Förr fanns det bara i minnet
+  // tills man gick vidare till karaktärerna, och en omladdning tappade allt.
+  useEffect(() => {
+    if (step !== 'import' || !importDraft.rawText.trim()) return;
+    if (!importDraft.id) {
+      setImportDraft(d => (d.id ? d : { ...d, id: crypto.randomUUID(), startedAt: new Date().toISOString() }));
+      return;
+    }
+    // Tillbaka från ett senare steg: boken har redan en egen post med bilder som gäller
+    if (book?.id === importDraft.id) return;
+    const draft = { ...importDraft, id: importDraft.id };
+    const timer = setTimeout(() => {
+      saveBook(draftAsBook(draft, importParsedBook), { cloud: false })
+        .catch(err => console.error('Kunde inte spara utkastet:', err));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [step, importDraft, importParsedBook, book?.id]);
+
+  // Den planerade boken får utkastets id, så att utkastet i Mina böcker blir boken
+  const handleParsedBookChange = (planned: BookProject | null) => {
+    setImportParsedBook(planned && importDraft.id ? { ...planned, id: importDraft.id } : planned);
+  };
+
+  // Samma uppdelning som förra gången (tillbaka från ett senare steg utan att dela upp
+  // texten igen): behåll boken med dess karaktärsbilder och illustrationer
+  const lastParsedRef = useRef<BookProject | null>(null);
   const handleBookParsed = (parsedBook: BookProject) => {
-    // Tillbaka från ett senare steg utan att dela upp texten igen: behåll boken
-    // med dess karaktärsbilder och illustrationer i stället för den gamla kopian
-    setBook(prev => (prev && prev.id === parsedBook.id ? prev : parsedBook));
+    const unchanged = lastParsedRef.current === parsedBook;
+    lastParsedRef.current = parsedBook;
+    setBook(prev => (prev && unchanged ? prev : parsedBook));
     setImportParsedBook(parsedBook);
     setStep('characters');
   };
@@ -121,6 +166,18 @@ export default function Home() {
     if (loadedBook.kind === 'audiobook') {
       setBookstoreEditId(null);
       handleOpenAudiobook(loadedBook);
+      return;
+    }
+    // Utkast: tillbaka till manuset, där det slutade
+    if (loadedBook.status === 'importing' && loadedBook.draft) {
+      const { draft, ...planned } = loadedBook;
+      setBook(null);
+      setIsClonedBook(false);
+      setBookstoreEditId(null);
+      setImportDraft({ ...EMPTY_DRAFT, ...draft, id: loadedBook.id, notice: 'Utkastet är återställt. Fortsätt där du slutade.' });
+      setImportParsedBook(planned.spreads.length > 0 ? planned : null);
+      setImportMode('import');
+      setStep('import');
       return;
     }
     setBook(loadedBook);
@@ -431,7 +488,7 @@ export default function Home() {
             mode={importMode}
             onModeChange={setImportMode}
             parsedBook={importParsedBook}
-            onParsedBookChange={setImportParsedBook}
+            onParsedBookChange={handleParsedBookChange}
             onAudiobook={() => handleOpenAudiobook(null)}
           />
         )}

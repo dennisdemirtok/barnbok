@@ -279,6 +279,8 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
                 ? { text: 'Ljudbok', className: 'bg-ink text-white' }
                 : STATUS[book.status] || STATUS.importing;
               const images = book.spreads.filter(s => s.generatedImage).length;
+              // Utkast som inte gått vidare till karaktärerna: visa hur långt manuset kommit
+              const draftWords = book.draft ? book.draft.rawText.split(/\s+/).filter(Boolean).length : 0;
               const style = getStylePreset(book.stylePresetId);
 
               return (
@@ -323,12 +325,14 @@ export default function BookLibrary({ onLoadBook, onNewBook, onStyleTest, onReus
                       <p className="text-xs text-ink/50 mt-0.5 truncate">
                         {isAudiobook
                           ? audiobookInfo(book)
-                          : `${style ? `${style.label} · ` : ''}${images} ${images === 1 ? 'bild' : 'bilder'}`}
+                          : book.draft
+                            ? `${style ? `${style.label} · ` : ''}${draftWords} ord`
+                            : `${style ? `${style.label} · ` : ''}${images} ${images === 1 ? 'bild' : 'bilder'}`}
                         {' · '}{new Date(book.updatedAt || book.createdAt).toLocaleDateString('sv-SE')}
                       </p>
                     </div>
                     <div className="flex shrink-0 -mr-1.5">
-                      {!isAudiobook && (
+                      {!isAudiobook && !book.draft && (
                         <button onClick={() => onReuseBook(book)} title="Skapa en kopia med nya bilder" className="btn-icon !w-8 !h-8">
                           <Icon name="content_copy" size={17} />
                         </button>

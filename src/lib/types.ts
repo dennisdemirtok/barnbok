@@ -1,3 +1,5 @@
+import type { AuthorVoice } from './author-types';
+
 export type BookFormat = 'bildbok-text-pa-bild' | 'bildbok-separat-text' | 'kapitelbok' | 'larobok';
 
 // spread = liggande uppslagsbild (32×21 cm), page = stående helsida (16×21 cm)
@@ -12,6 +14,28 @@ export type IllustrationShape = 'spread' | 'page';
 //   round  - rund vinjett
 //   panels - 3-4 serierutor
 export type Composition = 'full' | 'spread' | 'band' | 'spot' | 'round' | 'panels';
+
+// Allt som hör till berättelsen innan boken skapas. Sparas löpande som utkast i
+// Mina böcker, så att en omladdning inte tappar texten.
+export interface ManuscriptDraft {
+  // Följer utkastet från första texten till den färdiga boken (blir bokens id)
+  id?: string;
+  startedAt?: string;
+  rawText: string;
+  title: string;
+  author: string;
+  stylePresetId: string;
+  targetAge?: string;
+  imageWishes: string;
+  // Från AI:n: disposition för hela boken, så att resten kan skrivas efter början
+  outline?: string;
+  restWritten?: boolean;
+  // Bokverktygets gamla strukturerade format (SIDA/BILDPROMPT) kan ange eget format
+  legacyFormat?: BookFormat;
+  // Författarspråk som AI:n skriver i (från AI-skrivaren)
+  voice?: AuthorVoice;
+  notice?: string;
+}
 
 export interface BookProject {
   id: string;
@@ -35,6 +59,8 @@ export interface BookProject {
   kind?: 'audiobook';
   // Baksidestext (skrivs när boken sparas i molnet) - står på bokens baksida
   description?: string;
+  // Utkast som ännu inte gått vidare till karaktärerna: manuset som skrevs i första steget
+  draft?: ManuscriptDraft;
   createdAt: string;
   updatedAt?: string;
 }

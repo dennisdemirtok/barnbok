@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookProject, BookFormat, SavedText } from '@/lib/types';
+import { BookProject, BookFormat, SavedText, ManuscriptDraft } from '@/lib/types';
 import { saveText, listSavedCharacters } from '@/lib/storage';
 import { STYLE_PRESETS, getStylePreset, composeStyleGuide } from '@/lib/styles';
 import BookCreator from './BookCreator';
@@ -12,28 +12,8 @@ import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
 import { countMissingMarkers, pasteManuscript, restoreDialogueMarkers } from '@/lib/dialogue';
-import type { AuthorVoice } from '@/lib/author-types';
 
 export type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
-
-// Allt som hör till berättelsen innan boken skapas - lyft till page.tsx så att
-// inget försvinner när man går fram och tillbaka mellan stegen
-export interface ManuscriptDraft {
-  rawText: string;
-  title: string;
-  author: string;
-  stylePresetId: string;
-  targetAge?: string;
-  imageWishes: string;
-  // Från AI:n: disposition för hela boken, så att resten kan skrivas efter början
-  outline?: string;
-  restWritten?: boolean;
-  // Bokverktygets gamla strukturerade format (SIDA/BILDPROMPT) kan ange eget format
-  legacyFormat?: BookFormat;
-  // Författarspråk som AI:n skriver i (från AI-skrivaren)
-  voice?: AuthorVoice;
-  notice?: string;
-}
 
 export const EMPTY_DRAFT: ManuscriptDraft = {
   rawText: '',
