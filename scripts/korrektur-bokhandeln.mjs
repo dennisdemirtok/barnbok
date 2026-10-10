@@ -3,9 +3,11 @@
 // (/api/proofread) och skriver en rapport. Ändrar ingenting utan --ratta.
 //
 //   node scripts/korrektur-bokhandeln.mjs                 rapport: eval-reports/korrektur-bokhandeln.md
-//   node scripts/korrektur-bokhandeln.mjs --bok <id>      bara en bok
+//   node scripts/korrektur-bokhandeln.mjs --bok <id,id>   bara vissa böcker (id eller början av id)
 //   node scripts/korrektur-bokhandeln.mjs --ratta         rättar de tydliga felen från rapporten i molnet
 //                                                         och sparar korrekturstatusen (inga nya AI-anrop)
+//   node scripts/korrektur-bokhandeln.mjs --forslag       sparar alla fynd som förslag utan att ändra texten
+//                                                         (författarens egen text - rättas under Rätta text)
 // Servern som läser: --base (standard http://localhost:3000). Text som ändrats sedan
 // rapporten rörs inte.
 import fs from 'node:fs';
@@ -15,6 +17,8 @@ import { ROOT, loadTs, readEnv, readJson, writeJson, args } from './hjarnan/lib.
 const { textHash } = loadTs(path.join(ROOT, 'src/lib/proof.ts'));
 const { getStylePreset } = loadTs(path.join(ROOT, 'src/lib/styles.ts'));
 const opts = args();
+// --bok tar ett eller flera id:n, eller början av dem
+const chosen = (id) => !opts.bok || opts.bok.split(',').some(p => id.startsWith(p.trim()));
 const BASE = opts.base || 'http://localhost:3000';
 const RAW = path.join(ROOT, 'eval-reports', 'korrektur-bokhandeln.raw.json');
 const REPORT = path.join(ROOT, 'eval-reports', 'korrektur-bokhandeln.md');
@@ -50,8 +54,7 @@ async function loadBook(row) {
 }
 
 async function proofread() {
-  const filter = opts.bok ? `&id=eq.${opts.bok}` : '';
-  const rows = await rest(`barnbok_books?is_public=eq.true${filter}&select=id,title,book_format,theme,age_min,age_max&order=published_at`);
+  const rows = (await rest('barnbok_books?is_public=eq.true&select=id,title,book_format,theme,age_min,age_max&order=published_at')).filter(r => chosen(r.id));
   const books = [];
   for (const row of rows) {
     const { spreads, names } = await loadBook(row);
@@ -111,11 +114,12 @@ function writeReport(books) {
   console.log(`Rapport: ${REPORT}`);
 }
 
-// Rättar de tydliga felen från rapporten och sparar korrekturstatusen per uppslag
-async function applyFixes() {
+// Rättar de tydliga felen från rapporten och sparar korrekturstatusen per uppslag.
+// suggestOnly: ingen text ändras - alla fynd blir förslag (författarens egen text)
+async function applyFixes(suggestOnly) {
   const raw = readJson(RAW);
   if (!raw) throw new Error(`Hittar ingen rapport (${RAW}) - kör utan --ratta först`);
-  for (const book of raw.books.filter(b => !opts.bok || b.id === opts.bok)) {
+  for (const book of raw.books.filter(b => chosen(b.id))) {
     const [row] = await rest(`barnbok_books?id=eq.${book.id}&select=theme`);
     const { spreads } = await loadBook({ id: book.id });
     const byKey = new Map(book.results.map(r => [r.key, r]));
@@ -137,11 +141,11 @@ async function applyFixes() {
         const result = byKey.get(`${spread.id}#${block.position}`);
         let text = block.text_content || '';
         for (const issue of result?.issues ?? []) {
-          if (issue.certain && text.includes(issue.quote)) {
+          if (!suggestOnly && issue.certain && text.includes(issue.quote)) {
             text = text.replace(issue.quote, issue.fix);
             spreadFixed++;
-          } else if (!issue.certain) {
-            open.push({ quote: issue.quote, fix: issue.fix, kind: issue.kind, reason: issue.reason, certain: false });
+          } else if (suggestOnly || !issue.certain) {
+            open.push({ quote: issue.quote, fix: issue.fix, kind: issue.kind, reason: issue.reason, certain: issue.certain === true });
           }
         }
         if (text !== (block.text_content || '')) {
@@ -153,9 +157,10 @@ async function applyFixes() {
       proofs[String(spread.spread_number)] = { hash: textHash(texts.join('\n')), checkedAt: raw.createdAt, ...(spreadFixed ? { fixed: spreadFixed } : {}), issues: open };
     }
     await rest(`barnbok_books?id=eq.${book.id}`, { method: 'PATCH', body: JSON.stringify({ theme: JSON.stringify({ ...meta, proof: proofs }) }), headers: { Prefer: 'return=minimal' } });
-    console.log(`${book.title}: ${fixed} fel rättade${skipped ? `, ${skipped} uppslag hoppades över (ändrade sedan rapporten)` : ''}`);
+    const suggestions = Object.values(proofs).reduce((n, p) => n + (p.issues?.length ?? 0), 0);
+    console.log(`${book.title}: ${fixed} fel rättade, ${suggestions} förslag sparade${skipped ? `, ${skipped} uppslag hoppades över (ändrade sedan rapporten)` : ''}`);
   }
 }
 
-if (opts.ratta) await applyFixes();
+if (opts.ratta || opts.forslag) await applyFixes(!opts.ratta);
 else await proofread();
