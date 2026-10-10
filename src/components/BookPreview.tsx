@@ -14,6 +14,8 @@ import Workshop from './Workshop';
 import BookReader from './BookReader';
 import TextCorrections from './TextCorrections';
 import ManuscriptReview from './ManuscriptReview';
+import ProofreadPanel from './ProofreadPanel';
+import { proofSummary } from '@/lib/proof';
 import { updateSpreadTextInCloud } from '@/lib/cloud-text';
 
 const spreadName = (s: Spread) =>
@@ -256,6 +258,19 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack, 
     });
   };
 
+  // Korrekturläsningen: ändrad text går till molnet, och statusen (i bokens metadata) följer med
+  const handleProofChange = async (changed: Spread[], next: BookProject): Promise<string | null> => {
+    const before = new Map(book.spreads.map(s => [s.id, s]));
+    changed.forEach(onUpdateSpread);
+    if (!inCloud) return null;
+    let problem: string | null = null;
+    for (const spread of changed) {
+      if (textChanged(before.get(spread.id), spread)) problem = (await syncTextToCloud(spread)) ?? problem;
+    }
+    await updateBookInfoInCloud({ ...bookWithInfo(), spreads: next.spreads }).catch(() => false);
+    return problem;
+  };
+
   const handleSaveSpread = (updatedSpread: Spread) => {
     updateSpreadAndSyncText(updatedSpread);
     setSelectedSpread(null);
@@ -321,6 +336,13 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack, 
   };
 
   const isPublic = cloudState === 'public';
+  // Påminnelse innan boken delas eller publiceras: text som inte är korrekturläst
+  const proof = proofSummary(book);
+  const proofWarning = proof.total === 0 ? null
+    : proof.unchecked === proof.total ? 'Boken är inte korrekturläst än.'
+    : proof.unchecked > 0 || proof.open > 0
+      ? `Korrekturläsningen har ${[proof.open > 0 && `${proof.open} förslag kvar`, proof.unchecked > 0 && `${proof.unchecked} uppslag som inte är kontrollerade`].filter(Boolean).join(' och ')}.`
+      : null;
   const busyText: Record<Exclude<Busy, null>, string> = {
     share: 'Sparar och publicerar…',
     save: 'Sparar i molnet…',
@@ -498,6 +520,17 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack, 
           )}
         </p>
 
+        {/* Korrekturläsningen: påminnelse innan boken delas eller publiceras */}
+        {proofWarning && viewMode !== 'text' && (
+          <div className="mt-3 note-warning flex flex-wrap items-center gap-2">
+            <Icon name="spellcheck" size={18} />
+            <span className="flex-1 min-w-0">{proofWarning}</span>
+            <button onClick={() => setViewMode('text')} className="btn-ghost !py-1.5 !px-3 !text-xs">
+              Gå till Rätta text
+            </button>
+          </div>
+        )}
+
         {notice && (
           <div role={notice.tone === 'error' ? 'alert' : 'status'} className={`mt-3 flex items-start gap-2 ${
             notice.tone === 'success' ? 'note-success' : notice.tone === 'warning' ? 'note-warning' : 'note-error'
@@ -584,6 +617,9 @@ export default function BookPreview({ book, onUpdateSpread, onSaveBook, onBack, 
 
       {/* ─── Verkstad (redigera text och bilder) ─── */}
       {/* ─── Rätta text (bara texten, bilderna rörs inte) ─── */}
+      {viewMode === 'text' && (
+        <ProofreadPanel book={book} onChange={handleProofChange} />
+      )}
       {viewMode === 'text' && (
         <ManuscriptReview book={book} onSaveSpread={handleSaveSpreadText} />
       )}

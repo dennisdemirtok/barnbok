@@ -61,6 +61,10 @@ export interface BookProject {
   description?: string;
   // Utkast som ännu inte gått vidare till karaktärerna: manuset som skrevs i första steget
   draft?: ManuscriptDraft;
+  // Texten skrevs av AI:n (inte av författaren) - korrekturläsningen rättar då tydliga fel själv
+  aiWritten?: boolean;
+  // Uppdelningen i sidor som boken kommer från - en ny uppdelning ger ett nytt id
+  planId?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -116,6 +120,24 @@ export interface Spread {
   status: 'pending' | 'generating' | 'done' | 'error';
   error?: string;
   qualityCheck?: SpreadQualityCheck;
+  proof?: SpreadProof;
+}
+
+// Ett språkfel som korrekturläsningen hittade
+export interface ProofIssue {
+  quote: string; // texten som är fel, exakt som den står
+  fix: string; // samma text rättad
+  kind: 'stavning' | 'böjning' | 'särskrivning' | 'skiljetecken' | 'repliker' | 'ordval' | 'övrigt';
+  reason: string;
+  certain?: boolean; // odiskutabelt fel (rättas automatiskt i AI-skriven text)
+}
+
+// Korrekturläsningen av ett uppslag (src/lib/proof.ts)
+export interface SpreadProof {
+  hash: string; // fingeravtryck av texten som lästes - ändras texten är uppslaget inte kontrollerat längre
+  checkedAt: string;
+  fixed?: number; // tydliga fel som rättades automatiskt
+  issues: ProofIssue[]; // förslag kvar att ta ställning till
 }
 
 // Result of the automatic quality check that runs after image generation

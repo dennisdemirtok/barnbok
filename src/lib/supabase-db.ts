@@ -1,5 +1,5 @@
 import { supabase, IMAGES_BUCKET } from './supabase';
-import { BookProject, Character, Spread, TextBlock, SavedCharacter, SavedText } from './types';
+import { BookProject, Character, Spread, TextBlock, SavedCharacter, SavedText, SpreadProof } from './types';
 import { countMissingMarkers } from './dialogue';
 
 // ═══════════════════════════════════════════
@@ -293,6 +293,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
       pages: s.pages,
       chapter: s.chapter || undefined,
       composition: meta.compositions?.[String(s.spread_number)],
+      proof: meta.proofs?.[String(s.spread_number)],
       textBlocks: tbs,
       imagePrompt: s.image_prompt || '',
       generatedImage: undefined, // Loaded on demand via image_url
@@ -311,6 +312,7 @@ export async function loadBookFromCloud(id: string): Promise<BookProject | null>
     stylePresetId: meta.stylePresetId,
     keepPrivate: meta.keepPrivate,
     kind: meta.kind,
+    aiWritten: meta.aiWritten,
     description: typeof bookRow.description === 'string' && bookRow.description.trim() ? bookRow.description.trim() : undefined,
     illustrationShape: meta.illustrationShape,
     targetAge: `${bookRow.age_min}-${bookRow.age_max}`,
@@ -1113,12 +1115,15 @@ async function serverThemeKeys(bookId: string): Promise<Record<string, unknown>>
 }
 
 function buildTheme(book: BookProject, serverMeta: Record<string, unknown> = {}): string {
-  // Bildtyper per uppslag sparas här så att ingen tabelländring behövs
+  // Bildtyper och korrekturläsning per uppslag sparas här så att ingen tabelländring behövs
   const compositions = Object.fromEntries(book.spreads.filter(sp => sp.composition).map(sp => [sp.spreadNumber, sp.composition]));
+  const proofs = Object.fromEntries(book.spreads.filter(sp => sp.proof).map(sp => [sp.spreadNumber, sp.proof]));
   return JSON.stringify({
     ...serverMeta,
     v: 1, stylePresetId: book.stylePresetId, illustrationShape: book.illustrationShape, author: book.author?.trim() || undefined,
     ...(Object.keys(compositions).length > 0 ? { compositions } : {}),
+    ...(Object.keys(proofs).length > 0 ? { proof: proofs } : {}),
+    ...(book.aiWritten ? { aiWritten: true } : {}),
     ...(isPrivateBook(book) ? { keepPrivate: true } : {}),
     ...(book.kind ? { kind: book.kind } : {}),
   });
@@ -1128,7 +1133,7 @@ function spreadLabel(spread: Spread): string {
   return spread.pages === 'omslag' ? 'omslag' : spread.pages === 'slutsida' ? 'slutsida' : `sida ${spread.pages}`;
 }
 
-function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author' | 'keepPrivate' | 'kind'> & { compositions?: Record<string, Spread['composition']>; audio?: AudioMeta } {
+function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'illustrationShape' | 'author' | 'keepPrivate' | 'kind' | 'aiWritten'> & { compositions?: Record<string, Spread['composition']>; proofs?: Record<string, SpreadProof>; audio?: AudioMeta } {
   if (typeof theme !== 'string' || !theme.startsWith('{')) return {};
   try {
     const meta = JSON.parse(theme);
@@ -1139,6 +1144,8 @@ function parseBookMeta(theme: unknown): Pick<BookProject, 'stylePresetId' | 'ill
       stylePresetId: meta.stylePresetId, illustrationShape: meta.illustrationShape, author: meta.author, compositions: meta.compositions,
       keepPrivate: meta.keepPrivate === true || undefined,
       kind: meta.kind === 'audiobook' ? 'audiobook' : undefined,
+      aiWritten: meta.aiWritten === true || undefined,
+      proofs: meta.proof && typeof meta.proof === 'object' ? meta.proof : undefined,
       audio,
     };
   } catch {

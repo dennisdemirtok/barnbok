@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { BookProject, Character, Spread, BookFormat, ManuscriptDraft } from '@/lib/types';
 import { getStylePreset } from '@/lib/styles';
+import { mergeProofResults, needsProof, type SpreadProofResult } from '@/lib/proof';
+import { proofreadBook } from '@/lib/proofread-client';
 import { saveBook, loadBook } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { loadBookFromCloud } from '@/lib/supabase-db';
@@ -138,18 +140,49 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [step, importDraft, importParsedBook, book?.id]);
 
+  // Korrekturläsningen av en ny uppdelning går i bakgrunden medan författaren tittar
+  // på sidorna och karaktärerna. Svaret läggs in där boken finns när det kommer.
+  const [proofing, setProofing] = useState<{ bookId: string; state: 'running' | 'done' | 'failed' } | null>(null);
+  const proofRunRef = useRef<{ bookId: string; done: Promise<SpreadProofResult[]> } | null>(null);
+  const proofreadInBackground = (target: BookProject) => {
+    if (!target.spreads.some(needsProof)) return;
+    setProofing({ bookId: target.id, state: 'running' });
+    const done = proofreadBook(target);
+    proofRunRef.current = { bookId: target.id, done };
+    done
+      .then(results => {
+        const merge = (prev: BookProject | null) => (prev && prev.id === target.id ? mergeProofResults(prev, results) : prev);
+        setImportParsedBook(merge);
+        setBook(merge);
+        setProofing({ bookId: target.id, state: 'done' });
+      })
+      .catch(err => {
+        console.error('Korrekturläsningen misslyckades:', err);
+        setProofing({ bookId: target.id, state: 'failed' });
+      });
+  };
+
   // Den planerade boken får utkastets id, så att utkastet i Mina böcker blir boken
   const handleParsedBookChange = (planned: BookProject | null) => {
-    setImportParsedBook(planned && importDraft.id ? { ...planned, id: importDraft.id } : planned);
+    if (!planned) {
+      setImportParsedBook(null);
+      return;
+    }
+    const stamped: BookProject = {
+      ...planned,
+      id: importDraft.id ?? planned.id,
+      // Text från AI-skrivaren: korrekturläsningen rättar tydliga fel direkt
+      aiWritten: !!importDraft.outline || undefined,
+      planId: crypto.randomUUID(),
+    };
+    setImportParsedBook(stamped);
+    proofreadInBackground(stamped);
   };
 
   // Samma uppdelning som förra gången (tillbaka från ett senare steg utan att dela upp
   // texten igen): behåll boken med dess karaktärsbilder och illustrationer
-  const lastParsedRef = useRef<BookProject | null>(null);
   const handleBookParsed = (parsedBook: BookProject) => {
-    const unchanged = lastParsedRef.current === parsedBook;
-    lastParsedRef.current = parsedBook;
-    setBook(prev => (prev && unchanged ? prev : parsedBook));
+    setBook(prev => (prev && prev.id === parsedBook.id && prev.planId === parsedBook.planId ? prev : parsedBook));
     setImportParsedBook(parsedBook);
     setStep('characters');
   };
@@ -178,6 +211,8 @@ export default function Home() {
       setImportParsedBook(planned.spreads.length > 0 ? planned : null);
       setImportMode('import');
       setStep('import');
+      // Laddades sidan om innan korrekturläsningen var klar: läs det som är kvar
+      if (planned.spreads.length > 0) proofreadInBackground(planned);
       return;
     }
     setBook(loadedBook);
@@ -229,8 +264,15 @@ export default function Home() {
   const handleEnsureSaved = async (): Promise<boolean> => {
     if (!book) return false;
     try {
-      const result = await saveBook(book, { cloud: true });
-      if (result.idsMigrated) setBook(result.book);
+      // Serieböckernas text ritas in i bilderna - korrekturläsningen ska vara klar först
+      let toSave = book;
+      const run = proofRunRef.current;
+      if (run?.bookId === book.id) {
+        const results = await run.done.catch(() => [] as SpreadProofResult[]);
+        toSave = mergeProofResults(book, results);
+      }
+      const result = await saveBook(toSave, { cloud: true });
+      if (result.idsMigrated || toSave !== book) setBook(result.book);
       if (result.cloud !== 'synced') {
         console.warn('Molnsparning innan illustrering:', result.cloudError || result.cloud);
         return false;
@@ -489,6 +531,7 @@ export default function Home() {
             onModeChange={setImportMode}
             parsedBook={importParsedBook}
             onParsedBookChange={handleParsedBookChange}
+            proofing={proofing && proofing.bookId === importParsedBook?.id ? proofing.state : null}
             onAudiobook={() => handleOpenAudiobook(null)}
           />
         )}

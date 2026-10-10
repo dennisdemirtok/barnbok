@@ -12,6 +12,7 @@ import Icon from './Icon';
 import StepHeader from './StepHeader';
 import { postJson } from '@/lib/fetch-json';
 import { countMissingMarkers, pasteManuscript, restoreDialogueMarkers } from '@/lib/dialogue';
+import { proofSummary } from '@/lib/proof';
 
 export type ImportMode = 'choose' | 'import' | 'create' | 'savedTexts' | 'styleTest';
 
@@ -33,6 +34,8 @@ interface Props {
   onParsedBookChange: (book: BookProject | null) => void;
   // Bara en ljudbok av en färdig text - ingen illustrering
   onAudiobook?: () => void;
+  // Korrekturläsningen av den uppdelade boken (körs i bakgrunden från page.tsx)
+  proofing?: 'running' | 'done' | 'failed' | null;
 }
 
 const LEGACY_FORMATS: { value: BookFormat; label: string }[] = [
@@ -112,6 +115,7 @@ export default function BookImporter({
   parsedBook,
   onParsedBookChange,
   onAudiobook,
+  proofing,
 }: Props) {
   const [planning, setPlanning] = useState(false);
   const [continuing, setContinuing] = useState(false);
@@ -431,6 +435,20 @@ export default function BookImporter({
     const pagesWithText = parsedBook.spreads.filter(s => s.pages !== 'omslag');
     const bookPreset = getStylePreset(parsedBook.stylePresetId);
     const empty = pagesWithText.length === 0;
+    const proof = proofSummary(parsedBook);
+    const proofLine = proofing === 'running'
+      ? { icon: 'spellcheck', tone: 'text-ink/60', text: 'Korrekturläser texten…' }
+      : proof.total > 0 && proof.unchecked === 0
+        ? {
+          icon: 'verified',
+          tone: 'text-emerald-700',
+          text: proof.fixed || proof.open
+            ? `Korrekturläst: ${[proof.fixed && `${proof.fixed} fel rättades`, proof.open && `${proof.open} förslag att titta på under Rätta text i sista steget`].filter(Boolean).join(' · ')}`
+            : 'Korrekturläst utan fel',
+        }
+        : proofing === 'failed'
+          ? { icon: 'info', tone: 'text-ink/60', text: 'Korrekturläsningen gick inte att göra nu. Den kan göras under Rätta text i sista steget.' }
+          : null;
     return (
       <div className="space-y-6">
         <StepHeader
@@ -461,6 +479,13 @@ export default function BookImporter({
               </div>
             </div>
           </div>
+
+          {/* Korrekturläsningen går i bakgrunden medan du tittar på sidorna */}
+          {!empty && proofLine && (
+            <p className={`flex items-center gap-2 text-sm font-medium ${proofLine.tone}`}>
+              <Icon name={proofLine.icon} size={18} /> {proofLine.text}
+            </p>
+          )}
 
           {empty && (
             <div className="note-warning">
