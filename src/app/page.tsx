@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { BookProject, Character, Spread, BookFormat, ManuscriptDraft } from '@/lib/types';
 import { getStylePreset } from '@/lib/styles';
-import { mergeProofResults, needsProof, type SpreadProofResult } from '@/lib/proof';
+import { mergeProofResults, needsProof, proofSummary, type SpreadProofResult } from '@/lib/proof';
 import { proofreadBook } from '@/lib/proofread-client';
 import { saveBook, loadBook } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
@@ -13,6 +13,7 @@ import BookImporter, { EMPTY_DRAFT, ImportMode } from '@/components/BookImporter
 import CharacterStudio from '@/components/CharacterStudio';
 import FinishBook from '@/components/finish/FinishBook';
 import CharacterApproval from '@/components/CharacterApproval';
+import ProofreadPanel from '@/components/ProofreadPanel';
 import PageGenerator from '@/components/PageGenerator';
 import BookPreview from '@/components/BookPreview';
 import ReferenceManager from '@/components/ReferenceManager';
@@ -218,6 +219,11 @@ export default function Home() {
     setBook(loadedBook);
     setIsClonedBook(false);
     setBookstoreEditId(null);
+    // Böcker som inte illustrerats än korrekturläses innan bilderna görs - seriernas
+    // text står i bilderna (gäller även böcker som delades upp innan korrekturläsningen fanns)
+    if ((loadedBook.status === 'importing' || loadedBook.status === 'characters') && loadedBook.spreads.some(needsProof)) {
+      proofreadInBackground(loadedBook);
+    }
     // Go to the appropriate step based on book status
     switch (loadedBook.status) {
       case 'importing':
@@ -302,6 +308,12 @@ export default function Home() {
       console.error('Kunde inte öppna boken som illustreras:', err);
     }
     setStep('library');
+  };
+
+  // Rättelser från korrekturläsningen innan boken illustreras (sparas lokalt som allt annat)
+  const handleProofChange = async (changed: Spread[]): Promise<string | null> => {
+    changed.forEach(handleUpdateSpread);
+    return null;
   };
 
   const handleUpdateSpread = (updatedSpread: Spread) => {
@@ -570,6 +582,12 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+            {/* Språkfel ska rättas innan bilderna görs - visas bara när det finns något att göra */}
+            {((proofing?.bookId === book.id && proofing.state === 'running') || proofSummary(book).open > 0) && (
+              <div className="mb-8">
+                <ProofreadPanel book={book} onChange={handleProofChange} background={proofing?.bookId === book.id && proofing.state === 'running'} />
               </div>
             )}
             <CharacterApproval

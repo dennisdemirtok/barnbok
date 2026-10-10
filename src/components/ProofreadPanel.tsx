@@ -10,6 +10,8 @@ interface Props {
   book: BookProject;
   // Sparar ändrade uppslag (lokalt och i molnet). Returnerar ett felmeddelande eller null.
   onChange: (changed: Spread[], next: BookProject) => Promise<string | null>;
+  // Korrekturläsningen pågår redan i bakgrunden (startad av page.tsx)
+  background?: boolean;
 }
 
 const KIND_LABEL: Record<ProofIssue['kind'], string> = {
@@ -28,7 +30,7 @@ const spreadName = (s: Spread) =>
 // Korrekturläsningen: bara språkfel (stavning, böjning, särskrivning, skiljetecken,
 // repliker). Text som AI:n skrivit rättas direkt när boken skapas; här syns det
 // som är kvar, och ändrad eller äldre text kan läsas på nytt.
-export default function ProofreadPanel({ book, onChange }: Props) {
+export default function ProofreadPanel({ book, onChange, background }: Props) {
   const [running, setRunning] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -102,7 +104,7 @@ export default function ProofreadPanel({ book, onChange }: Props) {
         </div>
       </div>
 
-      {running ? (
+      {running || background ? (
         <div className="flex items-center gap-2.5 text-sm text-ink/70">
           <span className="spinner !w-4 !h-4 text-brand" />
           Korrekturläser {never ? 'boken' : `${summary.unchecked} uppslag`}...
